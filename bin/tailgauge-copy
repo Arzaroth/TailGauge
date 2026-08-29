@@ -1,0 +1,31 @@
+#!/bin/bash
+# Usage: tailgauge-copy <text>
+# Copies text to the clipboard on Wayland or X11.
+
+set -euo pipefail
+
+text="${1-}"
+[[ -z $text ]] && exit 0
+
+if [[ ${WAYLAND_DISPLAY:-} != "" ]] && command -v wl-copy >/dev/null 2>&1; then
+  printf %s "$text" | wl-copy
+  exit 0
+fi
+
+if command -v xclip >/dev/null 2>&1; then
+  printf %s "$text" | xclip -selection clipboard
+  exit 0
+fi
+
+if command -v xsel >/dev/null 2>&1; then
+  printf %s "$text" | xsel --clipboard --input
+  exit 0
+fi
+
+if command -v wl-copy >/dev/null 2>&1; then
+  printf %s "$text" | wl-copy
+  exit 0
+fi
+
+echo "tailgauge-copy: install wl-clipboard, xclip, or xsel" >&2
+exit 1

@@ -1,0 +1,12 @@
+[Unit]
+Description=Save incoming Taildrop files to the downloads directory
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/tailgauge-receive
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

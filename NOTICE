@@ -1,0 +1,34 @@
+TailGauge is a port of the first-party Tailscale panel plugin that ships with
+Omarchy 4 (Quattro), from Hyprland/Quickshell to KDE Plasma 6 and GNOME Shell.
+
+Upstream: https://github.com/basecamp/omarchy (MIT, Copyright (c) David
+Heinemeier Hansson), branch `quattro`:
+
+  shell/plugins/panels/tailscale/{Model.js,Service.qml,Panel.qml,TailscaleIcon.qml}
+  bin/omarchy-tailscale-send
+  bin/omarchy-tailscale-receive
+  default/systemd/user/omarchy-tailscale-receive.service
+
+What was carried over and what was rewritten:
+
+  shared/model.js
+      Derived from Model.js, near-verbatim. The status, account and exit-node
+      parsing, the Mullvad region grouping and the Taildrop capability checks
+      are upstream's. Added here: osIconName, the recent-region helpers that
+      Panel.qml kept inline, and the shell-quoting helpers Plasma needs.
+
+  bin/tailgauge-send, bin/tailgauge-receive
+      Derived from the omarchy-tailscale-* scripts. The Taildrop staging and
+      link(2) name-claiming logic is upstream's; the file chooser and the
+      notification helper are replaced with desktop-neutral equivalents.
+
+  plasma/, gnome/
+      Rewritten. Service.qml's state machine (optimistic toggle, poll
+      watchdog, startup ramp, login URL scraping) is reproduced against
+      Plasma5Support.DataSource and Gio.Subprocess respectively; Panel.qml's
+      layout and keyboard model are reproduced against Plasma Components and
+      St/PopupMenu. No Quickshell code is used.
+
+Tailscale and Mullvad are trademarks of their respective owners. TailGauge is
+not affiliated with, endorsed by, or sponsored by Tailscale Inc., Mullvad, or
+Basecamp.

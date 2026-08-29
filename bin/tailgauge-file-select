@@ -1,0 +1,65 @@
+#!/bin/bash
+# Usage: tailgauge-file-select [--title TITLE] [--multiple]
+# Prints one selected path per line.
+# Exit 0 picked, 1 nothing picked, 2 no chooser available.
+
+set -uo pipefail
+
+title="Select file"
+multiple=false
+
+while (($# > 0)); do
+  case "$1" in
+  --title)
+    title="${2:-Select file}"
+    shift 2
+    ;;
+  --multiple)
+    multiple=true
+    shift
+    ;;
+  *) shift ;;
+  esac
+done
+
+prefer_kde=false
+[[ ${XDG_CURRENT_DESKTOP:-} == *KDE* || ${XDG_CURRENT_DESKTOP:-} == *plasma* ]] && prefer_kde=true
+
+run_kdialog() {
+  local args=(--title "$title" --getopenfilename "${HOME}")
+  $multiple && args=(--title "$title" --multiple --separate-output --getopenfilename "${HOME}")
+  kdialog "${args[@]}"
+}
+
+run_zenity() {
+  local args=(--file-selection --title="$title")
+  $multiple && args+=(--multiple --separator=$'\n')
+  zenity "${args[@]}"
+}
+
+picked=""
+status=2
+
+if $prefer_kde && command -v kdialog >/dev/null 2>&1; then
+  picked=$(run_kdialog)
+  status=$?
+elif command -v zenity >/dev/null 2>&1; then
+  picked=$(run_zenity)
+  status=$?
+elif command -v kdialog >/dev/null 2>&1; then
+  picked=$(run_kdialog)
+  status=$?
+else
+  echo "tailgauge-file-select: install zenity or kdialog to pick files" >&2
+  exit 2
+fi
+
+# Both choosers exit non-zero on cancel, which is a decision rather than a
+# fault. Only an empty selection with a zero status means the dialog broke.
+if ((status != 0)); then
+  exit 1
+fi
+
+[[ -z $picked ]] && exit 1
+
+printf '%s\n' "$picked"

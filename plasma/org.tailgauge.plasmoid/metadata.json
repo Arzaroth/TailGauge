@@ -1,0 +1,17 @@
+{
+    "KPlugin": {
+        "Id": "org.tailgauge.plasmoid",
+        "Name": "TailGauge",
+        "Description": "Tailscale status, exit nodes, machines and Taildrop in the panel",
+        "Icon": "network-vpn",
+        "Category": "Network",
+        "License": "MIT",
+        "Version": "1.0.0",
+        "Website": "https://github.com/Arzaroth/TailGauge",
+        "Authors": [
+            { "Name": "Arzaroth" }
+        ]
+    },
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
