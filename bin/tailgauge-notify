@@ -1,0 +1,51 @@
+#!/bin/bash
+# Usage: tailgauge-notify [--image PATH] [--open PATH] [--urgency LEVEL] SUMMARY BODY
+
+set -euo pipefail
+
+image=""
+open_path=""
+urgency="normal"
+
+while (($# > 0)); do
+  case "$1" in
+  --image)
+    image="${2:-}"
+    shift 2
+    ;;
+  --open)
+    open_path="${2:-}"
+    shift 2
+    ;;
+  --urgency | -u)
+    urgency="${2:-normal}"
+    shift 2
+    ;;
+  --)
+    shift
+    break
+    ;;
+  *) break ;;
+  esac
+done
+
+summary="${1:-TailGauge}"
+body="${2:-}"
+
+command -v notify-send >/dev/null 2>&1 || exit 0
+
+args=(--app-name=TailGauge --urgency="$urgency" --icon=network-vpn-symbolic)
+[[ -n $image ]] && args+=(--hint="string:image-path:file://$image")
+
+# --wait blocks until the notification is dismissed or actioned, so the click
+# handler only works detached from whatever called us.
+if [[ -n $open_path ]] && notify-send --help 2>&1 | grep -q -- '--action'; then
+  (
+    chosen=$(notify-send "${args[@]}" --wait --action=default=Open -- "$summary" "$body" 2>/dev/null || true)
+    [[ $chosen == "default" ]] && setsid xdg-open "$open_path" >/dev/null 2>&1
+  ) &
+  disown
+  exit 0
+fi
+
+notify-send "${args[@]}" -- "$summary" "$body" || true

@@ -1,0 +1,107 @@
+# TailGauge
+
+Tailscale in your **KDE Plasma 6** and **GNOME Shell** panel: connection state, on/off, account switching, exit nodes including Mullvad regions, machine browsing with copy actions, and Taildrop file sending.
+
+It is a port of the first-party `omarchy.tailscale` panel plugin that ships with [Omarchy 4 (Quattro)](https://github.com/basecamp/omarchy), moved off Hyprland/Quickshell onto the two big desktops. See [NOTICE](NOTICE) for what was carried over and what was rewritten.
+
+There is no daemon and no service to run. Both frontends drive the `tailscale` CLI directly and share one data model.
+
+## Features
+
+- **Panel indicator**: the Tailscale mark drawn natively as a 3×3 dot grid, slashed when disconnected, badged when the device needs authorization. Optionally followed by the machine name.
+- **On/off**: a switch at the top of the panel. The UI flips optimistically the instant you click, then reconciles with the next `tailscale status`.
+- **Login**: when the device needs authorizing, the auth URL is scraped out of `tailscale up` as it prints and opened in your browser.
+- **Connections**: switch between Tailscale profiles when more than one is signed in. Offers to `pkexec tailscale set --operator=$USER` when the daemon refuses profile access.
+- **Exit nodes**: every tailnet exit node, plus a shortlist of the Mullvad regions you actually use, plus a searchable picker for the full Mullvad fleet.
+- **Machines**: every online peer with its IP and MagicDNS name, copy actions for name / DNS name / IPv4 / IPv6, and a Taildrop send button where the tailnet allows file sharing.
+- **Taildrop receive**: a systemd user service parks on `tailscale file get --wait`, delivers into `~/Downloads`, and announces each file with a notification you can click to open.
+- **Keyboard**: `t` toggle, `r` refresh, and on a machine row `c` copy IP, `n` copy name, `d` copy DNS name, `s` send files. Arrows and Enter work as they do natively on each desktop.
+
+## Requirements
+
+- `tailscale` on `PATH`
+- KDE Plasma 6.0+ or GNOME Shell 45+
+- `zenity` or `kdialog` for the Taildrop file chooser
+- `wl-clipboard`, `xclip`, or `xsel` for the Plasma copy actions (GNOME uses `St.Clipboard`)
+- Taildrop enabled for the tailnet, to send files
+
+## Install
+
+```bash
+git clone https://github.com/Arzaroth/TailGauge
+cd TailGauge
+scripts/install.sh
+```
+
+The installer detects the running desktop. Pass `--plasma` or `--gnome` to force one, and `--no-taildrop` to skip the receive service.
+
+**Plasma**: adds the widget to your library. Add it from *Add Widgets*, or restart the shell to pick up changes:
+
+```bash
+systemctl --user restart plasma-plasmashell.service
+```
+
+**GNOME**: installs the extension, then enable it:
+
+```bash
+gnome-extensions enable tailgauge@arzaroth.github.io
+```
+
+On Xorg, restart the shell with `Alt+F2` `r`. On Wayland, log out and back in.
+
+## Layout
+
+```
+shared/model.js          the only copy of the Tailscale data model
+shared/model.exports.mjs the export footer appended for the GNOME build
+plasma/                  the Plasma 6 plasmoid (QML)
+gnome/                   the GNOME Shell extension (GJS)
+bin/                     tailgauge-send / -receive / -copy / -notify / -file-select
+systemd/                 the Taildrop receive user unit
+scripts/build.sh         assembles build/, wiring the shared model into both
+scripts/install.sh       builds, then installs helpers, unit and packages
+```
+
+`shared/model.js` is written without module syntax so the QML engine can load it as a plain shared script. `scripts/build.sh` copies it into the plasmoid as-is and concatenates it with `model.exports.mjs` to produce the ES module the GNOME extension imports. **Edit `shared/model.js`, never the copies under `build/`.**
+
+## Settings
+
+| Setting | Default | What it does |
+|---|---|---|
+| Refresh interval | 30s | How often `tailscale status --json` is re-read |
+| Show the machine name | off | Puts the machine name next to the panel icon |
+| Recent Mullvad regions | — | Shortlist behind the exit node list, cleared from GNOME's preferences |
+
+Plasma stores these in the widget's own configuration; GNOME in `org.gnome.shell.extensions.tailgauge`.
+
+## Differences from the Omarchy plugin
+
+- **Right click** opens the desktop's own context menu rather than toggling Tailscale. Both desktops carry the toggle and refresh as menu entries, and **middle click** on the panel icon toggles.
+- **GNOME** uses native `PopupMenu` rows rather than a custom keyboard-driven panel, so arrows, Enter and type-ahead behave the way every other extension does. Machines and the Mullvad picker are submenus; the copy actions live inside a machine's submenu.
+- **Clipboard** goes through `St.Clipboard` on GNOME and a helper that picks `wl-copy` / `xclip` / `xsel` on Plasma, so the copy actions also work in an X11 session.
+- **No IPC**. Omarchy's `omarchy-shell omarchy.tailscale toggle` has no equivalent here.
+
+## Development
+
+```bash
+scripts/build.sh          # assemble build/ without installing
+scripts/install.sh        # build and install for the running desktop
+```
+
+Plasma logs QML errors to the shell's journal:
+
+```bash
+journalctl --user -u plasma-plasmashell -f
+```
+
+GNOME logs extension errors to:
+
+```bash
+journalctl --user -u org.gnome.Shell@wayland -f
+```
+
+Linting QML needs `qmllint` from the Qt 6 declarative dev package (`qt6-qtdeclarative-devel` on Fedora, `qt6-declarative` on Arch).
+
+## License
+
+MIT. See [LICENSE](LICENSE) and [NOTICE](NOTICE).

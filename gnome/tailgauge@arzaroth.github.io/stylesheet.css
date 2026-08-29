@@ -1,0 +1,23 @@
+.tailgauge-panel-label {
+    padding-left: 4px;
+}
+
+.tailgauge-status {
+    font-size: 0.9em;
+    color: rgba(255, 255, 255, 0.6);
+    padding-top: 0;
+    padding-bottom: 6px;
+}
+
+.tailgauge-status.tailgauge-error {
+    color: #f38ba8;
+}
+
+.tailgauge-search {
+    margin: 4px 12px 8px 12px;
+    min-width: 180px;
+}
+
+.tailgauge-copy-icon {
+    opacity: 0.6;
+}

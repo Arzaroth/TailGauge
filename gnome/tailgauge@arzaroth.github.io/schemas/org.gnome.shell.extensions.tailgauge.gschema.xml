@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="tailgauge">
+  <schema id="org.gnome.shell.extensions.tailgauge" path="/org/gnome/shell/extensions/tailgauge/">
+    <key name="refresh-interval" type="i">
+      <range min="5" max="3600"/>
+      <default>30</default>
+      <summary>Refresh interval in seconds</summary>
+      <description>How often `tailscale status` is re-read.</description>
+    </key>
+    <key name="show-status-in-panel" type="b">
+      <default>false</default>
+      <summary>Show the machine name in the panel</summary>
+      <description>When off, the panel shows only the Tailscale icon.</description>
+    </key>
+    <key name="recent-mullvad-regions" type="as">
+      <default>[]</default>
+      <summary>Recently used Mullvad exit node regions</summary>
+      <description>Keeps the exit node list a shortlist rather than the whole Mullvad fleet.</description>
+    </key>
+  </schema>
+</schemalist>
