@@ -64,8 +64,10 @@ jobs:
           safe="${REF_NAME//[^A-Za-z0-9._-]/_}"
           mkdir -p dist
 
-          # The plasmoid, as kpackagetool6 -i takes it.
-          tar -C build -czf "dist/tailgauge-$safe-plasmoid.tar.gz" org.tailgauge.plasmoid
+          # The plasmoid: a zip of the package contents, which is what both
+          # `kpackagetool6 -i` and the KDE Store accept. The name has to match
+          # what bin/tailgauge-update downloads.
+          (cd build/org.tailgauge.plasmoid && zip -qr "$GITHUB_WORKSPACE/dist/tailgauge-$safe-plasmoid.plasmoid" .)
 
           # The extension, as gnome-extensions install takes it.
           cp "build/tailgauge@arzaroth.github.io.shell-extension.zip" \

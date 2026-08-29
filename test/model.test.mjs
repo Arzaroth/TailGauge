@@ -124,7 +124,7 @@ test('shell quoting survives an apostrophe', () => {
 
 test('sections come back in a fixed order', () => {
     const panel = M.resolvePanel(state(), {});
-    assert.deepEqual(panel.sections.map(s => s.id), ['connections', 'exitNodes', 'machines']);
+    assert.deepEqual(panel.sections.map(s => s.id), ['update', 'connections', 'exitNodes', 'machines']);
 });
 
 test('connections appear only with a choice to make', () => {
@@ -306,8 +306,12 @@ test('the translator reaches every user-visible string', () => {
     const panel = M.resolvePanel(state({installed: false}), {t: s => `«${s}»`});
     assert.match(panel.status.text, /^«.*»$/);
     assert.match(panel.header.toggleHint, /^«.*»$/);
-    for (const s of panel.sections)
+    for (const s of panel.sections) {
+        // The update banner carries no header, so it has no title to translate.
+        if (s.title === '')
+            continue;
         assert.match(s.title, /^«.*»$/);
+    }
     const machines = section(M.resolvePanel(state({peers: []}), {t: s => `«${s}»`}), 'machines');
     assert.match(machines.empty, /^«.*»$/);
 });
@@ -320,4 +324,67 @@ test('a busy row reports which command it is waiting on', () => {
     const settingId = status.exitNodes[0].id;
     const setting = section(M.resolvePanel(state({settingExitNodeId: settingId}), {}), 'exitNodes').rows;
     assert.equal(setting[0].busy, true);
+});
+
+// ---- the update banner ----------------------------------------------------
+
+test('the update section is hidden until there is an update', () => {
+    const panel = M.resolvePanel(state(), {});
+    const update = section(panel, 'update');
+    assert.equal(update.visible, false);
+    assert.equal(update.rows.length, 0);
+    assert.equal(update.title, '', 'one banner needs no section header');
+    assert.equal(panel.navigation.some(n => n.rowId === 'update'), false);
+});
+
+test('an installable update offers to install itself', () => {
+    const panel = M.resolvePanel(state({update: {available: true, updatable: true, latest: '1.1.0'}}), {});
+    const row = section(panel, 'update').rows[0];
+    assert.equal(section(panel, 'update').visible, true);
+    assert.equal(row.kind, 'update');
+    assert.equal(row.label, 'TailGauge 1.1.0 is available');
+    assert.equal(row.sublabel, 'Install it now');
+    assert.equal(row.action, 'update');
+    assert.equal(panel.navigation[1].rowId, 'update', 'the banner leads the traversal');
+});
+
+test('a store-managed update points at the store instead', () => {
+    const row = section(M.resolvePanel(state({update: {available: true, updatable: false, latest: '1.1.0'}}), {}), 'update').rows[0];
+    assert.equal(row.sublabel, 'Update it where you installed it from');
+    assert.equal(row.action, 'openUrl');
+});
+
+test('an update in flight marks the row busy', () => {
+    const row = section(M.resolvePanel(state({
+        update: {available: true, updatable: true, latest: '1.1.0'}, updating: true,
+    }), {}), 'update').rows[0];
+    assert.equal(row.busy, true);
+});
+
+test('the version substitutes into the translated template', () => {
+    const row = section(M.resolvePanel(state({update: {available: true, updatable: true, latest: '2.3.4'}}),
+        {t: s => `«${s}»`}), 'update').rows[0];
+    assert.equal(row.label, '«TailGauge %1 is available»'.replace('%1', '2.3.4'));
+    assert.equal(M.formatText('a %1 b', 'X'), 'a X b');
+});
+
+// ---- Taildrop needs the helpers, not just the capability -------------------
+
+test('the send action disappears when the helpers are not installed', () => {
+    const withHelpers = section(M.resolvePanel(state(), {}), 'machines').rows;
+    assert.equal(withHelpers.some(r => r.actions.some(a => a.id === 'send')), true);
+
+    const without = section(M.resolvePanel(state({helpers: false}), {}), 'machines').rows;
+    assert.equal(without.some(r => r.actions.some(a => a.id === 'send')), false,
+        'a store-installed widget has no tailgauge-send to call');
+    assert.equal(without.every(r => r.actions.some(a => a.id === 'copy')), true,
+        'copying still works without the helpers');
+});
+
+test('canSendFiles agrees with the resolved actions', () => {
+    const peer = status.peers.find(p => p.HostName === 'laptop');
+    assert.equal(M.canSendFiles(state(), peer), true);
+    assert.equal(M.canSendFiles(state({helpers: false}), peer), false);
+    assert.equal(M.canSendFiles(state({fileSharing: false}), peer), false);
+    assert.equal(M.canSendFiles(state({running: false}), peer), false);
 });

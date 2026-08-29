@@ -99,6 +99,12 @@ Item {
         case "copy":
             openCopyMenuFor(row.id)
             break
+        case "update":
+            service.applyUpdate()
+            break
+        case "openUrl":
+            service.openUrl(row.payload ? row.payload.url : "")
+            break
         }
     }
 
@@ -352,11 +358,13 @@ Item {
                     visible: modelData.visible
 
                     Kirigami.Separator {
+                        visible: sectionView.modelData.title !== ""
                         Layout.fillWidth: true
                         Layout.topMargin: Kirigami.Units.smallSpacing
                     }
 
                     SectionHeader {
+                        visible: sectionView.modelData.title !== ""
                         text: sectionView.modelData.title
                         Layout.fillWidth: true
                     }
