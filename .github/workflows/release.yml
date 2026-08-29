@@ -102,5 +102,6 @@ jobs:
           body_path: release-notes.md
           generate_release_notes: true
           files: |
+            dist/*.plasmoid
             dist/*.tar.gz
             dist/*.zip

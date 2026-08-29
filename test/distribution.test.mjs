@@ -30,6 +30,21 @@ test('the updater downloads exactly the assets the release publishes', () => {
     assert.deepEqual(downloadedSuffixes, publishedSuffixes);
 });
 
+test('every packaged asset is actually uploaded', () => {
+    const block = release.match(/files: \|\n((?:\s+\S+\n)+)/)?.[1];
+    assert.ok(block, 'the release publishes no files block');
+    const globs = block.trim().split('\n').map(l => l.trim()).filter(Boolean);
+    const matches = name => globs.some(g => {
+        const re = new RegExp('^' + g.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$');
+        return re.test('dist/' + name);
+    });
+    for (const suffix of publishedSuffixes) {
+        const name = `tailgauge-v0.0.0-${suffix}`;
+        assert.ok(matches(name),
+            `Package builds ${name} but no upload glob matches it: ${globs.join(', ')}`);
+    }
+});
+
 test('the plasmoid ships as a .plasmoid zip', () => {
     // kpackagetool6 and the KDE Store both take a zip of the package contents;
     // a tarball installs from neither.
