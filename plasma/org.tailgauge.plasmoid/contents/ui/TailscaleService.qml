@@ -54,7 +54,16 @@ Item {
     property bool _loginUrlOpened: false
     property string _preLoginAuthUrl: ""
 
-    readonly property bool busy: _inflightCount > 0
+    // Only work the user asked for. A status poll or an update check is not
+    // something the panel should ever report as busy, let alone gate a control
+    // on: the poll runs every few seconds and would flicker the whole panel.
+    readonly property var _userKinds: ["action", "login", "switch", "exitNode", "operator", "applyUpdate"]
+    property int _userInflight: 0
+    readonly property bool busy: _userInflight > 0
+
+    // True while the popup is on screen. Polling follows the panel: fast enough
+    // to feel live while it is open, lazy while it is not.
+    property bool attentive: false
 
     // The flat state resolvePanel() reads. Both desktops hand it the same
     // shape, so the panel they get back cannot disagree.
@@ -132,6 +141,7 @@ Item {
         inflight[kind] = source
         root._inflight = inflight
         root._inflightCount += 1
+        if (root._userKinds.indexOf(kind) !== -1) root._userInflight += 1
         exec.connectSource(source)
         return true
     }
@@ -147,9 +157,13 @@ Item {
             delete inflight[kind]
             root._inflight = inflight
             root._inflightCount = Math.max(0, root._inflightCount - 1)
+            if (root._userKinds.indexOf(kind) !== -1)
+                root._userInflight = Math.max(0, root._userInflight - 1)
         }
     }
 
+    // The watcher is meant to sit there for minutes; reaping it as a hung poll
+    // would restart it forever.
     function _reap(kind) {
         var source = root._inflight[kind]
         if (!source) return
@@ -169,7 +183,10 @@ Item {
     function _handle(kind, exitCode, stdout, stderr) {
         if (kind === "which") {
             root.installed = exitCode === 0
-            if (root.installed) root.refreshStatusAndAccounts()
+            if (root.installed) {
+                root.refreshStatusAndAccounts()
+                if (!root._inflight["watch"]) root.watch()
+            }
             else {
                 root.refreshing = false
                 root.resetUnavailable("Not installed")
@@ -242,6 +259,12 @@ Item {
             }
             root.settingExitNodeId = ""
             delayedRefresh.restart()
+        } else if (kind === "watch") {
+            // 0 means something changed, 2 means the wait simply expired.
+            // Anything else is a broken watcher, so back off rather than spin.
+            if (exitCode === 0) root.refresh()
+            rearmWatch.interval = (exitCode === 0 || exitCode === 2) ? 250 : 30000
+            rearmWatch.restart()
         } else if (kind === "helpers") {
             root.helpers = exitCode === 0
         } else if (kind === "update") {
@@ -315,6 +338,13 @@ Item {
         var target = Model.peerAddress(peer)
         if (target === "") return
         _detach(["tailgauge-send", target])
+    }
+
+    // Re-armed from a timer rather than from inside its own handler, which is
+    // still mid-disconnect when this runs.
+    function watch() {
+        if (!installed) return
+        _run("watch", ["tailgauge-watch", "300"])
     }
 
     function checkUpdate(force) {
@@ -523,7 +553,16 @@ Item {
     // ---- timers -------------------------------------------------------------
 
     Timer {
-        interval: Math.max(5, root.refreshIntervalSec) * 1000
+        id: rearmWatch
+        interval: 250
+        repeat: false
+        onTriggered: root.watch()
+    }
+
+    Timer {
+        // The watcher carries the news; this is the floor under it, and the
+        // only thing running when the watcher is unavailable.
+        interval: (root.attentive ? 3 : Math.max(5, root.refreshIntervalSec)) * 1000
         repeat: true
         running: true
         triggeredOnStart: true

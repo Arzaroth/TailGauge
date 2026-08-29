@@ -1,0 +1,65 @@
+#!/bin/bash
+# Usage: tailgauge-watch [timeout-seconds]
+#
+# Blocks until the local tailscaled reports a state change, then exits 0. Exits
+# 2 if the timeout elapsed with nothing to report, 1 if tailscale is unusable.
+#
+# The panels chain this ahead of a refresh, so a change made anywhere - tsui,
+# the CLI, another desktop - shows up at once instead of waiting for the next
+# poll.
+
+set -uo pipefail
+
+timeout_sec="${1:-300}"
+
+command -v tailscale >/dev/null 2>&1 || exit 1
+
+# The IPN bus is the cheap path: tailscaled pushes a notification on every
+# state and prefs change, so this process sits idle until something happens.
+watch_ipn() {
+  local line
+  # `timeout` closes the pipe on expiry; grep -m1 closes it on the first
+  # notification, which ends watch-ipn either way.
+  timeout "$timeout_sec" tailscale debug watch-ipn 2>/dev/null |
+    while IFS= read -r line; do
+      case "$line" in
+      *'"State"'* | *'"Prefs"'* | *'"LoginFinished"'* | *'"BackendState"'*)
+        return 0
+        ;;
+      esac
+    done
+  return 2
+}
+
+# Older daemons have no watch-ipn, and a broken bus should not turn the panel
+# into a busy loop. Comparing the fields the panel actually renders keeps this
+# from firing on netmap churn.
+fingerprint() {
+  tailscale status --json 2>/dev/null |
+    sed -n 's/.*"BackendState"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/state=\1/p;
+            s/.*"ExitNodeStatus".*/exitnode/p' |
+    head -4
+}
+
+poll_fallback() {
+  local before after waited=0
+  before=$(fingerprint)
+  while ((waited < timeout_sec)); do
+    sleep 2
+    waited=$((waited + 2))
+    after=$(fingerprint)
+    [[ $after != "$before" ]] && return 0
+  done
+  return 2
+}
+
+if tailscale debug watch-ipn --help >/dev/null 2>&1 ||
+  tailscale debug --help 2>&1 | grep -q watch-ipn; then
+  watch_ipn
+  status=$?
+  # A bus that hangs up immediately is not a state change; fall back rather
+  # than spinning on it.
+  ((status == 0 || status == 2)) && exit $status
+fi
+
+poll_fallback
