@@ -2,9 +2,13 @@
 
 All notable changes to this project are documented here.
 
-## [1.0.0]
+## [0.0.1]
 
-First release. A port of the first-party `omarchy.tailscale` panel plugin that
+First release, and deliberately numbered as one: the Plasma widget has been
+run and driven on a real desktop, but the GNOME extension has never been
+executed. It is syntax-checked and shares the resolver, the model and the
+helpers with the Plasma side, so the risk sits in its St/PopupMenu rendering
+and its Gio.Subprocess plumbing. A port of the first-party `omarchy.tailscale` panel plugin that
 ships with [Omarchy 4 (Quattro)](https://github.com/basecamp/omarchy), moved off
 Hyprland/Quickshell onto KDE Plasma 6 and GNOME Shell 45+.
 
