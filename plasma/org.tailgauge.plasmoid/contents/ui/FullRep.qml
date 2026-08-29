@@ -17,226 +17,153 @@ Item {
     Layout.preferredWidth: Kirigami.Units.gridUnit * 24
     Layout.preferredHeight: Kirigami.Units.gridUnit * 30
 
-    property string focusSection: "header"
-    property int accountIndex: 0
-    property int peerIndex: 0
-    property int exitNodeIndex: 0
-    property int mullvadRegionIndex: 0
     property bool cursorActive: false
+    property int cursorIndex: 0
     property bool mullvadPickerOpen: false
     property string mullvadQuery: ""
     property int phraseIndex: 0
 
-    readonly property var activePhrases: [
-        i18n("Encrypting connections"),
-        i18n("Sending secrets"),
-        i18n("Guarding wires"),
-        i18n("Braiding packets"),
-        i18n("Polishing tunnels"),
-        i18n("Hiding routes"),
-        i18n("Sealing ports"),
-        i18n("Sorting tailnets"),
-        i18n("Shuffling keys"),
-        i18n("Watching machines")
-    ]
-    readonly property string heroPhraseText: activePhrases[phraseIndex % activePhrases.length]
+    // Everything the panel shows is decided in the shared model: which sections
+    // exist, their order, their rows, every label, and the cursor's traversal
+    // order. This file only decides what a row looks like.
+    readonly property var panel: Model.resolvePanel(service.snapshot(), {
+        t: (text) => i18n(text),
+        recentRegions: root.recentMullvadRegions,
+        mullvadQuery: full.mullvadQuery,
+        mullvadPickerOpen: full.mullvadPickerOpen,
+        phraseIndex: full.phraseIndex
+    })
 
     readonly property color dimColor: Qt.darker(Kirigami.Theme.textColor, 1.55)
 
-    readonly property bool showConnections: service.accounts.length > 1 || service.accountsAccessDenied
-    readonly property bool showPeers: service.active && service.peers.length > 0
-    readonly property var recentMullvadExitNodes: Model.recentMullvadNodes(service.mullvadRegions, root.recentMullvadRegions, 5)
-    readonly property var exitNodes: displayExitNodes()
-    readonly property bool showExitNodes: service.active && (exitNodes.length > 0 || service.mullvadRegions.length > 0)
-    readonly property var filteredMullvadRegions: Model.filterMullvadRegions(service.mullvadRegions, mullvadQuery)
+    // ---- cursor -------------------------------------------------------------
 
-    // ---- selection ----------------------------------------------------------
-
-    function displayExitNodes() {
-        var nodes = []
-        for (var i = 0; i < service.tailnetExitNodes.length; i++) nodes.push(service.tailnetExitNodes[i])
-        for (var j = 0; j < recentMullvadExitNodes.length; j++) nodes.push(recentMullvadExitNodes[j])
-        if (service.mullvadRegions.length > 0)
-            nodes.push({ id: "mullvad:add", AddMullvad: true, DisplayName: i18n("Choose Mullvad region") })
-        return nodes
-    }
-
-    function selectedPeer() {
-        if (service.peers.length === 0) return null
-        return service.peers[Math.max(0, Math.min(peerIndex, service.peers.length - 1))]
-    }
-
-    function selectedExitNode() {
-        if (exitNodes.length === 0) return null
-        return exitNodes[Math.max(0, Math.min(exitNodeIndex, exitNodes.length - 1))]
-    }
-
-    function selectedAccount() {
-        if (service.accounts.length === 0) return null
-        return service.accounts[Math.max(0, Math.min(accountIndex, service.accounts.length - 1))]
-    }
-
-    function selectedMullvadRegion() {
-        if (filteredMullvadRegions.length === 0) return null
-        return filteredMullvadRegions[Math.max(0, Math.min(mullvadRegionIndex, filteredMullvadRegions.length - 1))]
-    }
-
-    function chooseExitNode(peer) {
-        if (!peer) return
-        if (peer.AddMullvad === true) {
-            mullvadPickerOpen = !mullvadPickerOpen
-            mullvadRegionIndex = 0
-            if (mullvadPickerOpen) Qt.callLater(function() { mullvadSearch.forceActiveFocus() })
-            return
-        }
-        if (peer.Mullvad === true) root.persistRecentMullvad(Model.mullvadRegionKey(peer))
-        service.setExitNode(peer)
-        mullvadPickerOpen = false
-    }
-
-    function sendPeerFile(peer) {
-        if (!service.canSendFiles(peer)) return
-        // The file chooser takes over from here, so get the popup out of the way.
-        service.sendFile(peer)
-        root.expanded = false
-    }
-
-    function ensureCursor() {
-        if (accountIndex >= service.accounts.length) accountIndex = Math.max(0, service.accounts.length - 1)
-        if (peerIndex >= service.peers.length) peerIndex = Math.max(0, service.peers.length - 1)
-        if (exitNodeIndex >= exitNodes.length) exitNodeIndex = Math.max(0, exitNodes.length - 1)
-        if (mullvadRegionIndex >= filteredMullvadRegions.length) mullvadRegionIndex = Math.max(0, filteredMullvadRegions.length - 1)
-        if (focusSection === "auth" && !service.accountsAccessDenied)
-            focusSection = service.accounts.length > 1 ? "accounts" : (showExitNodes ? "exitNodes" : (showPeers ? "peers" : "header"))
-        if (focusSection === "accounts" && service.accounts.length <= 1)
-            focusSection = service.accountsAccessDenied ? "auth" : (showExitNodes ? "exitNodes" : (showPeers ? "peers" : "header"))
-        if (focusSection === "peers" && !showPeers)
-            focusSection = showExitNodes ? "exitNodes" : (service.accountsAccessDenied ? "auth" : (service.accounts.length > 1 ? "accounts" : "header"))
-        if (focusSection === "exitNodes" && !showExitNodes)
-            focusSection = showPeers ? "peers" : (service.accountsAccessDenied ? "auth" : (service.accounts.length > 1 ? "accounts" : "header"))
-    }
-
-    function moveCursor(dy) {
+    function moveCursor(delta) {
         cursorActive = true
-        ensureCursor()
-        if (dy === 0) return
-
-        if (focusSection === "header") {
-            if (dy > 0) {
-                if (service.accountsAccessDenied) focusSection = "auth"
-                else if (service.accounts.length > 1) focusSection = "accounts"
-                else if (showExitNodes) focusSection = "exitNodes"
-                else if (showPeers) focusSection = "peers"
-            }
-        } else if (focusSection === "auth") {
-            if (dy < 0) focusSection = "header"
-            else if (service.accounts.length > 1) focusSection = "accounts"
-            else if (showExitNodes) focusSection = "exitNodes"
-            else if (showPeers) focusSection = "peers"
-        } else if (focusSection === "accounts") {
-            if (dy < 0) {
-                if (accountIndex <= 0) focusSection = service.accountsAccessDenied ? "auth" : "header"
-                else accountIndex--
-            } else {
-                if (accountIndex < service.accounts.length - 1) accountIndex++
-                else if (showExitNodes) focusSection = "exitNodes"
-                else if (showPeers) focusSection = "peers"
-            }
-        } else if (focusSection === "exitNodes") {
-            if (dy < 0) {
-                if (exitNodeIndex <= 0) focusSection = service.accounts.length > 1 ? "accounts" : (service.accountsAccessDenied ? "auth" : "header")
-                else exitNodeIndex--
-            } else if (exitNodeIndex < exitNodes.length - 1) {
-                exitNodeIndex++
-            } else if (showPeers) {
-                focusSection = "peers"
-            }
-        } else if (focusSection === "peers") {
-            if (dy < 0) {
-                if (peerIndex <= 0) focusSection = showExitNodes ? "exitNodes" : (service.accounts.length > 1 ? "accounts" : (service.accountsAccessDenied ? "auth" : "header"))
-                else peerIndex--
-            } else if (peerIndex < service.peers.length - 1) {
-                peerIndex++
-            }
-        }
-
-        ensureCursor()
+        var count = panel.navigation.length
+        if (count === 0) return
+        cursorIndex = Math.max(0, Math.min(count - 1, cursorIndex + delta))
         scrollCursorIntoView()
     }
 
+    function cursorRowId() {
+        if (cursorIndex < 0 || cursorIndex >= panel.navigation.length) return ""
+        return panel.navigation[cursorIndex].rowId
+    }
+
+    function selectedRow() {
+        return Model.panelRowAt(panel, cursorIndex)
+    }
+
+    // The cursor follows the row's identity, not its slot: a machine that drops
+    // off the tailnet between polls would otherwise slide a different one under
+    // whatever was selected.
+    property string _pinnedRowId: ""
+    onCursorIndexChanged: _pinnedRowId = cursorRowId()
+    onPanelChanged: {
+        if (_pinnedRowId === "") return
+        var next = Model.panelNavIndexOf(panel, _pinnedRowId)
+        if (next !== cursorIndex) cursorIndex = next
+    }
+
     function activateCursor() {
-        ensureCursor()
-        if (focusSection === "header") service.toggleTailscale()
-        else if (focusSection === "auth") service.authorizeTailscaleOperator()
-        else if (focusSection === "accounts") {
-            var account = selectedAccount()
-            if (account) service.switchAccount(account.id)
-        } else if (focusSection === "exitNodes") chooseExitNode(selectedExitNode())
-        else if (focusSection === "peers") openSelectedPeerCopyMenu()
+        if (cursorIndex === 0) {
+            service.toggleTailscale()
+            return
+        }
+        dispatch(selectedRow())
     }
 
-    function moveMullvadRegionCursor(delta) {
-        if (filteredMullvadRegions.length === 0) return
-        cursorActive = true
-        mullvadRegionIndex = Math.max(0, Math.min(filteredMullvadRegions.length - 1, mullvadRegionIndex + delta))
-        scrollMullvadRegionCursorIntoView()
+    // The one place a resolved row turns back into a service call.
+    function dispatch(row) {
+        if (!row) return
+        switch (row.action) {
+        case "toggle":
+            service.toggleTailscale()
+            break
+        case "authorize":
+            service.authorizeTailscaleOperator()
+            break
+        case "switchAccount":
+            service.switchAccount(row.payload.id)
+            break
+        case "setExitNode":
+            if (row.payload.Mullvad === true)
+                root.persistRecentMullvad(Model.mullvadRegionKey(row.payload))
+            service.setExitNode(row.payload)
+            mullvadPickerOpen = false
+            break
+        case "togglePicker":
+            mullvadPickerOpen = !mullvadPickerOpen
+            break
+        case "copy":
+            openCopyMenuFor(row.id)
+            break
+        }
     }
 
-    function activateMullvadRegionCursor() {
-        var region = selectedMullvadRegion()
-        if (region) chooseExitNode(region)
+    function copyOption(row, kind) {
+        if (!row) return
+        if (kind === "name") service.copyPeerName(row.payload)
+        else if (kind === "dns") service.copyPeerDnsName(row.payload)
+        else if (kind === "ip") service.copyPeerIp(row.payload)
+        else {
+            for (var i = 0; i < row.copyOptions.length; i++)
+                if (row.copyOptions[i].kind === kind) service.copyToClipboard(row.copyOptions[i].label)
+        }
     }
 
-    function openSelectedPeerCopyMenu() {
-        if (peerIndex < 0 || peerIndex >= peerRepeater.count) return
-        var item = peerRepeater.itemAt(peerIndex)
+    function sendPeerFile(row) {
+        if (!row || !row.payload) return
+        // The file chooser takes over from here, so get the popup out of the way.
+        service.sendFile(row.payload)
+        root.expanded = false
+    }
+
+    function rowAction(row, actionId) {
+        if (actionId === "send") sendPeerFile(row)
+        else openCopyMenuFor(row.id)
+    }
+
+    // ---- row registry -------------------------------------------------------
+    // Rows live inside nested Repeaters, so they register themselves here for
+    // the two things reached by id rather than by binding: scrolling the cursor
+    // into view, and opening a machine's copy menu from the keyboard.
+
+    property var rowItems: ({})
+
+    function registerRow(id, item) {
+        var items = rowItems
+        if (item) items[id] = item
+        else delete items[id]
+        rowItems = items
+    }
+
+    function openCopyMenuFor(id) {
+        var item = rowItems[id]
         if (item && item.openCopyMenu) item.openCopyMenu()
     }
 
-    // ---- scrolling ----------------------------------------------------------
+    function focusRow(id) {
+        cursorActive = true
+        cursorIndex = Model.panelNavIndexOf(panel, id)
+    }
 
-    function scrollItemIntoView(item) {
+    function scrollCursorIntoView() {
+        var item = rowItems[cursorRowId()]
         if (!item) return
-        Qt.callLater(function() {
-            if (!item) return
+        Qt.callLater(function () {
             var flick = scroll.contentItem
-            if (!flick) return
+            if (!flick || !item) return
             var margin = Kirigami.Units.gridUnit
             var point = item.mapToItem(flick.contentItem, 0, 0)
             var top = point.y
             var bottom = top + item.height
-            var viewTop = flick.contentY
-            var viewBottom = viewTop + flick.height
             var maxY = Math.max(0, flick.contentHeight - flick.height)
-            if (top < viewTop + margin) flick.contentY = Math.max(0, top - margin)
-            else if (bottom > viewBottom - margin) flick.contentY = Math.min(maxY, bottom + margin - flick.height)
+            if (top < flick.contentY + margin) flick.contentY = Math.max(0, top - margin)
+            else if (bottom > flick.contentY + flick.height - margin)
+                flick.contentY = Math.min(maxY, bottom + margin - flick.height)
         })
-    }
-
-    function scrollCursorIntoView() {
-        if (focusSection === "peers" && peerIndex >= 0 && peerIndex < peerRepeater.count)
-            scrollItemIntoView(peerRepeater.itemAt(peerIndex))
-        else if (focusSection === "exitNodes" && exitNodeIndex >= 0 && exitNodeIndex < exitNodeRepeater.count)
-            scrollItemIntoView(exitNodeRepeater.itemAt(exitNodeIndex))
-    }
-
-    function scrollMullvadRegionCursorIntoView() {
-        if (mullvadRegionIndex >= 0 && mullvadRegionIndex < mullvadRegionRepeater.count)
-            scrollItemIntoView(mullvadRegionRepeater.itemAt(mullvadRegionIndex))
-    }
-
-    onPeerIndexChanged: scrollCursorIntoView()
-    onExitNodeIndexChanged: scrollCursorIntoView()
-    onMullvadRegionIndexChanged: if (mullvadPickerOpen) scrollMullvadRegionCursorIntoView()
-    onShowConnectionsChanged: ensureCursor()
-    onShowPeersChanged: ensureCursor()
-    onShowExitNodesChanged: ensureCursor()
-
-    Connections {
-        target: full.service
-        function onPeersChanged() { full.ensureCursor() }
-        function onAccountsChanged() { full.ensureCursor() }
-        function onAccountsAccessDeniedChanged() { full.ensureCursor() }
     }
 
     // ---- keyboard -----------------------------------------------------------
@@ -246,14 +173,12 @@ Item {
         switch (event.key) {
         case Qt.Key_Down:
         case Qt.Key_J:
-            if (event.key === Qt.Key_J && (event.modifiers & Qt.ControlModifier)) break
             if (!full.cursorActive) full.cursorActive = true
             else full.moveCursor(1)
             event.accepted = true
             return
         case Qt.Key_Up:
         case Qt.Key_K:
-            if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)) break
             if (!full.cursorActive) full.cursorActive = true
             else full.moveCursor(-1)
             event.accepted = true
@@ -266,7 +191,8 @@ Item {
             event.accepted = true
             return
         case Qt.Key_Escape:
-            root.expanded = false
+            if (full.mullvadPickerOpen) full.mullvadPickerOpen = false
+            else root.expanded = false
             event.accepted = true
             return
         case Qt.Key_T:
@@ -278,19 +204,15 @@ Item {
             event.accepted = true
             return
         case Qt.Key_C:
-            full.service.copyPeerIp(full.selectedPeer())
-            event.accepted = true
-            return
         case Qt.Key_N:
-            full.service.copyPeerName(full.selectedPeer())
-            event.accepted = true
-            return
         case Qt.Key_D:
-            full.service.copyPeerDnsName(full.selectedPeer())
-            event.accepted = true
-            return
         case Qt.Key_S:
-            full.sendPeerFile(full.selectedPeer())
+            var row = full.selectedRow()
+            if (!row || row.kind !== "peer") return
+            if (event.key === Qt.Key_C) full.copyOption(row, "ip")
+            else if (event.key === Qt.Key_N) full.copyOption(row, "name")
+            else if (event.key === Qt.Key_D) full.copyOption(row, "dns")
+            else full.sendPeerFile(row)
             event.accepted = true
             return
         }
@@ -299,17 +221,20 @@ Item {
     onVisibleChanged: {
         if (!visible) return
         cursorActive = false
+        cursorIndex = 0
+        _pinnedRowId = ""
         mullvadPickerOpen = false
+        mullvadQuery = ""
         if (scroll.contentItem) scroll.contentItem.contentY = 0
         service.refresh()
-        Qt.callLater(function() { full.forceActiveFocus() })
+        Qt.callLater(() => full.forceActiveFocus())
     }
 
     Timer {
         interval: 2800
-        running: full.visible && full.service.active
+        running: full.visible && full.panel.header.toggleChecked
         repeat: true
-        onTriggered: full.phraseIndex = (full.phraseIndex + 1) % full.activePhrases.length
+        onTriggered: full.phraseIndex = full.phraseIndex + 1
     }
 
     // ---- layout -------------------------------------------------------------
@@ -323,11 +248,10 @@ Item {
             width: scroll.availableWidth
             spacing: Kirigami.Units.smallSpacing
 
-            // Header
             RowSurface {
                 Layout.fillWidth: true
                 Layout.preferredHeight: heroRow.implicitHeight + Kirigami.Units.largeSpacing
-                hasCursor: full.cursorActive && full.focusSection === "header" && full.service.installed
+                hasCursor: full.cursorActive && full.cursorIndex === 0 && full.panel.header.toggleVisible
                 hovered: heroMouse.containsMouse
 
                 MouseArea {
@@ -337,7 +261,7 @@ Item {
                     acceptedButtons: Qt.NoButton
                     onContainsMouseChanged: if (containsMouse) {
                         full.cursorActive = true
-                        full.focusSection = "header"
+                        full.cursorIndex = 0
                     }
                 }
 
@@ -350,11 +274,11 @@ Item {
 
                     TailscaleIcon {
                         iconSize: Kirigami.Units.iconSizes.medium
-                        color: full.service.active ? Kirigami.Theme.textColor : full.dimColor
+                        color: full.panel.header.dimmed ? full.dimColor : Kirigami.Theme.textColor
                         badgeColor: Kirigami.Theme.negativeTextColor
-                        crossed: !full.service.active && !full.service.needsLogin
-                        warning: full.service.needsLogin
-                        opacity: full.service.active ? 1.0 : 0.5
+                        crossed: full.panel.header.crossed
+                        warning: full.panel.header.warning
+                        opacity: full.panel.header.dimmed ? 0.5 : 1.0
                         Layout.alignment: Qt.AlignVCenter
                     }
 
@@ -364,14 +288,13 @@ Item {
 
                         PlasmaExtras.Heading {
                             level: 4
-                            text: full.service.installed ? (full.service.selfName || "Tailscale") : "Tailscale"
+                            text: full.panel.header.title
                             elide: Text.ElideRight
                             Layout.fillWidth: true
                         }
 
                         PlasmaComponents3.Label {
-                            id: heroPhrase
-                            text: full.service.active ? full.heroPhraseText : i18n("Tailscale is disconnected")
+                            text: full.panel.header.meta
                             color: full.dimColor
                             font: Kirigami.Theme.smallFont
                             elide: Text.ElideRight
@@ -394,561 +317,145 @@ Item {
                     }
 
                     PlasmaComponents3.Switch {
-                        visible: full.service.installed
-                        checked: full.service.active
-                        enabled: !full.service.busy
+                        visible: full.panel.header.toggleVisible
+                        checked: full.panel.header.toggleChecked
+                        enabled: full.panel.header.toggleEnabled
                         Layout.alignment: Qt.AlignVCenter
                         onToggled: full.service.toggleTailscale()
 
                         PlasmaComponents3.ToolTip.visible: hovered
-                        PlasmaComponents3.ToolTip.text: full.service.active
-                            ? i18n("Turn Tailscale off")
-                            : (full.service.needsLogin ? i18n("Authorize this device") : i18n("Turn Tailscale on"))
+                        PlasmaComponents3.ToolTip.text: full.panel.header.toggleHint
                     }
                 }
             }
 
-            // Status / error line
             PlasmaComponents3.Label {
-                visible: full.service.actionStatus !== "" || full.service.lastError !== ""
+                visible: full.panel.status.text !== ""
                 Layout.fillWidth: true
                 Layout.leftMargin: Kirigami.Units.smallSpacing * 2
                 Layout.rightMargin: Kirigami.Units.smallSpacing * 2
-                text: full.service.actionStatus !== "" ? full.service.actionStatus : full.service.lastError
-                color: full.service.lastError !== "" && full.service.actionStatus === ""
-                    ? Kirigami.Theme.negativeTextColor : full.dimColor
+                text: full.panel.status.text
+                color: full.panel.status.tone === "error" ? Kirigami.Theme.negativeTextColor : full.dimColor
                 font: Kirigami.Theme.smallFont
                 wrapMode: Text.WordWrap
             }
 
-            PlasmaComponents3.Label {
-                visible: !full.service.installed
-                Layout.fillWidth: true
-                Layout.margins: Kirigami.Units.smallSpacing * 2
-                text: i18n("Tailscale CLI is not installed or not on PATH.")
-                color: full.dimColor
-                wrapMode: Text.WordWrap
-            }
-
-            // Connections
-            Kirigami.Separator {
-                visible: full.showConnections
-                Layout.fillWidth: true
-                Layout.topMargin: Kirigami.Units.smallSpacing
-            }
-
-            SectionHeader {
-                visible: full.showConnections
-                text: i18n("Connections")
-                Layout.fillWidth: true
-            }
-
-            AuthRow {
-                visible: full.service.accountsAccessDenied
-                Layout.fillWidth: true
-            }
-
             Repeater {
-                model: full.service.accounts
-                AccountRow {
+                model: full.panel.sections
+
+                ColumnLayout {
+                    id: sectionView
                     required property var modelData
-                    required property int index
-                    account: modelData
-                    rowIndex: index
+
                     Layout.fillWidth: true
-                }
-            }
+                    spacing: Kirigami.Units.smallSpacing
+                    visible: modelData.visible
 
-            // Exit nodes
-            Kirigami.Separator {
-                visible: full.showExitNodes
-                Layout.fillWidth: true
-                Layout.topMargin: Kirigami.Units.smallSpacing
-            }
+                    Kirigami.Separator {
+                        Layout.fillWidth: true
+                        Layout.topMargin: Kirigami.Units.smallSpacing
+                    }
 
-            SectionHeader {
-                visible: full.showExitNodes
-                text: i18n("Exit nodes")
-                Layout.fillWidth: true
-            }
+                    SectionHeader {
+                        text: sectionView.modelData.title
+                        Layout.fillWidth: true
+                    }
 
-            Repeater {
-                id: exitNodeRepeater
-                model: full.exitNodes
-                ExitNodeRow {
-                    required property var modelData
-                    required property int index
-                    peer: modelData
-                    rowIndex: index
-                    Layout.fillWidth: true
-                }
-            }
+                    PlasmaComponents3.Label {
+                        visible: sectionView.modelData.rows.length === 0 && sectionView.modelData.empty !== ""
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignHCenter
+                        text: sectionView.modelData.empty
+                        color: full.dimColor
+                    }
 
-            PlasmaComponents3.TextField {
-                id: mullvadSearch
-                visible: full.mullvadPickerOpen
-                Layout.fillWidth: true
-                Layout.leftMargin: Kirigami.Units.smallSpacing * 2
-                Layout.rightMargin: Kirigami.Units.smallSpacing * 2
-                placeholderText: i18n("Search regions")
-                text: full.mullvadQuery
-                onTextChanged: {
-                    full.mullvadQuery = text
-                    full.mullvadRegionIndex = 0
-                }
-                onAccepted: full.activateMullvadRegionCursor()
-                Keys.onPressed: (event) => {
-                    if (event.key === Qt.Key_Down) {
-                        full.moveMullvadRegionCursor(1)
-                        event.accepted = true
-                    } else if (event.key === Qt.Key_Up) {
-                        full.moveMullvadRegionCursor(-1)
-                        event.accepted = true
-                    } else if (event.key === Qt.Key_Escape) {
-                        full.mullvadPickerOpen = false
-                        full.forceActiveFocus()
-                        event.accepted = true
+                    Repeater {
+                        model: sectionView.modelData.rows
+
+                        ColumnLayout {
+                            id: rowGroup
+                            required property var modelData
+
+                            readonly property bool isPicker: modelData.kind === "mullvadPicker"
+                            readonly property bool isEmpty: modelData.kind === "empty"
+
+                            Layout.fillWidth: true
+                            spacing: Kirigami.Units.smallSpacing
+
+                            PlasmaComponents3.Label {
+                                visible: rowGroup.isEmpty
+                                Layout.fillWidth: true
+                                horizontalAlignment: Text.AlignHCenter
+                                text: rowGroup.modelData.label
+                                color: full.dimColor
+                                font: Kirigami.Theme.smallFont
+                            }
+
+                            PanelRowView {
+                                id: rowView
+                                visible: !rowGroup.isEmpty
+                                Layout.fillWidth: true
+                                row: rowGroup.modelData
+                                cursorActive: full.cursorActive
+                                cursorRowId: full.cursorRowId()
+                                dimColor: full.dimColor
+                                onActivated: full.dispatch(rowGroup.modelData)
+                                onHoveredRow: full.focusRow(rowGroup.modelData.id)
+                                onActionTriggered: (actionId) => full.rowAction(rowGroup.modelData, actionId)
+                                onCopyRequested: (kind) => full.copyOption(rowGroup.modelData, kind)
+                                Component.onCompleted: full.registerRow(rowGroup.modelData.id, rowView)
+                                Component.onDestruction: full.registerRow(rowGroup.modelData.id, null)
+                            }
+
+                            PlasmaComponents3.TextField {
+                                visible: rowGroup.isPicker && rowGroup.modelData.expanded
+                                Layout.fillWidth: true
+                                Layout.leftMargin: Kirigami.Units.gridUnit
+                                placeholderText: rowGroup.isPicker ? rowGroup.modelData.searchPlaceholder : ""
+                                text: full.mullvadQuery
+                                onTextChanged: full.mullvadQuery = text
+                                onVisibleChanged: if (visible) Qt.callLater(() => forceActiveFocus())
+                                Keys.onPressed: (event) => {
+                                    if (event.key === Qt.Key_Escape) {
+                                        full.mullvadPickerOpen = false
+                                        full.forceActiveFocus()
+                                        event.accepted = true
+                                    } else if (event.key === Qt.Key_Down || event.key === Qt.Key_Up) {
+                                        full.moveCursor(event.key === Qt.Key_Down ? 1 : -1)
+                                        event.accepted = true
+                                    } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                                        full.activateCursor()
+                                        event.accepted = true
+                                    }
+                                }
+                            }
+
+                            // One level of nesting is all the model ever emits,
+                            // so the children render through the same view
+                            // without the component having to recurse.
+                            Repeater {
+                                model: rowGroup.modelData.expanded ? rowGroup.modelData.children : []
+
+                                PanelRowView {
+                                    id: childView
+                                    required property var modelData
+                                    Layout.fillWidth: true
+                                    Layout.leftMargin: Kirigami.Units.gridUnit
+                                    row: modelData
+                                    cursorActive: full.cursorActive
+                                    cursorRowId: full.cursorRowId()
+                                    dimColor: full.dimColor
+                                    onActivated: full.dispatch(childView.modelData)
+                                    onHoveredRow: full.focusRow(childView.modelData.id)
+                                    onCopyRequested: (kind) => full.copyOption(childView.modelData, kind)
+                                    Component.onCompleted: full.registerRow(childView.modelData.id, childView)
+                                    Component.onDestruction: full.registerRow(childView.modelData.id, null)
+                                }
+                            }
+                        }
                     }
                 }
             }
-
-            PlasmaComponents3.Label {
-                visible: full.mullvadPickerOpen && full.filteredMullvadRegions.length === 0
-                Layout.fillWidth: true
-                horizontalAlignment: Text.AlignHCenter
-                text: i18n("No Mullvad regions found.")
-                color: full.dimColor
-                font: Kirigami.Theme.smallFont
-            }
-
-            Repeater {
-                id: mullvadRegionRepeater
-                model: full.mullvadPickerOpen ? full.filteredMullvadRegions : []
-                MullvadRegionRow {
-                    required property var modelData
-                    required property int index
-                    peer: modelData
-                    rowIndex: index
-                    Layout.fillWidth: true
-                }
-            }
-
-            // Machines
-            Kirigami.Separator {
-                visible: full.service.installed && full.service.active
-                Layout.fillWidth: true
-                Layout.topMargin: Kirigami.Units.smallSpacing
-            }
-
-            SectionHeader {
-                visible: full.service.installed && full.service.active
-                text: i18n("Machines")
-                Layout.fillWidth: true
-            }
-
-            PlasmaComponents3.Label {
-                visible: full.service.installed && full.service.active && full.service.peers.length === 0
-                Layout.fillWidth: true
-                horizontalAlignment: Text.AlignHCenter
-                text: i18n("No machines found on this tailnet.")
-                color: full.dimColor
-            }
-
-            Repeater {
-                id: peerRepeater
-                model: full.showPeers ? full.service.peers : []
-                PeerRow {
-                    required property var modelData
-                    required property int index
-                    peer: modelData
-                    rowIndex: index
-                    Layout.fillWidth: true
-                }
-            }
-        }
-    }
-
-    // ---- rows ---------------------------------------------------------------
-
-    component AuthRow: RowSurface {
-        id: authRow
-
-        implicitHeight: authContent.implicitHeight + Kirigami.Units.largeSpacing
-        hasCursor: full.cursorActive && full.focusSection === "auth"
-        hovered: authMouse.containsMouse
-
-        MouseArea {
-            id: authMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: full.service.busy ? Qt.ArrowCursor : Qt.PointingHandCursor
-            enabled: !full.service.busy
-            onEntered: {
-                full.cursorActive = true
-                full.focusSection = "auth"
-            }
-            onClicked: full.service.authorizeTailscaleOperator()
-        }
-
-        RowLayout {
-            id: authContent
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.leftMargin: Kirigami.Units.smallSpacing * 2
-            anchors.rightMargin: Kirigami.Units.smallSpacing * 2
-            spacing: Kirigami.Units.smallSpacing * 2
-
-            Kirigami.Icon {
-                source: "security-medium-symbolic"
-                implicitWidth: Kirigami.Units.iconSizes.small
-                implicitHeight: Kirigami.Units.iconSizes.small
-                Layout.alignment: Qt.AlignVCenter
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 0
-
-                PlasmaComponents3.Label {
-                    text: i18n("Authorize Tailscale operator")
-                    elide: Text.ElideRight
-                    Layout.fillWidth: true
-                }
-
-                PlasmaComponents3.Label {
-                    text: i18n("Allow this user to operate this Tailscale profile")
-                    color: full.dimColor
-                    font: Kirigami.Theme.smallFont
-                    elide: Text.ElideRight
-                    Layout.fillWidth: true
-                }
-            }
-        }
-    }
-
-    component AccountRow: RowSurface {
-        id: accountRow
-
-        property var account: null
-        property int rowIndex: 0
-
-        readonly property bool isSelected: account && account.selected === true
-        readonly property bool isSwitching: account && full.service.switchingAccountId === String(account.id || "")
-
-        implicitHeight: accountContent.implicitHeight + Kirigami.Units.largeSpacing
-        hasCursor: full.cursorActive && full.focusSection === "accounts" && full.accountIndex === rowIndex
-        current: isSelected
-        hovered: accountMouse.containsMouse
-
-        MouseArea {
-            id: accountMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onEntered: {
-                full.cursorActive = true
-                full.focusSection = "accounts"
-                full.accountIndex = accountRow.rowIndex
-            }
-            onClicked: if (accountRow.account) full.service.switchAccount(accountRow.account.id)
-        }
-
-        RowLayout {
-            id: accountContent
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.leftMargin: Kirigami.Units.smallSpacing * 2
-            anchors.rightMargin: Kirigami.Units.smallSpacing * 2
-            spacing: Kirigami.Units.smallSpacing * 2
-
-            Kirigami.Icon {
-                source: accountRow.isSelected ? "checkmark-symbolic" : "user-symbolic"
-                implicitWidth: Kirigami.Units.iconSizes.small
-                implicitHeight: Kirigami.Units.iconSizes.small
-                opacity: accountRow.isSwitching ? 0.45 : 1.0
-                Layout.alignment: Qt.AlignVCenter
-
-                SequentialAnimation on opacity {
-                    running: accountRow.isSwitching
-                    loops: Animation.Infinite
-                    NumberAnimation { to: 1.0; duration: 420; easing.type: Easing.InOutQuad }
-                    NumberAnimation { to: 0.45; duration: 420; easing.type: Easing.InOutQuad }
-                }
-            }
-
-            PlasmaComponents3.Label {
-                text: accountRow.account ? full.service.accountLabel(accountRow.account) : ""
-                font.bold: accountRow.isSelected
-                elide: Text.ElideRight
-                Layout.fillWidth: true
-            }
-        }
-    }
-
-    component ExitNodeRow: RowSurface {
-        id: exitNodeRow
-
-        property var peer: null
-        property int rowIndex: 0
-
-        readonly property bool addMullvad: peer && peer.AddMullvad === true
-        readonly property bool activeExitNode: peer && peer.ExitNode === true
-        readonly property bool settingExitNode: peer && full.service.settingExitNodeId === String(peer.id || "")
-        readonly property string peerName: peer ? String(peer.DisplayName || peer.HostName || i18n("Unknown")) : i18n("Unknown")
-
-        implicitHeight: exitNodeContent.implicitHeight + Kirigami.Units.largeSpacing
-        hasCursor: full.cursorActive && full.focusSection === "exitNodes" && full.exitNodeIndex === rowIndex
-        current: activeExitNode || settingExitNode || (addMullvad && full.mullvadPickerOpen)
-        hovered: exitNodeMouse.containsMouse
-
-        MouseArea {
-            id: exitNodeMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onEntered: {
-                full.cursorActive = true
-                full.focusSection = "exitNodes"
-                full.exitNodeIndex = exitNodeRow.rowIndex
-            }
-            onClicked: full.chooseExitNode(exitNodeRow.peer)
-
-            PlasmaComponents3.ToolTip.visible: containsMouse && !exitNodeRow.addMullvad
-            PlasmaComponents3.ToolTip.text: exitNodeRow.activeExitNode ? i18n("Disconnect") : i18n("Connect")
-        }
-
-        RowLayout {
-            id: exitNodeContent
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.leftMargin: Kirigami.Units.smallSpacing * 2
-            anchors.rightMargin: Kirigami.Units.smallSpacing * 2
-            spacing: Kirigami.Units.smallSpacing * 2
-
-            Kirigami.Icon {
-                source: exitNodeRow.addMullvad
-                    ? "list-add-symbolic"
-                    : (exitNodeRow.peer && exitNodeRow.peer.Mullvad === true ? "network-vpn-symbolic" : "network-connect-symbolic")
-                implicitWidth: Kirigami.Units.iconSizes.small
-                implicitHeight: Kirigami.Units.iconSizes.small
-                Layout.alignment: Qt.AlignVCenter
-
-                RotationAnimation on rotation {
-                    running: exitNodeRow.settingExitNode
-                    loops: Animation.Infinite
-                    from: 0
-                    to: 360
-                    duration: 900
-                }
-                onRotationChanged: if (!exitNodeRow.settingExitNode && rotation !== 0) rotation = 0
-            }
-
-            PlasmaComponents3.Label {
-                text: exitNodeRow.peerName
-                font.bold: exitNodeRow.activeExitNode
-                elide: Text.ElideRight
-                Layout.fillWidth: true
-            }
-        }
-    }
-
-    component MullvadRegionRow: RowSurface {
-        id: regionRow
-
-        property var peer: null
-        property int rowIndex: 0
-
-        readonly property bool activeExitNode: peer && peer.ExitNode === true
-        readonly property bool settingExitNode: peer && full.service.settingExitNodeId === String(peer.id || "")
-        readonly property bool selectedRegion: full.mullvadPickerOpen && full.mullvadRegionIndex === rowIndex
-
-        implicitHeight: regionContent.implicitHeight + Kirigami.Units.largeSpacing
-        current: activeExitNode || settingExitNode || selectedRegion
-        hovered: regionMouse.containsMouse
-
-        MouseArea {
-            id: regionMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onEntered: full.mullvadRegionIndex = regionRow.rowIndex
-            onClicked: full.chooseExitNode(regionRow.peer)
-
-            PlasmaComponents3.ToolTip.visible: containsMouse
-            PlasmaComponents3.ToolTip.text: regionRow.activeExitNode ? i18n("Disconnect") : i18n("Connect")
-        }
-
-        RowLayout {
-            id: regionContent
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.leftMargin: Kirigami.Units.gridUnit
-            anchors.rightMargin: Kirigami.Units.smallSpacing * 2
-            spacing: Kirigami.Units.smallSpacing * 2
-
-            Kirigami.Icon {
-                source: "network-vpn-symbolic"
-                implicitWidth: Kirigami.Units.iconSizes.small
-                implicitHeight: Kirigami.Units.iconSizes.small
-                Layout.alignment: Qt.AlignVCenter
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 0
-
-                PlasmaComponents3.Label {
-                    text: Model.mullvadRegionTitle(regionRow.peer)
-                    font.bold: regionRow.activeExitNode
-                    elide: Text.ElideRight
-                    Layout.fillWidth: true
-                }
-
-                PlasmaComponents3.Label {
-                    text: Model.mullvadRegionSubtitle(regionRow.peer)
-                    visible: text !== ""
-                    color: full.dimColor
-                    font: Kirigami.Theme.smallFont
-                    elide: Text.ElideRight
-                    Layout.fillWidth: true
-                }
-            }
-        }
-    }
-
-    component PeerRow: RowSurface {
-        id: peerRow
-
-        property var peer: null
-        property int rowIndex: 0
-
-        readonly property string peerName: peer ? String(peer.DisplayName || peer.HostName || i18n("Unknown")) : i18n("Unknown")
-        readonly property string peerIp: peer && peer.TailscaleIPs && peer.TailscaleIPs.length > 0 ? String(peer.TailscaleIPs[0]) : ""
-        readonly property string peerIpv6: peer && peer.TailscaleIPv6 && peer.TailscaleIPv6.length > 0 ? String(peer.TailscaleIPv6[0]) : ""
-        readonly property string peerDns: peer ? String(peer.DNSName || "") : ""
-
-        readonly property var copyOptions: {
-            var options = []
-            if (peerName !== "") options.push({ kind: "name", label: peerName })
-            if (peerDns !== "") options.push({ kind: "dns", label: peerDns })
-            if (peerIpv6 !== "") options.push({ kind: "ipv6", label: peerIpv6 })
-            if (peerIp !== "") options.push({ kind: "ip", label: peerIp })
-            return options
-        }
-
-        function openCopyMenu() {
-            if (copyOptions.length === 0) return
-            copyMenu.popup(copyButton, 0, copyButton.height)
-        }
-
-        function copyOption(kind) {
-            if (kind === "name") full.service.copyPeerName(peer)
-            else if (kind === "dns") full.service.copyPeerDnsName(peer)
-            else if (kind === "ipv6") full.service.copyToClipboard(peerIpv6)
-            else if (kind === "ip") full.service.copyPeerIp(peer)
-        }
-
-        implicitHeight: peerContent.implicitHeight + Kirigami.Units.largeSpacing
-        hasCursor: full.cursorActive && full.focusSection === "peers" && full.peerIndex === rowIndex
-        hovered: peerMouse.containsMouse
-
-        MouseArea {
-            id: peerMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            acceptedButtons: Qt.NoButton
-            onContainsMouseChanged: if (containsMouse) {
-                full.cursorActive = true
-                full.focusSection = "peers"
-                full.peerIndex = peerRow.rowIndex
-            }
-        }
-
-        RowLayout {
-            id: peerContent
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.leftMargin: Kirigami.Units.smallSpacing * 2
-            anchors.rightMargin: Kirigami.Units.smallSpacing
-            spacing: Kirigami.Units.smallSpacing * 2
-
-            Kirigami.Icon {
-                source: Model.osIconName(peerRow.peer ? peerRow.peer.OS : "")
-                implicitWidth: Kirigami.Units.iconSizes.small
-                implicitHeight: Kirigami.Units.iconSizes.small
-                Layout.alignment: Qt.AlignVCenter
-            }
-
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 0
-
-                PlasmaComponents3.Label {
-                    text: peerRow.peerName
-                    elide: Text.ElideRight
-                    Layout.fillWidth: true
-                }
-
-                PlasmaComponents3.Label {
-                    text: {
-                        var parts = []
-                        if (peerRow.peerIp !== "") parts.push(peerRow.peerIp)
-                        if (peerRow.peerDns !== "") parts.push(peerRow.peerDns)
-                        return parts.join(" · ")
-                    }
-                    color: full.dimColor
-                    font: Kirigami.Theme.smallFont
-                    elide: Text.ElideRight
-                    Layout.fillWidth: true
-                }
-            }
-
-            PlasmaComponents3.ToolButton {
-                visible: full.service.canSendFiles(peerRow.peer)
-                icon.name: "document-send-symbolic"
-                display: QQC2.AbstractButton.IconOnly
-                text: i18n("Send files")
-                Layout.alignment: Qt.AlignVCenter
-                onClicked: full.sendPeerFile(peerRow.peer)
-
-                PlasmaComponents3.ToolTip.visible: hovered
-                PlasmaComponents3.ToolTip.text: i18n("Send files")
-            }
-
-            PlasmaComponents3.ToolButton {
-                id: copyButton
-                icon.name: "edit-copy-symbolic"
-                display: QQC2.AbstractButton.IconOnly
-                text: i18n("Copy")
-                enabled: peerRow.copyOptions.length > 0
-                Layout.alignment: Qt.AlignVCenter
-                onClicked: peerRow.openCopyMenu()
-
-                PlasmaComponents3.ToolTip.visible: hovered
-                PlasmaComponents3.ToolTip.text: i18n("Copy")
-            }
-        }
-
-        QQC2.Menu {
-            id: copyMenu
-            onClosed: Qt.callLater(function() { full.forceActiveFocus() })
-        }
-
-        Instantiator {
-            model: peerRow.copyOptions
-            delegate: QQC2.MenuItem {
-                required property var modelData
-                text: String(modelData.label || "")
-                icon.name: "edit-copy-symbolic"
-                onTriggered: peerRow.copyOption(String(modelData.kind || ""))
-            }
-            onObjectAdded: (index, object) => copyMenu.insertItem(index, object)
-            onObjectRemoved: (index, object) => copyMenu.removeItem(object)
         }
     }
 }

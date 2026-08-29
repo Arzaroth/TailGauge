@@ -92,6 +92,32 @@ export const TailscaleService = GObject.registerClass({
         return this._cancellables.size > 0;
     }
 
+    // The flat state resolvePanel() reads. Both desktops hand it the same
+    // shape, so the panel they get back cannot disagree.
+    snapshot() {
+        return {
+            installed: this.installed,
+            running: this.running,
+            active: this.active,
+            needsLogin: this.needsLogin,
+            busy: this.busy,
+            selfName: this.selfName,
+            selfIp: this.selfIp,
+            selfUserId: this.selfUserId,
+            fileSharing: this.fileSharing,
+            peers: this.peers,
+            tailnetExitNodes: this.tailnetExitNodes,
+            mullvadRegions: this.mullvadRegions,
+            accounts: this.accounts,
+            selectedAccountId: this.selectedAccountId,
+            switchingAccountId: this.switchingAccountId,
+            settingExitNodeId: this.settingExitNodeId,
+            accountsAccessDenied: this.accountsAccessDenied,
+            actionStatus: this.actionStatus,
+            lastError: this.lastError,
+        };
+    }
+
     // ---- plumbing --------------------------------------------------------
 
     _emit() {

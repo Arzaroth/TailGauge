@@ -21,3 +21,9 @@
 .tailgauge-copy-icon {
     opacity: 0.6;
 }
+
+.tailgauge-sublabel {
+    font-size: 0.85em;
+    opacity: 0.6;
+    padding-left: 12px;
+}

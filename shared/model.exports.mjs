@@ -31,5 +31,12 @@ export {
   elideStatus,
   isProfilesAccessDenied,
   shellQuote,
-  shellCommand
+  shellCommand,
+  ACTIVE_PHRASES,
+  canSendFiles,
+  peerCopyOptions,
+  peerSubtitle,
+  resolvePanel,
+  panelRowAt,
+  panelNavIndexOf
 }

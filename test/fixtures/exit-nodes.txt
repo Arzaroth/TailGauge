@@ -1,0 +1,11 @@
+
+IP             HOSTNAME                          COUNTRY         CITY            STATUS
+100.101.1.1    at-vie-wg-001.mullvad.ts.net      Austria         Vienna          -
+100.101.1.2    be-bru-wg-101.mullvad.ts.net      Belgium         Brussels        -
+100.101.1.3    fr-par-wg-001.mullvad.ts.net      France          Paris           selected
+100.101.1.4    fr-mrs-wg-002.mullvad.ts.net      France          Marseille       -
+100.101.1.5    de-ber-wg-001.mullvad.ts.net      Germany         Berlin          -
+100.101.1.6    any-any-wg-001.mullvad.ts.net     Germany         Any             -
+100.101.1.7    not-a-mullvad-host.tail.ts.net    Nowhere         Nowhere         -
+
+# To use an exit node, run:

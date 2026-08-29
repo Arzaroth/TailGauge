@@ -29,7 +29,12 @@ mkdir -p "$staging"
 # directory, so the link always resolves and unlinking the staged name
 # finishes the move. Prints the name it took.
 claim_path() {
-  local staged="$1" name="${staged##*/}" base ext candidate index=0
+  # Two statements, not one: within a single `local`, a later assignment reads
+  # the caller's value of an earlier name rather than the one just assigned, so
+  # `name` would take its basename from deliver()'s `staged` instead of "$1".
+  local staged="$1"
+  local name="${staged##*/}"
+  local base ext candidate index=0
 
   base="${name%.*}"
   ext="${name#"$base"}"
