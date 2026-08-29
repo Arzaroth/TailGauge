@@ -35,10 +35,10 @@ scripts/install.sh
 
 The installer detects the running desktop. Pass `--plasma` or `--gnome` to force one, and `--no-taildrop` to skip the receive service.
 
-**Plasma**: adds the widget to your library. Add it from *Add Widgets*, or restart the shell to pick up changes:
+**Plasma**: adds the widget to your library. Add it from *Add Widgets*. QML changes need the shell reloaded, and the unit name depends on how the session started it:
 
 ```bash
-systemctl --user restart plasma-plasmashell.service
+systemctl --user restart "$(systemctl --user list-units --no-legend 'app-plasmashell@*.service' | awk '{print $1}' | head -1)"
 ```
 
 **GNOME**: installs the extension, then enable it:
@@ -147,11 +147,13 @@ scripts/install.sh                  # build and install for the running desktop
 
 CI runs those on every pull request, along with `qmllint` for QML syntax, `node --check` on the extension, `shellcheck` on the helpers, and a check that the plasmoid and the extension declare the same version. Tagging `vX.Y.Z` builds and publishes the plasmoid tarball, the GNOME extension zip and the helpers.
 
-Plasma logs QML errors to the shell's journal:
+Plasma logs QML errors under the `plasmashell` identifier rather than a unit, because it usually runs as a transient `app-plasmashell@<hash>.service`:
 
 ```bash
-journalctl --user -u plasma-plasmashell -f
+journalctl --user --identifier=plasmashell -f
 ```
+
+`console.log` from a plasmoid maps to `qDebug` and is filtered out by default. Use `console.warn` when adding a temporary probe, or nothing reaches the journal.
 
 GNOME logs extension errors to:
 

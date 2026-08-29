@@ -92,8 +92,18 @@ if $want_plasma; then
   else
     kpackagetool6 -t Plasma/Applet -i "$build/$PLASMOID_ID"
   fi
-  echo "Installed $PLASMOID_ID - add it from Add Widgets, or restart plasmashell to pick up changes:"
-  echo "  systemctl --user restart plasma-plasmashell.service"
+  echo "Installed $PLASMOID_ID - add it from Add Widgets."
+  # plasmashell is a transient app-plasmashell@<hash>.service under a systemd
+  # session and plasma-plasmashell.service elsewhere, so the unit is looked up
+  # rather than assumed.
+  unit=$(systemctl --user list-units --no-legend 'app-plasmashell@*.service' 2>/dev/null | awk '{print $1}' | head -1)
+  [[ -z $unit ]] && systemctl --user cat plasma-plasmashell.service >/dev/null 2>&1 && unit=plasma-plasmashell.service
+  echo "QML changes need the shell reloaded:"
+  if [[ -n $unit ]]; then
+    echo "  systemctl --user restart $unit"
+  else
+    echo "  plasmashell --replace &"
+  fi
 fi
 
 # ---- GNOME ----------------------------------------------------------------
