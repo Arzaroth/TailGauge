@@ -23,6 +23,8 @@ PlasmoidItem {
     TailscaleService {
         id: service
         refreshIntervalSec: Plasmoid.configuration.refreshIntervalSec
+        // An open popup is worth polling for; a closed one rides the watcher.
+        attentive: root.expanded
     }
 
     Plasmoid.icon: "network-vpn"

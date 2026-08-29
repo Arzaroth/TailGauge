@@ -326,6 +326,9 @@ Item {
                         visible: full.panel.header.toggleVisible
                         checked: full.panel.header.toggleChecked
                         enabled: full.panel.header.toggleEnabled
+                        // Busy is shown, never enforced: a command in flight
+                        // dims the switch but leaves it clickable.
+                        opacity: full.panel.header.busy ? 0.6 : 1.0
                         Layout.alignment: Qt.AlignVCenter
                         onToggled: full.service.toggleTailscale()
 

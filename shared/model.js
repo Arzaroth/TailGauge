@@ -538,8 +538,12 @@ function panelHeader(state, t, phraseIndex) {
     meta: meta,
     action: "toggle",
     toggleVisible: state.installed === true,
-    toggleEnabled: state.busy !== true,
+    // Never gated on `busy`. A background status poll must not make the switch
+    // unclickable, and a toggle already reports optimistically through
+    // `active`, so there is nothing to protect against a second click.
+    toggleEnabled: state.installed === true,
     toggleChecked: state.active === true,
+    busy: state.busy === true,
     toggleHint: state.active
       ? t("Turn Tailscale off")
       : (state.needsLogin ? t("Authorize this device") : t("Turn Tailscale on")),

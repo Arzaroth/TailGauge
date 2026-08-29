@@ -16,6 +16,12 @@ const DELAYED_REFRESH_MS = 600;
 const STARTUP_RAMP_MS = 2000;
 const STARTUP_RAMP_TICKS = 15;
 const ACCOUNTS_MAX_AGE_MS = 60000;
+const ATTENTIVE_INTERVAL_SEC = 3;
+const WATCH_TIMEOUT_SEC = 300;
+const WATCH_REARM_MS = 250;
+const WATCH_BACKOFF_MS = 30000;
+
+const USER_KINDS = ['action', 'login', 'switch', 'exitNode', 'operator', 'applyUpdate'];
 
 // gnome-shell inherits the session PATH, which often lacks the user bin dirs
 // the installer drops the Taildrop and clipboard helpers into. `exec "$@"`
@@ -69,6 +75,7 @@ export const TailscaleService = GObject.registerClass({
         // Assume the helpers are there until the probe says otherwise, so the
         // send action does not flicker away on a slow first poll.
         this.helpers = true;
+        this._attentive = false;
         this.update = {available: false, updatable: false, latest: '', url: '', error: ''};
         this.updating = false;
 
@@ -105,8 +112,28 @@ export const TailscaleService = GObject.registerClass({
         return this._desired === -1 ? this.running : this._desired === 1;
     }
 
+    // Only work the user asked for. A status poll or an update check is not
+    // something the panel should ever report as busy, let alone gate a control
+    // on: the poll runs every few seconds and would flicker the whole panel.
     get busy() {
-        return this._cancellables.size > 0;
+        for (const kind of USER_KINDS) {
+            if (this._cancellables.has(kind))
+                return true;
+        }
+        return false;
+    }
+
+    // True while the menu is on screen. Polling follows the panel: fast enough
+    // to feel live while it is open, lazy while it is not.
+    set attentive(value) {
+        if (this._attentive === value)
+            return;
+        this._attentive = value;
+        this._armRefresh();
+    }
+
+    get attentive() {
+        return this._attentive === true;
     }
 
     // The flat state resolvePanel() reads. Both desktops hand it the same
@@ -146,7 +173,9 @@ export const TailscaleService = GObject.registerClass({
     }
 
     _armRefresh() {
-        const seconds = Math.max(5, this._settings.get_int('refresh-interval'));
+        const seconds = this.attentive
+            ? ATTENTIVE_INTERVAL_SEC
+            : Math.max(5, this._settings.get_int('refresh-interval'));
         this._removeTimeout('refresh');
         this._timeouts.set('refresh', GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, seconds, () => {
             this.refresh();
@@ -230,6 +259,24 @@ export const TailscaleService = GObject.registerClass({
 
     // ---- polling ---------------------------------------------------------
 
+    // A long poll that returns the moment tailscaled reports a change, so an
+    // external `tailscale up` shows up at once instead of on the next tick.
+    watch() {
+        if (!this.installed || this._destroyed)
+            return;
+        this._run('watch', ['tailgauge-watch', String(WATCH_TIMEOUT_SEC)], status => {
+            // 0 means something changed, 2 means the wait simply expired.
+            // Anything else is a broken watcher, so back off rather than spin.
+            if (status === 0)
+                this.refresh();
+            const delay = (status === 0 || status === 2) ? WATCH_REARM_MS : WATCH_BACKOFF_MS;
+            this._addTimeout('rearmWatch', delay, () => {
+                this.watch();
+                return GLib.SOURCE_REMOVE;
+            });
+        });
+    }
+
     checkUpdate(force = false) {
         const argv = ['tailgauge-update', '--check', '--json'];
         if (force)
@@ -280,6 +327,8 @@ export const TailscaleService = GObject.registerClass({
             this.installed = status === 0;
             if (this.installed) {
                 this._refreshStatusAndAccounts(false);
+                if (!this._cancellables.has('watch'))
+                    this.watch();
             } else {
                 this.refreshing = false;
                 this._resetUnavailable(_('Not installed'));

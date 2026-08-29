@@ -127,6 +127,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
             () => this._syncPanel(this._panel()));
 
         this.menu.connect('open-state-changed', (_menu, open) => {
+            this._service.attentive = open;
             if (open) {
                 this._service.refresh();
                 this._startPhrases();
@@ -233,7 +234,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
 
     _syncHeader(panel) {
         this._headerItem.label.text = panel.header.title;
-        this._headerItem.setSensitive(panel.header.toggleVisible);
+        this._headerItem.setSensitive(panel.header.toggleEnabled);
         if (this._headerItem.state !== panel.header.toggleChecked)
             this._headerItem.setToggleState(panel.header.toggleChecked);
 

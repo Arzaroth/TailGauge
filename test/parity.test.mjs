@@ -83,6 +83,18 @@ test('both services hand resolvePanel the same snapshot shape', () => {
         'the two snapshots disagree, so the two panels can disagree');
 });
 
+test('neither frontend gates a control on background work', () => {
+    for (const [name, source] of [['plasma', plasmaSource], ['gnome', gnomeSource]]) {
+        assert.equal(/enabled:\s*!.*busy|setSensitive\(.*busy/.test(source), false,
+            `${name} disables a control while busy; resolvePanel decides that`);
+    }
+});
+
+test('both frontends tell the service when the panel is on screen', () => {
+    assert.match(plasmaSource + read('plasma/org.tailgauge.plasmoid/contents/ui/main.qml'), /attentive/);
+    assert.match(gnomeSource, /attentive/);
+});
+
 test('the shared model owns the layout vocabulary', () => {
     const model = read('shared/model.js');
     for (const word of ['sections', 'navigation', 'visible', 'rows', 'empty'])

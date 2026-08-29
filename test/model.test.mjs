@@ -388,3 +388,21 @@ test('canSendFiles agrees with the resolved actions', () => {
     assert.equal(M.canSendFiles(state({fileSharing: false}), peer), false);
     assert.equal(M.canSendFiles(state({running: false}), peer), false);
 });
+
+// ---- the toggle must never be gated on background work --------------------
+
+test('the switch stays enabled while a background poll runs', () => {
+    // A status poll every few seconds would otherwise leave the switch dead
+    // most of the time. Upstream shows `busy`; it never enforces it.
+    const idle = M.resolvePanel(state(), {}).header;
+    const polling = M.resolvePanel(state({busy: true}), {}).header;
+    assert.equal(idle.toggleEnabled, true);
+    assert.equal(polling.toggleEnabled, true, 'busy must not disable the toggle');
+    assert.equal(polling.busy, true, 'but it is still reported, for a spinner');
+    assert.equal(idle.busy, false);
+});
+
+test('the switch is disabled only when there is no CLI to drive', () => {
+    assert.equal(M.resolvePanel(state({installed: false}), {}).header.toggleEnabled, false);
+    assert.equal(M.resolvePanel(state({installed: false}), {}).header.toggleVisible, false);
+});
