@@ -1,0 +1,313 @@
+#!/bin/bash
+# Usage: tailgauge-update [--check] [--json] [--apply] [--force] [--quiet]
+#
+# --check   report whether a newer release exists (default)
+# --json    machine-readable output, which is what the panels read
+# --apply   download and install the newer release
+# --force   ignore the cache, and update even a store-managed install
+#
+# Exit 0 when up to date or updated, 1 on error, 2 when an update is available
+# and only being reported.
+
+set -uo pipefail
+
+VERSION="1.0.0"
+REPO="Arzaroth/TailGauge"
+PLASMOID_ID="org.tailgauge.plasmoid"
+EXTENSION_UUID="tailgauge@arzaroth.github.io"
+CACHE_TTL_SEC=21600
+
+cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/tailgauge"
+cache_file="$cache_dir/update.json"
+
+mode="check"
+json=false
+force=false
+quiet=false
+
+while (($# > 0)); do
+  case "$1" in
+  --check) mode="check" ;;
+  --apply) mode="apply" ;;
+  --json) json=true ;;
+  --force) force=true ;;
+  --quiet) quiet=true ;;
+  -h | --help)
+    sed -n '2,10p' "$0"
+    exit 0
+    ;;
+  *)
+    echo "tailgauge-update: unknown option $1" >&2
+    exit 1
+    ;;
+  esac
+  shift
+done
+
+say() { $quiet || echo "$@"; }
+
+json_escape() {
+  local s="${1-}"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\n'/ }"
+  printf '%s' "$s"
+}
+
+# Sort -V puts the newer version last, so a is older than b only when the pair
+# is already in order and the two differ.
+newer_than() {
+  [[ $1 != "$2" ]] && [[ $(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1) == "$1" ]]
+}
+
+read_json_string() {
+  local file="$1" key="$2"
+  [[ -f $file ]] || return 1
+  sed -n "s/.*\"$key\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$file" | head -1
+}
+
+plasmoid_dir() {
+  for base in "$HOME/.local/share/plasma/plasmoids" /usr/share/plasma/plasmoids; do
+    [[ -f "$base/$PLASMOID_ID/metadata.json" ]] && {
+      printf '%s\n' "$base/$PLASMOID_ID"
+      return 0
+    }
+  done
+  return 1
+}
+
+extension_dir() {
+  for base in "$HOME/.local/share/gnome-shell/extensions" /usr/share/gnome-shell/extensions; do
+    [[ -f "$base/$EXTENSION_UUID/metadata.json" ]] && {
+      printf '%s\n' "$base/$EXTENSION_UUID"
+      return 0
+    }
+  done
+  return 1
+}
+
+# Who owns this copy decides whether we may replace it. A store-managed install
+# has its own updater, and racing it leaves the store's registry describing a
+# version that is no longer on disk.
+plasmoid_managed() {
+  local dir="$1"
+  [[ $dir == /usr/* ]] && {
+    echo system
+    return
+  }
+  local registry="$HOME/.local/share/knewstuff3/plasmoids.knsregistry"
+  if [[ -f $registry ]] && grep -q "$PLASMOID_ID" "$registry"; then
+    echo knewstuff
+    return
+  fi
+  echo manual
+}
+
+extension_managed() {
+  local dir="$1"
+  [[ $dir == /usr/* ]] && {
+    echo system
+    return
+  }
+  # EGO's build pipeline stamps every zip it serves; the Extensions app updates
+  # those on its own schedule.
+  if grep -q '"_generated"' "$dir/metadata.json" 2>/dev/null; then
+    echo ego
+    return
+  fi
+  echo manual
+}
+
+fetch_latest() {
+  local now cached_at
+  now=$(date +%s)
+
+  if ! $force && [[ -f $cache_file ]]; then
+    cached_at=$(read_json_string "$cache_file" "checked")
+    if [[ -n $cached_at ]] && ((now - cached_at < CACHE_TTL_SEC)); then
+      read_json_string "$cache_file" "latest"
+      return 0
+    fi
+  fi
+
+  command -v curl >/dev/null 2>&1 || {
+    echo "tailgauge-update: curl is required to check for updates" >&2
+    return 1
+  }
+
+  local body tag
+  body=$(curl -fsSL --max-time 15 \
+    -H 'Accept: application/vnd.github+json' \
+    "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null) || return 1
+  tag=$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' <<<"$body" | head -1)
+  [[ -n $tag ]] || return 1
+
+  mkdir -p "$cache_dir"
+  printf '{"latest":"%s","checked":"%s"}\n' "${tag#v}" "$now" >"$cache_file"
+  printf '%s\n' "${tag#v}"
+}
+
+# ---- gather ---------------------------------------------------------------
+
+latest=$(fetch_latest) || latest=""
+error=""
+[[ -z $latest ]] && error="Could not reach GitHub to check for updates"
+
+targets=()   # kind:current:managed:outdated:dir
+available=false
+updatable=false
+
+add_target() {
+  local kind="$1" current="$2" managed="$3" dir="$4" outdated=false
+  if [[ -n $latest && -n $current ]] && newer_than "$latest" "$current"; then
+    outdated=true
+    available=true
+    [[ $managed == manual ]] && updatable=true
+  fi
+  targets+=("$kind:$current:$managed:$outdated:$dir")
+}
+
+if dir=$(plasmoid_dir); then
+  add_target plasmoid "$(read_json_string "$dir/metadata.json" Version)" "$(plasmoid_managed "$dir")" "$dir"
+fi
+if dir=$(extension_dir); then
+  add_target extension "$(read_json_string "$dir/metadata.json" version-name)" "$(extension_managed "$dir")" "$dir"
+fi
+add_target helpers "$VERSION" manual "$(dirname "$(readlink -f "$0")")"
+
+$force && updatable=true
+
+# ---- report ---------------------------------------------------------------
+
+emit_json() {
+  local first=true
+  printf '{"available":%s,"updatable":%s,"latest":"%s","url":"https://github.com/%s/releases/latest","error":"%s","targets":[' \
+    "$available" "$updatable" "$(json_escape "$latest")" "$REPO" "$(json_escape "$error")"
+  for entry in "${targets[@]}"; do
+    IFS=: read -r kind current managed outdated _dir <<<"$entry"
+    $first || printf ','
+    first=false
+    printf '{"kind":"%s","current":"%s","managed":"%s","outdated":%s}' \
+      "$kind" "$(json_escape "$current")" "$managed" "$outdated"
+  done
+  printf ']}\n'
+}
+
+if [[ $mode == check ]]; then
+  if $json; then
+    emit_json
+  elif [[ -n $error ]]; then
+    echo "$error" >&2
+  elif $available; then
+    say "TailGauge $latest is available."
+    for entry in "${targets[@]}"; do
+      IFS=: read -r kind current managed outdated _dir <<<"$entry"
+      $outdated && say "  $kind $current ($managed)"
+    done
+    $updatable || say "Nothing to do here: every outdated part is managed elsewhere."
+  else
+    say "TailGauge is up to date${latest:+ ($latest)}."
+  fi
+  $available && exit 2
+  [[ -n $error ]] && exit 1
+  exit 0
+fi
+
+# ---- apply ----------------------------------------------------------------
+
+[[ -n $error ]] && {
+  echo "$error" >&2
+  exit 1
+}
+$available || {
+  say "TailGauge is already up to date ($latest)."
+  exit 0
+}
+$updatable || {
+  echo "tailgauge-update: every outdated part is managed by the store that installed it." >&2
+  echo "Update from Add Widgets on Plasma, or the Extensions app on GNOME. Use --force to override." >&2
+  exit 1
+}
+
+command -v curl >/dev/null 2>&1 || {
+  echo "tailgauge-update: curl is required" >&2
+  exit 1
+}
+
+work=$(mktemp -d) || exit 1
+trap 'rm -rf "$work"' EXIT
+
+base="https://github.com/$REPO/releases/download/v$latest"
+notify="tailgauge-notify"
+command -v "$notify" >/dev/null 2>&1 || notify=""
+
+download() {
+  curl -fsSL --max-time 120 -o "$work/$2" "$base/$1" 2>/dev/null
+}
+
+fail() {
+  echo "tailgauge-update: $1" >&2
+  [[ -n $notify ]] && "$notify" -u critical "TailGauge update failed" "$1"
+  exit 1
+}
+
+updated=()
+for entry in "${targets[@]}"; do
+  IFS=: read -r kind current managed outdated dir <<<"$entry"
+  { $outdated && [[ $managed == manual ]]; } || continue
+
+  case "$kind" in
+  plasmoid)
+    download "tailgauge-v$latest-plasmoid.plasmoid" plasmoid.zip ||
+      fail "could not download the plasmoid for $latest"
+    # -u exits 2 when the package is not registered, which happens if the
+    # widget directory was put in place by hand rather than installed.
+    kpackagetool6 -t Plasma/Applet -u "$work/plasmoid.zip" >/dev/null 2>&1 ||
+      kpackagetool6 -t Plasma/Applet -i "$work/plasmoid.zip" >/dev/null ||
+      fail "kpackagetool6 refused the new plasmoid"
+    updated+=("Plasma widget")
+    ;;
+  extension)
+    download "tailgauge-v$latest-gnome-shell-extension.zip" extension.zip ||
+      fail "could not download the GNOME extension for $latest"
+    gnome-extensions install --force "$work/extension.zip" >/dev/null ||
+      fail "gnome-extensions refused the new extension"
+    updated+=("GNOME extension")
+    ;;
+  helpers)
+    download "tailgauge-v$latest-helpers.tar.gz" helpers.tar.gz ||
+      fail "could not download the helpers for $latest"
+    mkdir -p "$work/helpers" || fail "could not stage the helpers"
+    tar -C "$work/helpers" -xzf "$work/helpers.tar.gz" ||
+      fail "the helpers archive did not extract"
+    # Replacing the running script in place is fine: bash has already read it.
+    for helper in "$work/helpers"/bin/*; do
+      [[ -f $helper ]] && install -m 755 "$helper" "$HOME/.local/bin/$(basename "$helper")"
+    done
+    if [[ -f "$work/helpers/systemd/tailgauge-receive.service" ]]; then
+      mkdir -p "$HOME/.config/systemd/user"
+      install -m 644 "$work/helpers/systemd/tailgauge-receive.service" \
+        "$HOME/.config/systemd/user/tailgauge-receive.service"
+      systemctl --user daemon-reload 2>/dev/null
+      systemctl --user is-enabled tailgauge-receive.service >/dev/null 2>&1 &&
+        systemctl --user restart tailgauge-receive.service 2>/dev/null
+    fi
+    updated+=("helpers")
+    ;;
+  esac
+done
+
+rm -f "$cache_file"
+
+if ((${#updated[@]} == 0)); then
+  say "Nothing to update."
+  exit 0
+fi
+
+joined=$(
+  IFS=", "
+  echo "${updated[*]}"
+)
+say "Updated to $latest: $joined"
+[[ -n $notify ]] && "$notify" "TailGauge updated to $latest" "$joined - restart the shell to load it"
+exit 0

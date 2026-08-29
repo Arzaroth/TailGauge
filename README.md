@@ -49,6 +49,45 @@ gnome-extensions enable tailgauge@arzaroth.github.io
 
 On Xorg, restart the shell with `Alt+F2` `r`. On Wayland, log out and back in.
 
+## Distribution
+
+TailGauge has no binary, so there is nothing to self-replace the way a compiled tool does. Instead both desktops already ship an update mechanism, and TailGauge uses them.
+
+| Channel | Installs | Updates |
+|---|---|---|
+| [store.kde.org](https://store.kde.org) | the Plasma widget | *Add Widgets* shows updates; KNewStuff tracks the version |
+| [extensions.gnome.org](https://extensions.gnome.org) | the GNOME extension | the Extensions app applies them on next session |
+| GitHub releases | everything, including the helpers | `tailgauge-update` |
+| Distro package | everything, as one unit | the package manager |
+
+**Neither store can install `bin/` or the systemd unit** - the KDE Store ships a kpackage, EGO ships an extension zip. A store-installed TailGauge is the panel only: status, toggle, connections, exit nodes, machines and copy actions all work; **Taildrop send does not appear**, because the panel checks for `tailgauge-send` before offering it. Install the helpers from the release archive to get it back:
+
+```bash
+curl -fsSL https://github.com/Arzaroth/TailGauge/releases/latest/download/tailgauge-v1.0.0-helpers.tar.gz | tar -xz
+install -m 755 bin/* ~/.local/bin/
+```
+
+### Updating
+
+```bash
+tailgauge-update             # is there a newer release?
+tailgauge-update --apply     # install it
+```
+
+The check is cached for six hours, so the panel polling it costs nothing. Both panels show a banner when an update is out, with an **Install it now** row when TailGauge can do it itself.
+
+It refuses to update anything it did not install. A widget registered with KNewStuff, an extension carrying EGO's `_generated` stamp, or anything under `/usr` is left to whoever owns it, and the banner says so instead of offering the button. `--force` overrides.
+
+### Release assets
+
+Tagging `vX.Y.Z` publishes:
+
+- `tailgauge-vX.Y.Z-plasmoid.plasmoid` - `kpackagetool6 -t Plasma/Applet -i`, and the KDE Store upload
+- `tailgauge-vX.Y.Z-gnome-shell-extension.zip` - `gnome-extensions install`, and the EGO upload
+- `tailgauge-vX.Y.Z-helpers.tar.gz` - `bin/` and the systemd unit
+
+`test/distribution.test.mjs` fails the build if those names stop matching what `tailgauge-update` downloads, or if the three declared versions drift apart.
+
 ## The parity rule
 
 The two frontends do not each decide what to draw. `shared/model.js` resolves the whole panel and hands both of them the same answer:
@@ -71,7 +110,7 @@ shared/model.js          the only copy of the data model AND the panel layout
 shared/model.exports.mjs the export footer appended for the GNOME build
 plasma/                  the Plasma 6 plasmoid (QML)
 gnome/                   the GNOME Shell extension (GJS)
-bin/                     tailgauge-send / -receive / -copy / -notify / -file-select
+bin/                     tailgauge-send / -receive / -copy / -notify / -file-select / -update
 systemd/                 the Taildrop receive user unit
 test/                    model and parity tests, run by `node --test`
 scripts/build.sh         assembles build/, wiring the shared model into both
@@ -86,7 +125,7 @@ scripts/install.sh       builds, then installs helpers, unit and packages
 |---|---|---|
 | Refresh interval | 30s | How often `tailscale status --json` is re-read |
 | Show the machine name | off | Puts the machine name next to the panel icon |
-| Recent Mullvad regions | — | Shortlist behind the exit node list, cleared from GNOME's preferences |
+| Recent Mullvad regions | - | Shortlist behind the exit node list, cleared from GNOME's preferences |
 
 Plasma stores these in the widget's own configuration; GNOME in `org.gnome.shell.extensions.tailgauge`.
 

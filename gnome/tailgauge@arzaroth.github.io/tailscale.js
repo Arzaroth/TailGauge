@@ -66,11 +66,28 @@ export const TailscaleService = GObject.registerClass({
         this.actionStatus = '';
         this.lastError = '';
 
+        // Assume the helpers are there until the probe says otherwise, so the
+        // send action does not flicker away on a slow first poll.
+        this.helpers = true;
+        this.update = {available: false, updatable: false, latest: '', url: '', error: ''};
+        this.updating = false;
+
         this._lastAccountsRefreshMs = 0;
         this._loginInProgress = false;
         this._loginUrlOpened = false;
         this._preLoginAuthUrl = '';
         this._startupTicks = 0;
+
+        this._run('helpers', ['which', 'tailgauge-send'], status => {
+            this.helpers = status === 0;
+        });
+        this.checkUpdate();
+        // The helper caches its GitHub answer, so this mostly reads a file; the
+        // interval is about how stale the banner may be, not about rate limits.
+        this._timeouts.set('update', GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 6 * 3600, () => {
+            this.checkUpdate();
+            return GLib.SOURCE_CONTINUE;
+        }));
 
         this._settingsChangedId = this._settings.connect('changed::refresh-interval', () => this._armRefresh());
         this._armRefresh();
@@ -115,6 +132,9 @@ export const TailscaleService = GObject.registerClass({
             accountsAccessDenied: this.accountsAccessDenied,
             actionStatus: this.actionStatus,
             lastError: this.lastError,
+            helpers: this.helpers,
+            update: this.update,
+            updating: this.updating,
         };
     }
 
@@ -209,6 +229,47 @@ export const TailscaleService = GObject.registerClass({
     }
 
     // ---- polling ---------------------------------------------------------
+
+    checkUpdate(force = false) {
+        const argv = ['tailgauge-update', '--check', '--json'];
+        if (force)
+            argv.push('--force');
+        // --check exits 2 when an update is available, which is a result, not a
+        // failure.
+        this._run('update', argv, (status, stdout) => {
+            if (status !== 0 && status !== 2)
+                return;
+            try {
+                this.update = JSON.parse(stdout);
+            } catch (e) {
+                this.update = {available: false, updatable: false, latest: '', url: '', error: ''};
+            }
+        });
+    }
+
+    applyUpdate() {
+        if (this.updating || this.update?.updatable !== true)
+            return;
+        this.updating = true;
+        this.actionStatus = _('Updating TailGauge…');
+        this._run('applyUpdate', ['tailgauge-update', '--apply', '--quiet'], (status, stdout, stderr) => {
+            this.updating = false;
+            if (status !== 0) {
+                this.lastError = Model.elideStatus(stderr || stdout || _('Update failed'));
+                this._flashStatus(this.lastError);
+            } else {
+                this._flashStatus(_('Updated - log back in to load it'));
+                this.checkUpdate(true);
+            }
+        });
+        this._emit();
+    }
+
+    openUrl(url) {
+        const target = String(url || '');
+        if (target !== '')
+            Gio.AppInfo.launch_default_for_uri(target, null);
+    }
 
     refresh(forceAccounts = false) {
         if (this.installed) {

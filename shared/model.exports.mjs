@@ -34,6 +34,7 @@ export {
   shellCommand,
   ACTIVE_PHRASES,
   canSendFiles,
+  formatText,
   peerCopyOptions,
   peerSubtitle,
   resolvePanel,

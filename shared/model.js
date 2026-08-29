@@ -470,8 +470,15 @@ var ACTIVE_PHRASES = [
 
 function identityText(text) { return text }
 
+function formatText(template, value) {
+  return String(template).replace("%1", String(value === null || value === undefined ? "" : value))
+}
+
 function canSendFiles(state, peer) {
   if (!state || !state.fileSharing || !state.running || !peer) return false
+  // The KDE Store ships a kpackage and EGO ships an extension zip; neither can
+  // put tailgauge-send on PATH. Without it the button would do nothing at all.
+  if (state.helpers === false) return false
   return isTaildropTarget(peer, state.selfUserId)
 }
 
@@ -549,6 +556,39 @@ function panelStatus(state, t) {
   if (state.actionStatus) return { text: String(state.actionStatus), tone: "dim" }
   if (state.lastError) return { text: String(state.lastError), tone: "error" }
   return { text: "", tone: "" }
+}
+
+function updateSection(state, t) {
+  var update = state.update || {}
+  var available = update.available === true
+  var rows = []
+
+  if (available) {
+    var updatable = update.updatable === true
+    rows.push(panelRow({
+      id: "update",
+      kind: "update",
+      label: formatText(t("TailGauge %1 is available"), update.latest),
+      sublabel: updatable
+        ? t("Install it now")
+        : t("Update it where you installed it from"),
+      icon: "software-update-available-symbolic",
+      glyph: "󰚰",
+      action: updatable ? "update" : "openUrl",
+      busy: state.updating === true,
+      current: true,
+      payload: update
+    }))
+  }
+
+  return {
+    id: "update",
+    // No title: one banner does not need a section header over it.
+    title: "",
+    visible: available,
+    empty: "",
+    rows: rows
+  }
 }
 
 function connectionsSection(state, t) {
@@ -742,6 +782,7 @@ function resolvePanel(state, options) {
 
   var header = panelHeader(source, t, opts.phraseIndex)
   var sections = [
+    updateSection(source, t),
     connectionsSection(source, t),
     exitNodesSection(source, t, opts.recentRegions || [], opts.mullvadQuery || "", opts.mullvadPickerOpen === true),
     machinesSection(source, t)

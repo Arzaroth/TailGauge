@@ -157,9 +157,10 @@ jobs:
         run: |
           plasmoid=$(node -e 'process.stdout.write(require("./plasma/org.tailgauge.plasmoid/metadata.json").KPlugin.Version)')
           extension=$(node -e 'process.stdout.write(require("./gnome/tailgauge@arzaroth.github.io/metadata.json")["version-name"])')
-          echo "plasmoid=$plasmoid extension=$extension"
-          if [[ $plasmoid != "$extension" ]]; then
-            echo "::error::version mismatch between the plasmoid and the GNOME extension"
+          helpers=$(sed -n 's/^VERSION="\(.*\)"$/\1/p' bin/tailgauge-update)
+          echo "plasmoid=$plasmoid extension=$extension helpers=$helpers"
+          if [[ $plasmoid != "$extension" || $plasmoid != "$helpers" ]]; then
+            echo "::error::version mismatch across the plasmoid, the extension and bin/tailgauge-update"
             exit 1
           fi
 

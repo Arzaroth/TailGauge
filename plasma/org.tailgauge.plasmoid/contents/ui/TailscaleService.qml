@@ -39,6 +39,12 @@ Item {
     property string actionStatus: ""
     property string lastError: ""
 
+    // Assume the helpers are there until the probe says otherwise, so the send
+    // button does not flicker away on a slow first poll.
+    property bool helpers: true
+    property var update: ({ available: false, updatable: false, latest: "", url: "", error: "" })
+    property bool updating: false
+
     property var _inflight: ({})
     property int _inflightCount: 0
     property var _kinds: ({})
@@ -72,7 +78,10 @@ Item {
             settingExitNodeId: settingExitNodeId,
             accountsAccessDenied: accountsAccessDenied,
             actionStatus: actionStatus,
-            lastError: lastError
+            lastError: lastError,
+            helpers: helpers,
+            update: update,
+            updating: updating
         }
     }
 
@@ -233,6 +242,29 @@ Item {
             }
             root.settingExitNodeId = ""
             delayedRefresh.restart()
+        } else if (kind === "helpers") {
+            root.helpers = exitCode === 0
+        } else if (kind === "update") {
+            // --check exits 2 when an update is available, which is a result,
+            // not a failure.
+            if (exitCode === 0 || exitCode === 2) {
+                try {
+                    root.update = JSON.parse(stdout)
+                } catch (e) {
+                    root.update = { available: false, updatable: false, latest: "", url: "", error: "" }
+                }
+            }
+        } else if (kind === "applyUpdate") {
+            root.updating = false
+            if (exitCode !== 0) {
+                root.lastError = Model.elideStatus(stderr || stdout || "Update failed")
+                root.actionStatus = root.lastError
+                actionStatusTimer.restart()
+            } else {
+                root.actionStatus = "Updated - restart the shell to load it"
+                actionStatusTimer.restart()
+                root.checkUpdate(true)
+            }
         } else if (kind === "operator") {
             if (exitCode !== 0) {
                 root.lastError = Model.elideStatus(stderr || stdout || "Tailscale authorization failed")
@@ -283,6 +315,24 @@ Item {
         var target = Model.peerAddress(peer)
         if (target === "") return
         _detach(["tailgauge-send", target])
+    }
+
+    function checkUpdate(force) {
+        var argv = ["tailgauge-update", "--check", "--json"]
+        if (force === true) argv.push("--force")
+        _run("update", argv)
+    }
+
+    function applyUpdate() {
+        if (updating || !update || update.updatable !== true) return
+        updating = true
+        actionStatus = "Updating TailGauge…"
+        _run("applyUpdate", ["tailgauge-update", "--apply", "--quiet"])
+    }
+
+    function openUrl(url) {
+        var target = String(url || "")
+        if (target !== "") Qt.openUrlExternally(target)
     }
 
     function refresh(forceAccounts) {
@@ -496,6 +546,18 @@ Item {
             else root.refresh()
         }
     }
+
+    Timer {
+        // The helper caches its GitHub answer, so this mostly reads a file; the
+        // interval is about how stale the banner may be, not about rate limits.
+        interval: 6 * 3600 * 1000
+        repeat: true
+        running: true
+        triggeredOnStart: true
+        onTriggered: root.checkUpdate()
+    }
+
+    Component.onCompleted: root._run("helpers", ["which", "tailgauge-send"])
 
     Timer {
         id: delayedRefresh

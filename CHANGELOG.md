@@ -40,8 +40,20 @@ Hyprland/Quickshell onto KDE Plasma 6 and GNOME Shell 45+.
   each frontend decides only how a row looks. `test/parity.test.mjs` enforces
   that boundary.
 
+### Distribution
+
+- Ships through store.kde.org and extensions.gnome.org, which both carry their
+  own update mechanism, plus GitHub releases for anyone installing from the
+  repo. `tailgauge-update --check/--apply` covers the last case, caches its
+  GitHub answer for six hours, and refuses to touch a copy that KNewStuff, EGO
+  or a distro package owns.
+- The update banner is resolved in `resolvePanel()`, so both panels show it.
+
 ### Fixed
 
+- Taildrop's send action appeared even when `tailgauge-send` was not installed,
+  which is every store install: neither the KDE Store nor EGO can put anything
+  on `PATH`. The panel now checks for the helper before offering the action.
 - `claim_path` in the Taildrop receiver derived the incoming file's name from
   the caller's variable rather than its own argument, because both assignments
   shared one `local` statement. Upstream has the same shape; it is masked there

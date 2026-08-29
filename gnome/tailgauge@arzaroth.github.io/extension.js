@@ -175,7 +175,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         this._statusItem.label.clutter_text.line_wrap = true;
         this.menu.addMenuItem(this._statusItem);
 
-        for (const id of ['connections', 'exitNodes', 'machines']) {
+        for (const id of ['update', 'connections', 'exitNodes', 'machines']) {
             const header = new PopupMenu.PopupSeparatorMenuItem('');
             const section = new PopupMenu.PopupMenuSection();
             this.menu.addMenuItem(header);
@@ -287,7 +287,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
             if (!slot)
                 continue;
             slot.header.label.text = section.title;
-            slot.header.visible = section.visible;
+            slot.header.visible = section.visible && section.title !== '';
             slot.section.removeAll();
             slot.section.actor.visible = section.visible;
 
@@ -432,6 +432,14 @@ class TailGaugeIndicator extends PanelMenu.Button {
             break;
         case 'switchAccount':
             this._service.switchAccount(row.payload.id);
+            break;
+        case 'update':
+            this._service.applyUpdate();
+            this.menu.close();
+            break;
+        case 'openUrl':
+            this._service.openUrl(row.payload ? row.payload.url : '');
+            this.menu.close();
             break;
         case 'setExitNode':
             if (row.payload.Mullvad === true) {
