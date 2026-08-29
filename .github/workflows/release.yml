@@ -1,0 +1,104 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and release (e.g. v1.0.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
+      - name: Install glib tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libglib2.0-bin
+
+      # Nothing ships that the tests have not seen: the same build.sh output is
+      # what the tests import and what the archives carry.
+      - name: Build
+        run: scripts/build.sh
+
+      - name: Test
+        run: node --test 'test/**/*.test.mjs'
+
+      # A tag that disagrees with the manifests would publish assets whose
+      # in-app version does not match the release they came from.
+      - name: Check the tag matches the manifests
+        env:
+          REF_NAME: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          version="${REF_NAME#v}"
+          plasmoid=$(node -e 'process.stdout.write(require("./plasma/org.tailgauge.plasmoid/metadata.json").KPlugin.Version)')
+          extension=$(node -e 'process.stdout.write(require("./gnome/tailgauge@arzaroth.github.io/metadata.json")["version-name"])')
+          echo "tag=$version plasmoid=$plasmoid extension=$extension"
+          if [[ $plasmoid != "$version" || $extension != "$version" ]]; then
+            echo "::error::tag $REF_NAME does not match the manifests"
+            exit 1
+          fi
+
+      - name: Package
+        env:
+          REF_NAME: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          # Sanitize the ref so path separators cannot break out of dist/.
+          safe="${REF_NAME//[^A-Za-z0-9._-]/_}"
+          mkdir -p dist
+
+          # The plasmoid, as kpackagetool6 -i takes it.
+          tar -C build -czf "dist/tailgauge-$safe-plasmoid.tar.gz" org.tailgauge.plasmoid
+
+          # The extension, as gnome-extensions install takes it.
+          cp "build/tailgauge@arzaroth.github.io.shell-extension.zip" \
+             "dist/tailgauge-$safe-gnome-shell-extension.zip"
+
+          # The helpers and the unit, for a packager who wants only those.
+          tar -czf "dist/tailgauge-$safe-helpers.tar.gz" bin systemd
+
+          ls -l dist
+
+      - name: Extract release notes from CHANGELOG
+        env:
+          REF_NAME: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          version="${REF_NAME#v}"
+          if [[ -f CHANGELOG.md ]]; then
+            awk -v hdr="## [$version]" '
+              index($0, hdr) == 1 { found = 1; next }
+              found && /^## / { exit }
+              found { print }
+            ' CHANGELOG.md >release-notes.md
+          fi
+          if [[ ! -s release-notes.md ]]; then
+            echo "::warning::No CHANGELOG.md section for $version - falling back to auto-generated notes."
+            : >release-notes.md
+          fi
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          body_path: release-notes.md
+          generate_release_notes: true
+          files: |
+            dist/*.tar.gz
+            dist/*.zip

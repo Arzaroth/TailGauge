@@ -1,0 +1,4 @@
+[
+  {"id": "aaaa", "nickname": "work", "tailnet": "example.com", "account": "ada@example.com", "selected": true},
+  {"id": "bbbb", "nickname": "personal", "tailnet": "example.ts.net", "account": "ada@personal.example", "selected": false}
+]

@@ -13,19 +13,7 @@ import {TailscaleService} from './tailscale.js';
 
 const RECENT_MULLVAD_LIMIT = 5;
 const PHRASE_INTERVAL_MS = 2800;
-
-const ACTIVE_PHRASES = [
-    'Encrypting connections',
-    'Sending secrets',
-    'Guarding wires',
-    'Braiding packets',
-    'Polishing tunnels',
-    'Hiding routes',
-    'Sealing ports',
-    'Sorting tailnets',
-    'Shuffling keys',
-    'Watching machines',
-];
+const MULLVAD_REGION_CAP = 200;
 
 // St.BoxLayout.vertical was replaced by the Clutter orientation property in
 // GNOME 48; both spellings have to work across the supported shell versions.
@@ -75,10 +63,7 @@ class TailscaleIcon extends St.DrawingArea {
         const dot = Math.max(2, size * 0.24);
         const radius = dot / 2;
         const positions = [0, (size - dot) / 2, size - dot];
-        const faded = [
-            [0, 0], [1, 0], [2, 0],
-            [0, 2], [2, 2],
-        ];
+        const faded = [[0, 0], [1, 0], [2, 0], [0, 2], [2, 2]];
         const isFaded = (col, rowIndex) => faded.some(([c, rw]) => c === col && rw === rowIndex);
 
         for (let rowIndex = 0; rowIndex < 3; rowIndex++) {
@@ -102,10 +87,8 @@ class TailscaleIcon extends St.DrawingArea {
 
         if (this._warning) {
             const badge = Math.max(5, size * 0.42);
-            const cx = offsetX + size - badge / 2;
-            const cy = offsetY + size - badge / 2;
             cr.setSourceRGBA(0.95, 0.35, 0.35, 1.0);
-            cr.arc(cx, cy, badge / 2, 0, 2 * Math.PI);
+            cr.arc(offsetX + size - badge / 2, offsetY + size - badge / 2, badge / 2, 0, 2 * Math.PI);
             cr.fill();
         }
 
@@ -125,7 +108,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         this._phraseIndex = 0;
         this._phraseTimeoutId = 0;
         this._mullvadQuery = '';
-        this._peerItems = [];
+        this._sections = new Map();
 
         const panelBox = box(false, {style_class: 'panel-status-menu-box tailgauge-panel'});
         this._panelIcon = new TailscaleIcon({width: 16, height: 16, y_align: Clutter.ActorAlign.CENTER});
@@ -141,7 +124,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
 
         this._changedId = this._service.connect('changed', () => this._sync());
         this._settingsPanelId = this._settings.connect('changed::show-status-in-panel',
-            () => this._syncPanel());
+            () => this._syncPanel(this._panel()));
 
         this.menu.connect('open-state-changed', (_menu, open) => {
             if (open) {
@@ -149,7 +132,10 @@ class TailGaugeIndicator extends PanelMenu.Button {
                 this._startPhrases();
             } else {
                 this._stopPhrases();
-                this._mullvadQuery = '';
+                if (this._mullvadQuery !== '') {
+                    this._mullvadQuery = '';
+                    this._signature = '';
+                }
             }
         });
 
@@ -161,12 +147,23 @@ class TailGaugeIndicator extends PanelMenu.Button {
             return Clutter.EVENT_PROPAGATE;
         });
 
-        this.menu.box.connect('key-press-event', (actor, event) => this._onMenuKey(event));
+        this.menu.box.connect('key-press-event', (_actor, event) => this._onMenuKey(event));
 
         this._sync();
     }
 
-    // ---- static scaffolding ---------------------------------------------
+    // The panel is resolved in the shared model, so what GNOME shows and what
+    // Plasma shows cannot drift. The picker is always resolved open here: its
+    // regions live in a submenu that PopupMenu shows and hides on its own.
+    _panel() {
+        return Model.resolvePanel(this._service.snapshot(), {
+            t: _,
+            recentRegions: this._settings.get_strv('recent-mullvad-regions'),
+            mullvadQuery: this._mullvadQuery,
+            mullvadPickerOpen: true,
+            phraseIndex: this._phraseIndex,
+        });
+    }
 
     _buildStaticItems() {
         this._headerItem = new PopupMenu.PopupSwitchMenuItem('Tailscale', false);
@@ -178,24 +175,13 @@ class TailGaugeIndicator extends PanelMenu.Button {
         this._statusItem.label.clutter_text.line_wrap = true;
         this.menu.addMenuItem(this._statusItem);
 
-        this._authItem = new PopupMenu.PopupMenuItem(_('Authorize Tailscale operator'));
-        this._authItem.connect('activate', () => this._service.authorizeTailscaleOperator());
-        this.menu.addMenuItem(this._authItem);
-
-        this._connectionsHeader = new PopupMenu.PopupSeparatorMenuItem(_('Connections'));
-        this.menu.addMenuItem(this._connectionsHeader);
-        this._connectionsSection = new PopupMenu.PopupMenuSection();
-        this.menu.addMenuItem(this._connectionsSection);
-
-        this._exitNodesHeader = new PopupMenu.PopupSeparatorMenuItem(_('Exit nodes'));
-        this.menu.addMenuItem(this._exitNodesHeader);
-        this._exitNodesSection = new PopupMenu.PopupMenuSection();
-        this.menu.addMenuItem(this._exitNodesSection);
-
-        this._machinesHeader = new PopupMenu.PopupSeparatorMenuItem(_('Machines'));
-        this.menu.addMenuItem(this._machinesHeader);
-        this._machinesSection = new PopupMenu.PopupMenuSection();
-        this.menu.addMenuItem(this._machinesSection);
+        for (const id of ['connections', 'exitNodes', 'machines']) {
+            const header = new PopupMenu.PopupSeparatorMenuItem('');
+            const section = new PopupMenu.PopupMenuSection();
+            this.menu.addMenuItem(header);
+            this.menu.addMenuItem(section);
+            this._sections.set(id, {header, section});
+        }
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
@@ -211,265 +197,157 @@ class TailGaugeIndicator extends PanelMenu.Button {
     // ---- sync ------------------------------------------------------------
 
     _sync() {
-        this._syncPanel();
-        this._syncHeader();
+        const panel = this._panel();
+        this._syncPanel(panel);
+        this._syncHeader(panel);
 
-        const signature = this._structureSignature();
+        // A rebuild throws away hover and key focus, so it only happens when
+        // the set of rows actually changed, not on every poll.
+        const signature = this._signatureOf(panel);
         if (signature !== this._signature) {
             this._signature = signature;
-            this._rebuildSections();
+            this._rebuildSections(panel);
         } else {
-            this._syncSectionOrnaments();
+            this._syncRows(panel);
         }
     }
 
-    _syncPanel() {
-        const service = this._service;
-        this._panelIcon.setState(!service.active && !service.needsLogin, service.needsLogin);
-        this._panelIcon.opacity = service.active ? 255 : 130;
+    _signatureOf(panel) {
+        const parts = [panel.header.toggleVisible ? '1' : '0'];
+        for (const section of panel.sections) {
+            parts.push(`${section.id}:${section.visible ? 1 : 0}:` +
+                section.rows.map(r => r.id + '/' + r.children.map(c => c.id).join('~')).join(','));
+        }
+        return parts.join('|');
+    }
+
+    _syncPanel(panel) {
+        this._panelIcon.setState(panel.header.crossed, panel.header.warning);
+        this._panelIcon.opacity = panel.header.dimmed ? 130 : 255;
 
         const showName = this._settings.get_boolean('show-status-in-panel');
-        const name = service.installed ? service.selfName : '';
+        const name = panel.header.toggleVisible ? panel.header.title : '';
         this._panelLabel.text = showName && name ? ` ${name}` : '';
         this._panelLabel.visible = this._panelLabel.text !== '';
     }
 
-    _syncHeader() {
-        const service = this._service;
-        this._headerItem.label.text = service.installed ? (service.selfName || 'Tailscale') : 'Tailscale';
-        this._headerItem.setSensitive(service.installed);
-        if (this._headerItem.state !== service.active)
-            this._headerItem.setToggleState(service.active);
+    _syncHeader(panel) {
+        this._headerItem.label.text = panel.header.title;
+        this._headerItem.setSensitive(panel.header.toggleVisible);
+        if (this._headerItem.state !== panel.header.toggleChecked)
+            this._headerItem.setToggleState(panel.header.toggleChecked);
 
-        let status = '';
-        if (!service.installed)
-            status = _('Tailscale CLI is not installed or not on PATH.');
-        else if (service.actionStatus !== '')
-            status = service.actionStatus;
-        else if (service.lastError !== '')
-            status = service.lastError;
-        else if (service.active)
-            status = _(ACTIVE_PHRASES[this._phraseIndex % ACTIVE_PHRASES.length]);
-        else
-            status = _('Tailscale is disconnected');
-
-        this._statusItem.label.text = status;
-        const isError = service.installed && service.lastError !== '' && service.actionStatus === '';
-        if (isError)
+        // The idle line is the header's own meta; the status slot carries only
+        // what the model put there.
+        const text = panel.status.text !== '' ? panel.status.text : panel.header.meta;
+        this._statusItem.label.text = text;
+        this._statusItem.visible = text !== '';
+        if (panel.status.tone === 'error')
             this._statusItem.label.add_style_class_name('tailgauge-error');
         else
             this._statusItem.label.remove_style_class_name('tailgauge-error');
 
-        this._authItem.visible = service.accountsAccessDenied;
-        this._refreshItem.setSensitive(service.installed);
+        this._refreshItem.setSensitive(panel.header.toggleVisible);
     }
 
-    // A rebuild while the menu is open throws away hover and key focus, so it
-    // only happens when the set of rows actually changed, not on every poll.
-    _structureSignature() {
-        const service = this._service;
-        const parts = [
-            service.installed ? '1' : '0',
-            service.active ? '1' : '0',
-            service.accountsAccessDenied ? '1' : '0',
-            service.fileSharing ? '1' : '0',
-            service.accounts.map(a => a.id).join(','),
-            this._displayExitNodes().map(n => n.id).join(','),
-            service.peers.map(p => p.id).join(','),
-        ];
-        return parts.join('|');
+    // Cheap pass for the things that change without the row set changing.
+    _syncRows(panel) {
+        const byId = new Map();
+        for (const section of panel.sections) {
+            for (const row of section.rows) {
+                byId.set(row.id, row);
+                for (const child of row.children)
+                    byId.set(child.id, child);
+            }
+        }
+        for (const {section} of this._sections.values()) {
+            for (const item of section._getMenuItems())
+                this._applyRow(item, byId);
+        }
     }
 
-    _displayExitNodes() {
-        const service = this._service;
-        const recent = Model.recentMullvadNodes(
-            service.mullvadRegions,
-            this._settings.get_strv('recent-mullvad-regions'),
-            RECENT_MULLVAD_LIMIT);
-        const nodes = service.tailnetExitNodes.concat(recent);
-        if (service.mullvadRegions.length > 0)
-            nodes.push({id: 'mullvad:add', AddMullvad: true, DisplayName: _('Choose Mullvad region')});
-        return nodes;
+    _applyRow(item, byId) {
+        const row = item._rowId ? byId.get(item._rowId) : null;
+        if (row) {
+            item.setOrnament(row.current ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
+            if (item.label)
+                item.label.text = row.label;
+            if (item._sublabel)
+                item._sublabel.text = row.sublabel;
+        }
+        if (item.menu) {
+            for (const child of item.menu._getMenuItems())
+                this._applyRow(child, byId);
+        }
     }
 
-    _rebuildSections() {
-        this._rebuildConnections();
-        this._rebuildExitNodes();
-        this._rebuildMachines();
-    }
-
-    _syncSectionOrnaments() {
-        const service = this._service;
-        for (const item of this._connectionsSection._getMenuItems()) {
-            if (!item._accountId)
+    _rebuildSections(panel) {
+        for (const section of panel.sections) {
+            const slot = this._sections.get(section.id);
+            if (!slot)
                 continue;
-            item.setOrnament(item._accountId === service.selectedAccountId
-                ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
-        }
-        const nodes = this._displayExitNodes();
-        for (const item of this._exitNodesSection._getMenuItems()) {
-            if (!item._exitNodeId)
-                continue;
-            const node = nodes.find(n => String(n.id) === item._exitNodeId);
-            item.setOrnament(node && node.ExitNode === true
-                ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
-        }
-    }
+            slot.header.label.text = section.title;
+            slot.header.visible = section.visible;
+            slot.section.removeAll();
+            slot.section.actor.visible = section.visible;
 
-    _rebuildConnections() {
-        const service = this._service;
-        this._connectionsSection.removeAll();
-
-        const show = service.accounts.length > 1 || service.accountsAccessDenied;
-        this._connectionsHeader.visible = show;
-        if (!show)
-            return;
-
-        for (const account of service.accounts) {
-            const item = new PopupMenu.PopupMenuItem(Model.accountLabel(account));
-            item._accountId = String(account.id || '');
-            item.setOrnament(account.selected === true
-                ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
-            item.connect('activate', () => this._service.switchAccount(account.id));
-            this._connectionsSection.addMenuItem(item);
-        }
-    }
-
-    _rebuildExitNodes() {
-        const service = this._service;
-        this._exitNodesSection.removeAll();
-
-        const nodes = this._displayExitNodes();
-        const show = service.active && (nodes.length > 0 || service.mullvadRegions.length > 0);
-        this._exitNodesHeader.visible = show;
-        if (!show)
-            return;
-
-        for (const node of nodes) {
-            if (node.AddMullvad === true) {
-                this._exitNodesSection.addMenuItem(this._buildMullvadPicker());
+            if (section.rows.length === 0 && section.empty !== '' && section.visible) {
+                slot.section.addMenuItem(new PopupMenu.PopupMenuItem(
+                    section.empty, {reactive: false, can_focus: false}));
                 continue;
             }
-            const item = new PopupMenu.PopupMenuItem(
-                String(node.DisplayName || node.HostName || _('Unknown')));
-            item._exitNodeId = String(node.id || '');
-            item.setOrnament(node.ExitNode === true
-                ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
-            item.connect('activate', () => this._chooseExitNode(node));
-            this._exitNodesSection.addMenuItem(item);
+            for (const row of section.rows)
+                slot.section.addMenuItem(this._renderRow(row));
         }
     }
 
-    _buildMullvadPicker() {
-        const submenu = new PopupMenu.PopupSubMenuMenuItem(_('Choose Mullvad region'), true);
-        submenu.icon.icon_name = 'network-vpn-symbolic';
+    _renderRow(row) {
+        if (row.kind === 'empty')
+            return new PopupMenu.PopupMenuItem(row.label, {reactive: false, can_focus: false});
 
-        const searchItem = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
-        const entry = new St.Entry({
-            style_class: 'tailgauge-search',
-            hint_text: _('Search regions'),
-            can_focus: true,
-            x_expand: true,
-        });
-        entry.clutter_text.connect('text-changed', () => {
-            this._mullvadQuery = entry.get_text();
-            this._fillMullvadRegions(submenu.menu);
-        });
-        searchItem.add_child(entry);
-        submenu.menu.addMenuItem(searchItem);
+        if (row.children.length > 0 || row.copyOptions.length > 0 || row.actions.length > 0)
+            return this._renderSubmenuRow(row);
 
-        this._mullvadRegionsFrom = submenu.menu.numMenuItems;
-        this._fillMullvadRegions(submenu.menu);
+        const item = new PopupMenu.PopupMenuItem(row.label);
+        this._decorate(item, row);
+        item.setOrnament(row.current ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
+        item.connect('activate', () => this._dispatch(row));
+        return item;
+    }
 
-        submenu.menu.connect('open-state-changed', (_menu, open) => {
-            if (open)
+    _renderSubmenuRow(row) {
+        const item = new PopupMenu.PopupSubMenuMenuItem(row.label, true);
+        item.icon.icon_name = row.icon;
+        this._decorate(item, row);
+
+        // The picker's own row does nothing but hold its regions; every other
+        // submenu row still carries its primary action as the first entry.
+        if (row.kind === 'mullvadPicker') {
+            const searchItem = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
+            const entry = new St.Entry({
+                style_class: 'tailgauge-search',
+                hint_text: row.searchPlaceholder,
+                can_focus: true,
+                x_expand: true,
+            });
+            entry.set_text(this._mullvadQuery);
+            entry.clutter_text.connect('text-changed', () => {
+                this._mullvadQuery = entry.get_text();
+                this._refillPicker(item, entry);
+            });
+            searchItem.add_child(entry);
+            item.menu.addMenuItem(searchItem);
+            item.menu.connect('open-state-changed', (_menu, open) => {
+                if (!open)
+                    return;
                 GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
                     entry.grab_key_focus();
                     return GLib.SOURCE_REMOVE;
                 });
-        });
-
-        return submenu;
-    }
-
-    _fillMullvadRegions(menu) {
-        for (const item of menu._getMenuItems().slice(this._mullvadRegionsFrom))
-            item.destroy();
-
-        const regions = Model.filterMullvadRegions(this._service.mullvadRegions, this._mullvadQuery);
-        if (regions.length === 0) {
-            const empty = new PopupMenu.PopupMenuItem(_('No Mullvad regions found.'),
-                {reactive: false, can_focus: false});
-            menu.addMenuItem(empty);
-            return;
+            });
         }
 
-        for (const region of regions.slice(0, 200)) {
-            const subtitle = Model.mullvadRegionSubtitle(region);
-            const title = Model.mullvadRegionTitle(region);
-            const item = new PopupMenu.PopupMenuItem(subtitle ? `${title}, ${subtitle}` : title);
-            item.setOrnament(region.ExitNode === true
-                ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
-            item.connect('activate', () => this._chooseExitNode(region));
-            menu.addMenuItem(item);
-        }
-    }
-
-    _chooseExitNode(node) {
-        if (!node)
-            return;
-        if (node.Mullvad === true) {
-            const next = Model.pushRecentMullvad(
-                this._settings.get_strv('recent-mullvad-regions'),
-                Model.mullvadRegionKey(node),
-                RECENT_MULLVAD_LIMIT);
-            this._settings.set_strv('recent-mullvad-regions', next);
-        }
-        this._service.setExitNode(node);
-    }
-
-    _rebuildMachines() {
-        const service = this._service;
-        this._machinesSection.removeAll();
-        this._peerItems = [];
-
-        const show = service.installed && service.active;
-        this._machinesHeader.visible = show;
-        if (!show)
-            return;
-
-        if (service.peers.length === 0) {
-            this._machinesSection.addMenuItem(new PopupMenu.PopupMenuItem(
-                _('No machines found on this tailnet.'), {reactive: false, can_focus: false}));
-            return;
-        }
-
-        for (const peer of service.peers)
-            this._machinesSection.addMenuItem(this._buildPeerItem(peer));
-    }
-
-    _buildPeerItem(peer) {
-        const name = String(peer.DisplayName || peer.HostName || _('Unknown'));
-        const item = new PopupMenu.PopupSubMenuMenuItem(name, true);
-        item.icon.icon_name = Model.osIconName(peer.OS);
-        item._peer = peer;
-        this._peerItems.push(item);
-
-        const ip = peer.TailscaleIPs && peer.TailscaleIPs.length > 0 ? String(peer.TailscaleIPs[0]) : '';
-        const ipv6 = peer.TailscaleIPv6 && peer.TailscaleIPv6.length > 0 ? String(peer.TailscaleIPv6[0]) : '';
-        const dns = String(peer.DNSName || '');
-
-        const options = [];
-        if (name !== '')
-            options.push({label: name, run: () => this._service.copyPeerName(peer)});
-        if (dns !== '')
-            options.push({label: dns, run: () => this._service.copyPeerDnsName(peer)});
-        if (ipv6 !== '')
-            options.push({label: ipv6, run: () => this._service.copyToClipboard(ipv6)});
-        if (ip !== '')
-            options.push({label: ip, run: () => this._service.copyPeerIp(peer)});
-
-        for (const option of options) {
+        for (const option of row.copyOptions) {
             const copyItem = new PopupMenu.PopupMenuItem(option.label);
             copyItem.add_child(new St.Icon({
                 icon_name: 'edit-copy-symbolic',
@@ -478,90 +356,172 @@ class TailGaugeIndicator extends PanelMenu.Button {
                 x_align: Clutter.ActorAlign.END,
             }));
             copyItem.connect('activate', () => {
-                option.run();
+                this._copyOption(row, option.kind);
                 this.menu.close();
             });
             item.menu.addMenuItem(copyItem);
         }
 
-        if (this._service.canSendFiles(peer)) {
+        for (const action of row.actions) {
+            if (action.id !== 'send')
+                continue;
             item.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-            const sendItem = new PopupMenu.PopupMenuItem(_('Send files…'));
-            sendItem.connect('activate', () => this._sendPeerFile(peer));
+            const sendItem = new PopupMenu.PopupMenuItem(action.label);
+            sendItem.connect('activate', () => this._sendFile(row));
             item.menu.addMenuItem(sendItem);
         }
+
+        for (const child of row.children)
+            item.menu.addMenuItem(this._renderRow(child));
 
         return item;
     }
 
-    _sendPeerFile(peer) {
-        if (!this._service.canSendFiles(peer))
+    // The sublabel rides on the trailing edge of the row rather than under it:
+    // a PopupMenuItem is one line tall, and dropping it instead would put GNOME
+    // and Plasma back out of step.
+    _decorate(item, row) {
+        item._rowId = row.id;
+        item._row = row;
+        if (item.label)
+            item.label.text = row.label;
+        if (row.sublabel === '')
+            return;
+        item._sublabel = new St.Label({
+            text: row.sublabel,
+            style_class: 'tailgauge-sublabel',
+            x_expand: true,
+            x_align: Clutter.ActorAlign.END,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        item.add_child(item._sublabel);
+    }
+
+    _refillPicker(item, entry) {
+        const panel = this._panel();
+        let picker = null;
+        for (const section of panel.sections) {
+            for (const candidate of section.rows) {
+                if (candidate.kind === 'mullvadPicker')
+                    picker = candidate;
+            }
+        }
+        if (!picker)
+            return;
+        // Everything after the search entry is a resolved region row.
+        const items = item.menu._getMenuItems();
+        for (const child of items.slice(1))
+            child.destroy();
+        for (const child of picker.children.slice(0, MULLVAD_REGION_CAP))
+            item.menu.addMenuItem(this._renderRow(child));
+        entry.grab_key_focus();
+    }
+
+    // ---- actions ---------------------------------------------------------
+
+    // The one place a resolved row turns back into a service call.
+    _dispatch(row) {
+        if (!row)
+            return;
+        switch (row.action) {
+        case 'toggle':
+            this._service.toggleTailscale();
+            break;
+        case 'authorize':
+            this._service.authorizeTailscaleOperator();
+            break;
+        case 'switchAccount':
+            this._service.switchAccount(row.payload.id);
+            break;
+        case 'setExitNode':
+            if (row.payload.Mullvad === true) {
+                this._settings.set_strv('recent-mullvad-regions', Model.pushRecentMullvad(
+                    this._settings.get_strv('recent-mullvad-regions'),
+                    Model.mullvadRegionKey(row.payload),
+                    RECENT_MULLVAD_LIMIT));
+            }
+            this._service.setExitNode(row.payload);
+            break;
+        }
+    }
+
+    _copyOption(row, kind) {
+        if (!row)
+            return;
+        if (kind === 'name')
+            this._service.copyPeerName(row.payload);
+        else if (kind === 'dns')
+            this._service.copyPeerDnsName(row.payload);
+        else if (kind === 'ip')
+            this._service.copyPeerIp(row.payload);
+        else
+            for (const option of row.copyOptions)
+                if (option.kind === kind)
+                    this._service.copyToClipboard(option.label);
+    }
+
+    _sendFile(row) {
+        if (!row || !row.payload)
             return;
         // The file chooser takes over from here, so get the menu out of the way.
-        this._service.sendFile(peer);
+        this._service.sendFile(row.payload);
         this.menu.close();
     }
 
     // ---- keyboard --------------------------------------------------------
 
     // PopupMenu already handles arrows and Enter; these are the single-letter
-    // actions the Omarchy panel binds, resolved against whichever machine row
-    // currently holds key focus.
+    // actions the Omarchy panel binds, resolved against whichever row currently
+    // holds key focus.
     _onMenuKey(event) {
         const focus = global.stage.get_key_focus();
         if (focus instanceof Clutter.Text && focus.editable)
             return Clutter.EVENT_PROPAGATE;
 
         const symbol = event.get_key_symbol();
-        const service = this._service;
 
         if (symbol === Clutter.KEY_t || symbol === Clutter.KEY_T) {
-            service.toggleTailscale();
+            this._service.toggleTailscale();
             return Clutter.EVENT_STOP;
         }
         if (symbol === Clutter.KEY_r || symbol === Clutter.KEY_R) {
-            service.refresh(true);
+            this._service.refresh(true);
             return Clutter.EVENT_STOP;
         }
 
-        const peer = this._focusedPeer();
-        if (!peer)
+        const row = this._focusedRow();
+        if (!row || row.kind !== 'peer')
             return Clutter.EVENT_PROPAGATE;
 
-        if (symbol === Clutter.KEY_c || symbol === Clutter.KEY_C) {
-            service.copyPeerIp(peer);
+        if (symbol === Clutter.KEY_c || symbol === Clutter.KEY_C)
+            this._copyOption(row, 'ip');
+        else if (symbol === Clutter.KEY_n || symbol === Clutter.KEY_N)
+            this._copyOption(row, 'name');
+        else if (symbol === Clutter.KEY_d || symbol === Clutter.KEY_D)
+            this._copyOption(row, 'dns');
+        else if (symbol === Clutter.KEY_s || symbol === Clutter.KEY_S)
+            this._sendFile(row);
+        else
+            return Clutter.EVENT_PROPAGATE;
+
+        if (symbol !== Clutter.KEY_s && symbol !== Clutter.KEY_S)
             this.menu.close();
-            return Clutter.EVENT_STOP;
-        }
-        if (symbol === Clutter.KEY_n || symbol === Clutter.KEY_N) {
-            service.copyPeerName(peer);
-            this.menu.close();
-            return Clutter.EVENT_STOP;
-        }
-        if (symbol === Clutter.KEY_d || symbol === Clutter.KEY_D) {
-            service.copyPeerDnsName(peer);
-            this.menu.close();
-            return Clutter.EVENT_STOP;
-        }
-        if (symbol === Clutter.KEY_s || symbol === Clutter.KEY_S) {
-            this._sendPeerFile(peer);
-            return Clutter.EVENT_STOP;
-        }
-        return Clutter.EVENT_PROPAGATE;
+        return Clutter.EVENT_STOP;
     }
 
-    _focusedPeer() {
+    _focusedRow() {
         let actor = global.stage.get_key_focus();
         while (actor) {
-            if (actor._delegate && actor._delegate._peer)
-                return actor._delegate._peer;
-            if (actor._peer)
-                return actor._peer;
+            if (actor._delegate?._row)
+                return actor._delegate._row;
+            if (actor._row)
+                return actor._row;
             actor = actor.get_parent();
         }
-        for (const item of this._peerItems) {
-            if (item.active)
-                return item._peer;
+        for (const {section} of this._sections.values()) {
+            for (const item of section._getMenuItems())
+                if (item.active && item._row)
+                    return item._row;
         }
         return null;
     }
@@ -571,8 +531,8 @@ class TailGaugeIndicator extends PanelMenu.Button {
     _startPhrases() {
         this._stopPhrases();
         this._phraseTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, PHRASE_INTERVAL_MS, () => {
-            this._phraseIndex = (this._phraseIndex + 1) % ACTIVE_PHRASES.length;
-            this._syncHeader();
+            this._phraseIndex += 1;
+            this._syncHeader(this._panel());
             return GLib.SOURCE_CONTINUE;
         });
     }

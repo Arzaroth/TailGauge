@@ -50,6 +50,32 @@ Item {
 
     readonly property bool busy: _inflightCount > 0
 
+    // The flat state resolvePanel() reads. Both desktops hand it the same
+    // shape, so the panel they get back cannot disagree.
+    function snapshot() {
+        return {
+            installed: installed,
+            running: running,
+            active: active,
+            needsLogin: needsLogin,
+            busy: busy,
+            selfName: selfName,
+            selfIp: selfIp,
+            selfUserId: selfUserId,
+            fileSharing: fileSharing,
+            peers: peers,
+            tailnetExitNodes: tailnetExitNodes,
+            mullvadRegions: mullvadRegions,
+            accounts: accounts,
+            selectedAccountId: selectedAccountId,
+            switchingAccountId: switchingAccountId,
+            settingExitNodeId: settingExitNodeId,
+            accountsAccessDenied: accountsAccessDenied,
+            actionStatus: actionStatus,
+            lastError: lastError
+        }
+    }
+
     function osIcon(os) { return Model.osIcon(os) }
     function accountLabel(account) { return Model.accountLabel(account) }
     function displayHostName(hostName, dnsName) { return Model.displayHostName(hostName, dnsName) }

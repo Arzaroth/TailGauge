@@ -445,3 +445,338 @@ function shellCommand(argv) {
   for (var i = 0; i < argv.length; i++) parts.push(shellQuote(argv[i]))
   return parts.join(" ")
 }
+
+// ---------------------------------------------------------------------------
+// Panel layout
+//
+// The parity rule: this resolver decides WHAT is in the panel - which sections
+// exist, in what order, which rows they hold, what every row says, and which
+// rows the cursor can land on. A frontend decides only how a row LOOKS. If
+// either desktop would otherwise have to re-derive something, it belongs here.
+// ---------------------------------------------------------------------------
+
+var ACTIVE_PHRASES = [
+  "Encrypting connections",
+  "Sending secrets",
+  "Guarding wires",
+  "Braiding packets",
+  "Polishing tunnels",
+  "Hiding routes",
+  "Sealing ports",
+  "Sorting tailnets",
+  "Shuffling keys",
+  "Watching machines"
+]
+
+function identityText(text) { return text }
+
+function canSendFiles(state, peer) {
+  if (!state || !state.fileSharing || !state.running || !peer) return false
+  return isTaildropTarget(peer, state.selfUserId)
+}
+
+function peerCopyOptions(peer) {
+  if (!peer) return []
+  var name = String(peer.DisplayName || peer.HostName || "")
+  var dns = String(peer.DNSName || "")
+  var ipv6 = peer.TailscaleIPv6 && peer.TailscaleIPv6.length > 0 ? String(peer.TailscaleIPv6[0]) : ""
+  var ip = peer.TailscaleIPs && peer.TailscaleIPs.length > 0 ? String(peer.TailscaleIPs[0]) : ""
+  var options = []
+  if (name !== "") options.push({ kind: "name", label: name })
+  if (dns !== "") options.push({ kind: "dns", label: dns })
+  if (ipv6 !== "") options.push({ kind: "ipv6", label: ipv6 })
+  if (ip !== "") options.push({ kind: "ip", label: ip })
+  return options
+}
+
+function peerSubtitle(peer) {
+  if (!peer) return ""
+  var parts = []
+  if (peer.TailscaleIPs && peer.TailscaleIPs.length > 0) parts.push(String(peer.TailscaleIPs[0]))
+  if (peer.DNSName) parts.push(String(peer.DNSName))
+  return parts.join(" · ")
+}
+
+function panelRow(row) {
+  return {
+    id: String(row.id || ""),
+    kind: String(row.kind || ""),
+    label: String(row.label || ""),
+    sublabel: String(row.sublabel || ""),
+    icon: String(row.icon || ""),
+    glyph: String(row.glyph || ""),
+    action: String(row.action || ""),
+    current: row.current === true,
+    busy: row.busy === true,
+    bold: row.bold === true,
+    navigable: row.navigable !== false,
+    hint: String(row.hint || ""),
+    actions: row.actions || [],
+    copyOptions: row.copyOptions || [],
+    children: row.children || [],
+    expanded: row.expanded === true,
+    searchPlaceholder: String(row.searchPlaceholder || ""),
+    payload: row.payload === undefined ? null : row.payload
+  }
+}
+
+function panelHeader(state, t, phraseIndex) {
+  var index = typeof phraseIndex === "number" ? phraseIndex : 0
+  var meta = state.active
+    ? t(ACTIVE_PHRASES[((index % ACTIVE_PHRASES.length) + ACTIVE_PHRASES.length) % ACTIVE_PHRASES.length])
+    : t("Tailscale is disconnected")
+  return {
+    id: "header",
+    title: state.installed ? (state.selfName || "Tailscale") : "Tailscale",
+    meta: meta,
+    action: "toggle",
+    toggleVisible: state.installed === true,
+    toggleEnabled: state.busy !== true,
+    toggleChecked: state.active === true,
+    toggleHint: state.active
+      ? t("Turn Tailscale off")
+      : (state.needsLogin ? t("Authorize this device") : t("Turn Tailscale on")),
+    crossed: !state.active && !state.needsLogin,
+    warning: state.needsLogin === true,
+    dimmed: !state.active
+  }
+}
+
+// Precedence, in one place: a command's own progress beats a stale error, and
+// both beat the idle line.
+function panelStatus(state, t) {
+  if (!state.installed) return { text: t("Tailscale CLI is not installed or not on PATH."), tone: "dim" }
+  if (state.actionStatus) return { text: String(state.actionStatus), tone: "dim" }
+  if (state.lastError) return { text: String(state.lastError), tone: "error" }
+  return { text: "", tone: "" }
+}
+
+function connectionsSection(state, t) {
+  var rows = []
+  if (state.accountsAccessDenied) {
+    rows.push(panelRow({
+      id: "auth",
+      kind: "auth",
+      label: t("Authorize Tailscale operator"),
+      sublabel: t("Allow this user to operate this Tailscale profile"),
+      icon: "security-medium-symbolic",
+      glyph: "󰒃",
+      action: "authorize",
+      busy: state.busy === true
+    }))
+  }
+  var accounts = state.accounts || []
+  for (var i = 0; i < accounts.length; i++) {
+    var account = accounts[i]
+    var id = String(account.id || "")
+    var selected = account.selected === true
+    rows.push(panelRow({
+      id: "account:" + id,
+      kind: "account",
+      label: accountLabel(account),
+      icon: selected ? "checkmark-symbolic" : "user-symbolic",
+      glyph: selected ? "" : "",
+      action: "switchAccount",
+      current: selected,
+      bold: selected,
+      busy: String(state.switchingAccountId || "") === id,
+      payload: account
+    }))
+  }
+  return {
+    id: "connections",
+    title: t("Connections"),
+    visible: accounts.length > 1 || state.accountsAccessDenied === true,
+    empty: "",
+    rows: rows
+  }
+}
+
+function exitNodeRows(state, t, recentRegions, mullvadQuery, pickerOpen) {
+  var rows = []
+  var tailnet = state.tailnetExitNodes || []
+  var regions = state.mullvadRegions || []
+  var i
+
+  for (i = 0; i < tailnet.length; i++) rows.push(exitNodeRow(state, tailnet[i], t))
+
+  var recent = recentMullvadNodes(regions, recentRegions, 5)
+  for (i = 0; i < recent.length; i++) rows.push(exitNodeRow(state, recent[i], t))
+
+  if (regions.length > 0) {
+    var matches = filterMullvadRegions(regions, mullvadQuery)
+    var children = []
+    if (matches.length === 0) {
+      children.push(panelRow({
+        id: "mullvad:empty",
+        kind: "empty",
+        label: t("No Mullvad regions found."),
+        navigable: false
+      }))
+    }
+    for (i = 0; i < matches.length; i++) {
+      var region = matches[i]
+      children.push(panelRow({
+        id: "region:" + String(region.id || ""),
+        kind: "mullvadRegion",
+        label: mullvadRegionTitle(region),
+        sublabel: mullvadRegionSubtitle(region),
+        icon: "network-vpn-symbolic",
+        glyph: "󰖂",
+        action: "setExitNode",
+        current: region.ExitNode === true,
+        bold: region.ExitNode === true,
+        busy: String(state.settingExitNodeId || "") === String(region.id || ""),
+        hint: region.ExitNode === true ? t("Disconnect") : t("Connect"),
+        payload: region
+      }))
+    }
+    rows.push(panelRow({
+      id: "mullvad:add",
+      kind: "mullvadPicker",
+      label: t("Choose Mullvad region"),
+      icon: "list-add-symbolic",
+      glyph: "+",
+      action: "togglePicker",
+      current: pickerOpen === true,
+      expanded: pickerOpen === true,
+      searchPlaceholder: t("Search regions"),
+      children: children
+    }))
+  }
+  return rows
+}
+
+function exitNodeRow(state, node, t) {
+  var active = node.ExitNode === true
+  return panelRow({
+    id: "exit:" + String(node.id || ""),
+    kind: "exitNode",
+    label: String(node.DisplayName || node.HostName || t("Unknown")),
+    icon: node.Mullvad === true ? "network-vpn-symbolic" : "network-connect-symbolic",
+    glyph: node.Mullvad === true ? "󰖂" : "󱇢",
+    action: "setExitNode",
+    current: active,
+    bold: active,
+    busy: String(state.settingExitNodeId || "") === String(node.id || ""),
+    hint: active ? t("Disconnect") : t("Connect"),
+    payload: node
+  })
+}
+
+function exitNodesSection(state, t, recentRegions, mullvadQuery, pickerOpen) {
+  var rows = state.active ? exitNodeRows(state, t, recentRegions, mullvadQuery, pickerOpen) : []
+  return {
+    id: "exitNodes",
+    title: t("Exit nodes"),
+    visible: state.active === true && rows.length > 0,
+    empty: "",
+    rows: rows
+  }
+}
+
+function machinesSection(state, t) {
+  var rows = []
+  var peers = state.active ? (state.peers || []) : []
+  for (var i = 0; i < peers.length; i++) {
+    var peer = peers[i]
+    var copyOptions = peerCopyOptions(peer)
+    var actions = []
+    if (canSendFiles(state, peer))
+      actions.push({ id: "send", label: t("Send files"), icon: "document-send-symbolic", glyph: "󰒊" })
+    if (copyOptions.length > 0)
+      actions.push({ id: "copy", label: t("Copy"), icon: "edit-copy-symbolic", glyph: "󰆏" })
+    rows.push(panelRow({
+      id: "peer:" + String(peer.id || ""),
+      kind: "peer",
+      label: String(peer.DisplayName || peer.HostName || t("Unknown")),
+      sublabel: peerSubtitle(peer),
+      icon: osIconName(peer.OS),
+      glyph: osIcon(peer.OS),
+      action: copyOptions.length > 0 ? "copy" : "",
+      actions: actions,
+      copyOptions: copyOptions,
+      payload: peer
+    }))
+  }
+  return {
+    id: "machines",
+    title: t("Machines"),
+    visible: state.installed === true && state.active === true,
+    empty: t("No machines found on this tailnet."),
+    rows: rows
+  }
+}
+
+// One traversal order for both desktops: the header, then every navigable row
+// of every visible section, in the order they are drawn. Cursor movement is an
+// index into this, so neither frontend carries a focus state machine that the
+// other one could disagree with.
+function panelNavigation(header, sections) {
+  var nav = [{ sectionId: "header", rowId: header.id, action: header.action }]
+  for (var s = 0; s < sections.length; s++) {
+    var section = sections[s]
+    if (!section.visible) continue
+    for (var r = 0; r < section.rows.length; r++) {
+      var row = section.rows[r]
+      if (!row.navigable) continue
+      nav.push({ sectionId: section.id, rowId: row.id, action: row.action })
+      // An expanded row's children are drawn between it and the next row, so
+      // they are cursor stops in that position too. Collapsed, they are not on
+      // screen and must not be.
+      if (!row.expanded) continue
+      for (var c = 0; c < row.children.length; c++) {
+        var child = row.children[c]
+        if (!child.navigable) continue
+        nav.push({ sectionId: section.id, rowId: child.id, action: child.action })
+      }
+    }
+  }
+  return nav
+}
+
+function resolvePanel(state, options) {
+  var opts = options || {}
+  var t = typeof opts.t === "function" ? opts.t : identityText
+  var source = state || {}
+
+  var header = panelHeader(source, t, opts.phraseIndex)
+  var sections = [
+    connectionsSection(source, t),
+    exitNodesSection(source, t, opts.recentRegions || [], opts.mullvadQuery || "", opts.mullvadPickerOpen === true),
+    machinesSection(source, t)
+  ]
+
+  return {
+    header: header,
+    status: panelStatus(source, t),
+    sections: sections,
+    navigation: panelNavigation(header, sections)
+  }
+}
+
+// Resolve a navigation entry back to the row it points at, so a frontend can
+// act on the cursor without keeping its own copy of the panel.
+function panelRowAt(panel, navIndex) {
+  if (!panel || !panel.navigation || navIndex < 0 || navIndex >= panel.navigation.length) return null
+  var entry = panel.navigation[navIndex]
+  if (entry.sectionId === "header") return null
+  for (var s = 0; s < panel.sections.length; s++) {
+    var section = panel.sections[s]
+    if (section.id !== entry.sectionId) continue
+    for (var r = 0; r < section.rows.length; r++) {
+      if (section.rows[r].id === entry.rowId) return section.rows[r]
+      var children = section.rows[r].children
+      for (var c = 0; c < children.length; c++)
+        if (children[c].id === entry.rowId) return children[c]
+    }
+  }
+  return null
+}
+
+function panelNavIndexOf(panel, rowId) {
+  if (!panel || !panel.navigation) return 0
+  for (var i = 0; i < panel.navigation.length; i++)
+    if (panel.navigation[i].rowId === String(rowId)) return i
+  return 0
+}

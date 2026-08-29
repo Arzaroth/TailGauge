@@ -1,0 +1,43 @@
+{
+  "BackendState": "Running",
+  "AuthURL": "",
+  "TailscaleIPs": ["100.64.0.1", "fd7a:115c:a1e0::1"],
+  "Self": {
+    "HostName": "workstation",
+    "DNSName": "workstation.example.ts.net.",
+    "UserID": 1001,
+    "TailscaleIPs": ["100.64.0.1", "fd7a:115c:a1e0::1"],
+    "CapMap": {"https://tailscale.com/cap/file-sharing": []}
+  },
+  "Peer": {
+    "nodekey:01": {
+      "HostName": "laptop", "DNSName": "laptop.example.ts.net.", "UserID": 1001,
+      "OS": "linux", "Online": true, "TaildropTarget": 1,
+      "TailscaleIPs": ["100.64.0.2", "fd7a:115c:a1e0::2"],
+      "ExitNodeOption": false, "ExitNode": false
+    },
+    "nodekey:02": {
+      "HostName": "router", "DNSName": "router.example.ts.net.", "UserID": 1001,
+      "OS": "linux", "Online": true, "TaildropTarget": 2,
+      "TailscaleIPs": ["100.64.0.3"],
+      "ExitNodeOption": true, "ExitNode": true
+    },
+    "nodekey:03": {
+      "HostName": "phone", "DNSName": "phone.example.ts.net.", "UserID": 2002,
+      "OS": "android", "Online": true, "TaildropTarget": 0,
+      "TailscaleIPs": ["100.64.0.4"],
+      "ExitNodeOption": false, "ExitNode": false
+    },
+    "nodekey:04": {
+      "HostName": "offline-box", "DNSName": "offline-box.example.ts.net.", "UserID": 1001,
+      "OS": "windows", "Online": false, "TaildropTarget": 1,
+      "TailscaleIPs": ["100.64.0.5"],
+      "ExitNodeOption": true, "ExitNode": false
+    },
+    "nodekey:05": {
+      "HostName": "fr-par-wg-001.mullvad.ts.net", "DNSName": "fr-par-wg-001.mullvad.ts.net.",
+      "UserID": 3003, "OS": "linux", "Online": true,
+      "TailscaleIPs": ["100.101.1.3"], "ExitNodeOption": true, "ExitNode": false
+    }
+  }
+}

@@ -1,0 +1,211 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+# Least privilege: CI only needs to read the repository.
+permissions:
+  contents: read
+
+jobs:
+  # The shared model is where both desktops get their panel from, so it is the
+  # only place a behaviour change can be caught once instead of twice.
+  model:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
+      - name: Build
+        run: scripts/build.sh
+
+      - name: Test
+        run: node --test 'test/**/*.test.mjs'
+
+      - name: Check the generated ES module resolves
+        run: |
+          node --input-type=module -e '
+            const m = await import("./build/tailgauge@arzaroth.github.io/model.js");
+            const missing = ["resolvePanel", "parseStatus", "panelRowAt", "panelNavIndexOf"]
+              .filter(name => typeof m[name] !== "function");
+            if (missing.length) {
+              console.error("missing exports: " + missing.join(", "));
+              process.exit(1);
+            }
+            console.log(Object.keys(m).length + " exports");
+          '
+
+      # shared/model.js is loaded by the QML engine as a plain shared script.
+      # A stray `export` or `import` in it loads as a blank panel on Plasma,
+      # and nothing else in CI would notice.
+      - name: Check the shared model stays module-free
+        run: |
+          if grep -nE '^\s*(export|import)\s' shared/model.js; then
+            echo "::error::shared/model.js must not use module syntax - the export footer lives in shared/model.exports.mjs"
+            exit 1
+          fi
+
+      - name: Check every model function is exported or deliberately private
+        run: |
+          node -e '
+            const fs = require("fs");
+            const src = fs.readFileSync("shared/model.js", "utf8");
+            const defined = [...src.matchAll(/^(?:function|var|const|let)\s+(\w+)/gm)].map(m => m[1]);
+            const footer = fs.readFileSync("shared/model.exports.mjs", "utf8");
+            const exported = new Set([...footer.matchAll(/^\s*(\w+),?$/gm)].map(m => m[1]));
+            const missing = [...exported].filter(name => !defined.includes(name));
+            if (missing.length) {
+              console.error("exported but not defined: " + missing.join(", "));
+              process.exit(1);
+            }
+            console.log(defined.length + " functions, " + exported.size + " exported");
+          '
+
+  # The frontends install separately from anything the model job builds, so a
+  # syntax error in one of them ships without any other job noticing.
+  frontends:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
+      - name: Install qmllint and glib tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            qt6-declarative-dev-tools libglib2.0-bin
+
+      - name: Build
+        run: scripts/build.sh
+
+      - name: Lint QML
+        run: |
+          shopt -s globstar nullglob
+          files=(build/org.tailgauge.plasmoid/contents/ui/*.qml)
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "no QML found - the glob has gone stale" >&2
+            exit 1
+          fi
+          # Every Plasma and Kirigami import is unresolvable here, and some
+          # qmllint builds exit non-zero on those warnings while others exit 0.
+          # So the exit code is not the signal: a `[syntax]` diagnostic is. That
+          # is the failure that actually ships, since a plasmoid with a syntax
+          # error loads as a blank panel.
+          set +e
+          out=$(/usr/lib/qt6/bin/qmllint "${files[@]}" 2>&1)
+          status=$?
+          set -e
+          echo "$out"
+          if [[ $status -eq 126 || $status -eq 127 ]]; then
+            echo "::error::qmllint could not be run (exit $status)"
+            exit 1
+          fi
+          if grep -q '\[syntax\]' <<<"$out"; then
+            echo "::error::QML syntax error - see the [syntax] diagnostics above"
+            exit 1
+          fi
+
+      - name: Check the GNOME extension
+        run: |
+          shopt -s globstar nullglob
+          files=(build/tailgauge@arzaroth.github.io/*.js)
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "no extension sources found - the glob has gone stale" >&2
+            exit 1
+          fi
+          for file in "${files[@]}"; do
+            node --input-type=module --check <"$file"
+          done
+
+      - name: Check the manifests
+        run: |
+          shopt -s globstar nullglob
+          files=(gnome/**/metadata.json plasma/**/metadata.json)
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "no manifests found - the glob has gone stale" >&2
+            exit 1
+          fi
+          for file in "${files[@]}"; do
+            node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$file"
+          done
+
+      - name: Check the settings schemas
+        run: |
+          glib-compile-schemas --strict --dry-run gnome/tailgauge@arzaroth.github.io/schemas
+          python3 -c "import xml.dom.minidom, sys; xml.dom.minidom.parse(sys.argv[1])" \
+            plasma/org.tailgauge.plasmoid/contents/config/main.xml
+
+      # The plasmoid and the extension both declare a version; a release that
+      # bumps one and forgets the other ships two different products.
+      - name: Check the versions agree
+        run: |
+          plasmoid=$(node -e 'process.stdout.write(require("./plasma/org.tailgauge.plasmoid/metadata.json").KPlugin.Version)')
+          extension=$(node -e 'process.stdout.write(require("./gnome/tailgauge@arzaroth.github.io/metadata.json")["version-name"])')
+          echo "plasmoid=$plasmoid extension=$extension"
+          if [[ $plasmoid != "$extension" ]]; then
+            echo "::error::version mismatch between the plasmoid and the GNOME extension"
+            exit 1
+          fi
+
+  helpers:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Syntax-check the shell helpers
+        run: |
+          shopt -s nullglob
+          files=(bin/* scripts/*.sh)
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "no shell sources found - the glob has gone stale" >&2
+            exit 1
+          fi
+          for file in "${files[@]}"; do
+            bash -n "$file"
+          done
+
+      - name: ShellCheck
+        run: |
+          shopt -s nullglob
+          shellcheck --severity=warning bin/* scripts/*.sh
+
+      - name: Check the helpers are executable
+        run: |
+          shopt -s nullglob
+          for file in bin/* scripts/*.sh; do
+            if [[ ! -x $file ]]; then
+              echo "::error::$file is not executable - the installer copies the mode bits"
+              exit 1
+            fi
+          done
+
+      # Informational: verify also resolves ExecStart, which does not exist on a
+      # runner, so its exit code cannot be the signal. A malformed unit still
+      # prints a parse error here.
+      - name: Check the systemd unit parses
+        run: |
+          out=$(systemd-analyze verify --user systemd/tailgauge-receive.service 2>&1 || true)
+          echo "$out"
+          if grep -qiE 'Unknown (key|section)|Failed to parse' <<<"$out"; then
+            echo "::error::the unit file does not parse"
+            exit 1
+          fi
