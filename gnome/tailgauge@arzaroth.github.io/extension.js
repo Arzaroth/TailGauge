@@ -1,6 +1,8 @@
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
+import Meta from 'gi://Meta';
+import Shell from 'gi://Shell';
 import St from 'gi://St';
 
 import {ensureActorVisibleInScrollView} from 'resource:///org/gnome/shell/misc/animationUtils.js';
@@ -486,6 +488,10 @@ class TailGaugeIndicator extends PanelMenu.Button {
 
     // ---- actions ---------------------------------------------------------
 
+    toggle() {
+        this._service.toggleTailscale();
+    }
+
     // The one place a resolved row turns back into a service call.
     _dispatch(row) {
         if (!row)
@@ -644,9 +650,20 @@ export default class TailGaugeExtension extends Extension {
     enable() {
         this._indicator = new Indicator(this);
         Main.panel.addToStatusArea(this.uuid, this._indicator);
+
+        // The shortcut goes through the running extension rather than through
+        // tailgauge-ctl, because a store install has no helpers on PATH. The
+        // setting is empty by default, so this registers nothing until asked.
+        this._settings = this.getSettings();
+        Main.wm.addKeybinding('toggle-shortcut', this._settings,
+            Meta.KeyBindingFlags.NONE,
+            Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW,
+            () => this._indicator?.toggle());
     }
 
     disable() {
+        Main.wm.removeKeybinding('toggle-shortcut');
+        this._settings = null;
         this._indicator?.destroy();
         this._indicator = null;
     }
