@@ -3,6 +3,7 @@ import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 
+import {ensureActorVisibleInScrollView} from 'resource:///org/gnome/shell/misc/animationUtils.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
@@ -14,6 +15,8 @@ import {TailscaleService} from './tailscale.js';
 const RECENT_MULLVAD_LIMIT = 5;
 const PHRASE_INTERVAL_MS = 2800;
 const MULLVAD_REGION_CAP = 200;
+const SCROLL_WORK_AREA_SHARE = 0.6;
+const SCROLL_MIN_HEIGHT = 200;
 
 // St.BoxLayout.vertical was replaced by the Clutter orientation property in
 // GNOME 48; both spellings have to work across the supported shell versions.
@@ -24,6 +27,25 @@ function box(vertical, props = {}) {
     else
         b.vertical = vertical;
     return b;
+}
+
+// St.ScrollView took its content through add_actor until GNOME 46 turned it
+// into a property, and only gained an adjustment of its own in that release.
+function scrollView(child, props = {}) {
+    const view = new St.ScrollView({
+        hscrollbar_policy: St.PolicyType.NEVER,
+        vscrollbar_policy: St.PolicyType.AUTOMATIC,
+        ...props,
+    });
+    if ('child' in view)
+        view.child = child;
+    else
+        view.add_actor(child);
+    return view;
+}
+
+function verticalAdjustment(view) {
+    return 'vadjustment' in view ? view.vadjustment : view.vscroll.adjustment;
 }
 
 // Native rendering of the Tailscale mark from the SVG: a 3x3 dot grid with the
@@ -129,6 +151,8 @@ class TailGaugeIndicator extends PanelMenu.Button {
         this.menu.connect('open-state-changed', (_menu, open) => {
             this._service.attentive = open;
             if (open) {
+                this._updateScrollHeight();
+                verticalAdjustment(this._scroll).value = 0;
                 this._service.refresh();
                 this._startPhrases();
             } else {
@@ -149,6 +173,9 @@ class TailGaugeIndicator extends PanelMenu.Button {
         });
 
         this.menu.box.connect('key-press-event', (_actor, event) => this._onMenuKey(event));
+
+        this._keyFocusId = global.stage.connect('notify::key-focus',
+            () => this._scrollFocusIntoView());
 
         this._sync();
     }
@@ -176,11 +203,25 @@ class TailGaugeIndicator extends PanelMenu.Button {
         this._statusItem.label.clutter_text.line_wrap = true;
         this.menu.addMenuItem(this._statusItem);
 
+        // The shell keeps a tall menu on screen by moving it, never by
+        // shrinking it, so the sections that grow with the tailnet carry their
+        // own scroll view; Refresh and Settings stay below it either way.
+        this._scrolled = new PopupMenu.PopupMenuSection();
+        this.menu.addMenuItem(this._scrolled);
+        this.menu.box.remove_child(this._scrolled.actor);
+        this._scroll = scrollView(this._scrolled.actor, {
+            style_class: 'tailgauge-scroll',
+            x_expand: true,
+            clip_to_allocation: true,
+        });
+        this._scroll._delegate = this._scrolled;
+        this.menu.box.add_child(this._scroll);
+
         for (const id of ['update', 'connections', 'exitNodes', 'machines']) {
             const header = new PopupMenu.PopupSeparatorMenuItem('');
             const section = new PopupMenu.PopupMenuSection();
-            this.menu.addMenuItem(header);
-            this.menu.addMenuItem(section);
+            this._scrolled.addMenuItem(header);
+            this._scrolled.addMenuItem(section);
             this._sections.set(id, {header, section});
         }
 
@@ -193,6 +234,31 @@ class TailGaugeIndicator extends PanelMenu.Button {
         const settingsItem = new PopupMenu.PopupMenuItem(_('Settings'));
         settingsItem.connect('activate', () => this._extension.openPreferences());
         this.menu.addMenuItem(settingsItem);
+    }
+
+    // ---- scrolling -------------------------------------------------------
+
+    // Nothing hands a menu a height budget, so the scroll view takes its share
+    // of the work area, resolved on every open in case the monitor changed.
+    _updateScrollHeight() {
+        const monitor = Main.layoutManager.findMonitorForActor(this) ??
+            Main.layoutManager.primaryMonitor;
+        if (!monitor)
+            return;
+        const workArea = Main.layoutManager.getWorkAreaForMonitor(monitor.index);
+        const scale = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+        const limit = Math.max(SCROLL_MIN_HEIGHT,
+            Math.round(workArea.height * SCROLL_WORK_AREA_SHARE / scale));
+        this._scroll.style = `max-height: ${limit}px`;
+    }
+
+    // PopupMenu walks key focus through the rows knowing nothing about the
+    // scroll view, so a row below the fold would be focused off screen.
+    _scrollFocusIntoView() {
+        const focus = global.stage.get_key_focus();
+        if (!focus || focus === this._scroll || !this._scroll.contains(focus))
+            return;
+        ensureActorVisibleInScrollView(this._scroll, focus);
     }
 
     // ---- sync ------------------------------------------------------------
@@ -555,6 +621,10 @@ class TailGaugeIndicator extends PanelMenu.Button {
 
     destroy() {
         this._stopPhrases();
+        if (this._keyFocusId) {
+            global.stage.disconnect(this._keyFocusId);
+            this._keyFocusId = 0;
+        }
         if (this._changedId) {
             this._service.disconnect(this._changedId);
             this._changedId = 0;
