@@ -20,6 +20,12 @@ All notable changes to this project are documented here.
   preferences, empty by default so it cannot collide with a binding already in
   use. It toggles in-process, so it works on a store install with no helpers on
   `PATH`. Plasma binds `tailgauge-ctl toggle` as a custom command instead.
+- **Offline machines** are listed instead of discarded. `parseStatus()` dropped
+  every peer that was not up, which made a sleeping laptop indistinguishable
+  from one that had been removed from the tailnet, and put its address out of
+  reach of the copy actions that would let you wake it. They sort below the
+  online ones and say "Offline" in the subtitle; sending files to one is still
+  refused, and an exit node that is down is still not offered as a route.
 
 ### Changed
 
