@@ -556,11 +556,15 @@ function peerCopyOptions(peer) {
   return options
 }
 
+// The owner takes the DNS name's place rather than sitting after it: the row
+// already names the machine, the full name is one click away in the copy menu,
+// and a third part would only elide on Plasma and widen the menu on GNOME.
 function peerSubtitle(peer) {
   if (!peer) return ""
   var parts = []
   if (peer.TailscaleIPs && peer.TailscaleIPs.length > 0) parts.push(String(peer.TailscaleIPs[0]))
-  if (peer.DNSName) parts.push(String(peer.DNSName))
+  if (peer.UserName) parts.push(String(peer.UserName))
+  else if (peer.DNSName) parts.push(String(peer.DNSName))
   return parts.join(" · ")
 }
 
