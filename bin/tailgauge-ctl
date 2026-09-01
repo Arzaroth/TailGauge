@@ -1,0 +1,184 @@
+#!/bin/bash
+# Usage: tailgauge-ctl <command> [argument]
+#
+# status              print the connection state, and the exit node if there is one
+# toggle              turn Tailscale off if it is on, on if it is off
+# up                  turn Tailscale on, opening the login page if it needs one
+# down                turn Tailscale off
+# exit-node [NAME]    print the current exit node, or route through NAME;
+#                     "off" clears it
+# exit-nodes          list the exit nodes this tailnet offers
+#
+# Both panels watch the IPN bus, so whatever this changes shows up in them at
+# once. That is the whole mechanism: there is no socket to talk to, which is
+# why binding `tailgauge-ctl toggle` to a key is enough.
+#
+# `status` exits 0 when connected and 3 when it is not, so it can gate a
+# script. Every other command exits 0 on success and 1 on failure.
+
+set -uo pipefail
+
+here="$(dirname "$(readlink -f "$0")")"
+notify="$here/tailgauge-notify"
+command -v tailgauge-notify >/dev/null 2>&1 && notify="tailgauge-notify"
+
+status_raw=""
+
+usage() {
+  sed -n '2,17p' "$0"
+}
+
+die() {
+  echo "tailgauge-ctl: $1" >&2
+  exit 1
+}
+
+# Nothing to report to on a terminal - the command already printed there. Bound
+# to a key there is no terminal at all, and a notification is the only way a
+# failure reaches anyone.
+announce() {
+  [[ -t 1 ]] && return 0
+  "$notify" "$@" >/dev/null 2>&1 || true
+}
+
+read_status() {
+  status_raw=$(tailscale status --json 2>/dev/null)
+  [[ -n $status_raw ]]
+}
+
+json_field() {
+  sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" <<<"$status_raw" | head -1
+}
+
+# Self is printed before the peer list, so the first of each in the document is
+# this machine's.
+self_name() { json_field HostName; }
+self_ip() { sed -n 's/.*"\(100\.[0-9][0-9.]*\)".*/\1/p' <<<"$status_raw" | head -1; }
+
+# The same column slicing shared/model.js does, for the same reason: CITY holds
+# names with spaces in them, so the fields cannot be split on whitespace.
+current_exit_node() {
+  tailscale exit-node list 2>/dev/null | awk '
+    /^IP[[:space:]]+HOSTNAME[[:space:]]+COUNTRY[[:space:]]+CITY[[:space:]]+STATUS/ {
+      host = index($0, "HOSTNAME")
+      country = index($0, "COUNTRY")
+      status = index($0, "STATUS")
+      next
+    }
+    /^[[:space:]]*#/ { next }
+    host && NF {
+      state = substr($0, status)
+      gsub(/^[ \t]+|[ \t]+$/, "", state)
+      if (state != "" && state != "-") {
+        name = substr($0, host, country - host)
+        gsub(/^[ \t]+|[ \t]+$/, "", name)
+        print name
+        exit
+      }
+    }'
+}
+
+cmd_status() {
+  read_status || {
+    echo "Tailscale is not answering"
+    return 3
+  }
+
+  local state name ip node
+  state=$(json_field BackendState)
+
+  if [[ $state != Running ]]; then
+    if [[ $state == NeedsLogin ]]; then
+      echo "Needs login"
+    else
+      printf '%s\n' "${state:-Disconnected}"
+    fi
+    return 3
+  fi
+
+  name=$(self_name)
+  ip=$(self_ip)
+  node=$(current_exit_node)
+  printf 'Connected as %s (%s)\n' "${name:-unknown}" "${ip:-no address}"
+  [[ -n $node ]] && printf 'Exit node: %s\n' "$node"
+  return 0
+}
+
+cmd_up() {
+  if [[ -t 1 ]]; then
+    tailscale up
+    return
+  fi
+
+  # Bound to a key there is no terminal for `tailscale up` to print its login
+  # URL on, so it is scraped out of the stream the way the panels do it.
+  local line url=""
+  while IFS= read -r line; do
+    [[ -n $url ]] && continue
+    url=$(sed -n 's|.*\(https://[^[:space:]]*\).*|\1|p' <<<"$line" | head -1)
+    if [[ -n $url ]] && command -v xdg-open >/dev/null 2>&1; then
+      announce "Authorize this device" "Opening the Tailscale login page"
+      xdg-open "$url" >/dev/null 2>&1 &
+    fi
+  done < <(tailscale up 2>&1)
+
+  read_status && [[ $(json_field BackendState) == Running ]] && return 0
+  announce --urgency critical "Could not turn Tailscale on" "Run tailgauge-ctl up for the reason"
+  return 1
+}
+
+cmd_down() {
+  tailscale down && return 0
+  announce --urgency critical "Could not turn Tailscale off" "Run tailgauge-ctl down for the reason"
+  return 1
+}
+
+cmd_toggle() {
+  read_status || die "tailscale is not answering"
+  # Not `on && down || up`: a failed `down` would fall through and turn it back
+  # on again.
+  if [[ $(json_field BackendState) == Running ]]; then
+    cmd_down
+  else
+    cmd_up
+  fi
+}
+
+cmd_exit_node() {
+  local target="${1:-}"
+
+  if [[ -z $target ]]; then
+    local node
+    node=$(current_exit_node)
+    printf '%s\n' "${node:-none}"
+    return 0
+  fi
+
+  case "${target,,}" in
+  off | none | clear) target="" ;;
+  esac
+
+  tailscale set --exit-node="$target" && return 0
+  announce --urgency critical "Could not set the exit node" "${1}"
+  return 1
+}
+
+command -v tailscale >/dev/null 2>&1 || die "the tailscale CLI is not on PATH"
+
+case "${1:-}" in
+status) cmd_status ;;
+toggle) cmd_toggle ;;
+up) cmd_up ;;
+down) cmd_down ;;
+exit-node) cmd_exit_node "${2:-}" ;;
+exit-nodes) tailscale exit-node list ;;
+-h | --help | help)
+  usage
+  exit 0
+  ;;
+"")
+  usage >&2
+  exit 1
+  ;;
+*) die "unknown command $1" ;;
+esac

@@ -50,6 +50,23 @@ gnome-extensions enable tailgauge@arzaroth.github.io
 
 On Xorg, restart the shell with `Alt+F2` `r`. On Wayland, log out and back in.
 
+## Outside the panel
+
+Omarchy's plugin answers to `omarchy-shell omarchy.tailscale toggle`. TailGauge has no IPC and needs none: both panels block on `tailscale debug watch-ipn`, so anything that changes tailscaled's state shows up in them within a second, whoever changed it.
+
+```bash
+tailgauge-ctl status              # exits 0 connected, 3 not
+tailgauge-ctl toggle              # off if it is on, on if it is off
+tailgauge-ctl up                  # opens the login page when it needs one
+tailgauge-ctl down
+tailgauge-ctl exit-node           # print the current one
+tailgauge-ctl exit-node de-ber-wg-001.mullvad.ts.net
+tailgauge-ctl exit-node off
+tailgauge-ctl exit-nodes          # what this tailnet offers
+```
+
+Run from a key binding there is no terminal to print on, so `up` opens the login page itself and a failure arrives as a notification instead.
+
 ## Distribution
 
 TailGauge has no binary, so there is nothing to self-replace the way a compiled tool does. Instead both desktops already ship an update mechanism, and TailGauge uses them.
@@ -111,7 +128,7 @@ shared/model.js          the only copy of the data model AND the panel layout
 shared/model.exports.mjs the export footer appended for the GNOME build
 plasma/                  the Plasma 6 plasmoid (QML)
 gnome/                   the GNOME Shell extension (GJS)
-bin/                     tailgauge-send / -receive / -copy / -notify / -file-select / -update
+bin/                     tailgauge-ctl / -send / -receive / -copy / -notify / -file-select / -update / -watch
 systemd/                 the Taildrop receive user unit
 test/                    model and parity tests, run by `node --test`
 scripts/build.sh         assembles build/, wiring the shared model into both
@@ -135,7 +152,7 @@ Plasma stores these in the widget's own configuration; GNOME in `org.gnome.shell
 - **Right click** opens the desktop's own context menu rather than toggling Tailscale. Both desktops carry the toggle and refresh as menu entries, and **middle click** on the panel icon toggles.
 - **GNOME** uses native `PopupMenu` rows rather than a custom keyboard-driven panel, so arrows, Enter and type-ahead behave the way every other extension does. Machines and the Mullvad picker are submenus; the copy actions live inside a machine's submenu.
 - **Clipboard** goes through `St.Clipboard` on GNOME and a helper that picks `wl-copy` / `xclip` / `xsel` on Plasma, so the copy actions also work in an X11 session.
-- **No IPC**. Omarchy's `omarchy-shell omarchy.tailscale toggle` has no equivalent here.
+- **No IPC**. `tailgauge-ctl toggle` stands in for `omarchy-shell omarchy.tailscale toggle`, but it drives tailscaled rather than the panel: nothing talks to a running widget.
 - **A machine's copy actions** are a popup menu on Plasma and a submenu on GNOME. Both list the same options in the same order, because the model resolves them once.
 
 ## Development

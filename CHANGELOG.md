@@ -11,6 +11,11 @@ All notable changes to this project are documented here.
   name, MagicDNS name, IPv4, IPv6. `parseStatus()` already normalized all of it
   and threw it away; the MagicDNS name reached no frontend at all, and the IP
   only ever showed up in a Plasma tooltip that GNOME had no counterpart for.
+- **`tailgauge-ctl`**: `status`, `toggle`, `up`, `down`, `exit-node [NAME|off]`
+  and `exit-nodes`, for a key binding or a script. There is still no IPC and no
+  need for one: both panels block on `tailscale debug watch-ipn`, so whatever
+  the helper changes shows up in them within a second. Run without a terminal
+  it opens the login page itself and reports failures as a notification.
 
 ### Changed
 
