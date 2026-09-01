@@ -26,6 +26,11 @@ All notable changes to this project are documented here.
   reach of the copy actions that would let you wake it. They sort below the
   online ones and say "Offline" in the subtitle; sending files to one is still
   refused, and an exit node that is down is still not offered as a route.
+- **Searching the machines list**: past eight machines the section grows a
+  search field, matching the name, the MagicDNS name, either address and the
+  OS. It appears only when the list is long enough to need one, and stays once
+  it is on screen so it cannot vanish from under what is being typed into it.
+  Neither it nor its no-match line is a cursor stop.
 
 ### Changed
 

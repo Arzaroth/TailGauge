@@ -267,6 +267,29 @@ function filterMullvadRegions(regions, query) {
   return result
 }
 
+// Everything a machine row shows is searchable, plus the OS, so "linux" or a
+// half-remembered address finds a machine as readily as its name does.
+function filterMachines(peers, query) {
+  var needle = String(query || "").trim().toLowerCase()
+  var values = Array.isArray(peers) ? peers : []
+  if (needle === "") return values.slice(0)
+
+  var result = []
+  for (var i = 0; i < values.length; i++) {
+    var peer = values[i]
+    var haystack = [
+      String(peer.DisplayName || ""),
+      String(peer.HostName || ""),
+      String(peer.DNSName || ""),
+      String(peer.OS || ""),
+      (peer.TailscaleIPs || []).join(" "),
+      (peer.TailscaleIPv6 || []).join(" ")
+    ].join(" ").toLowerCase()
+    if (haystack.indexOf(needle) !== -1) result.push(peer)
+  }
+  return result
+}
+
 function mullvadRegionNode(regions, region) {
   var values = Array.isArray(regions) ? regions : []
   for (var i = 0; i < values.length; i++) {
@@ -770,9 +793,35 @@ function exitNodesSection(state, t, recentRegions, mullvadQuery, pickerOpen) {
   }
 }
 
-function machinesSection(state, t) {
+var MACHINE_SEARCH_MIN = 8
+
+function machinesSection(state, t, machineQuery) {
+  var query = String(machineQuery || "")
+  var all = state.active ? (state.peers || []) : []
   var rows = []
-  var peers = state.active ? (state.peers || []) : []
+
+  // A field over three machines is clutter; over eighty it is the only way to
+  // find one. Once it is on screen it stays, so it cannot disappear from under
+  // whatever is being typed into it.
+  if (all.length > MACHINE_SEARCH_MIN || query !== "") {
+    rows.push(panelRow({
+      id: "machines:search",
+      kind: "machineSearch",
+      searchPlaceholder: t("Search machines"),
+      navigable: false
+    }))
+  }
+
+  var peers = filterMachines(all, query)
+  if (all.length > 0 && peers.length === 0) {
+    rows.push(panelRow({
+      id: "machines:empty",
+      kind: "empty",
+      label: t("No machines match."),
+      navigable: false
+    }))
+  }
+
   for (var i = 0; i < peers.length; i++) {
     var peer = peers[i]
     var copyOptions = peerCopyOptions(peer)
@@ -841,7 +890,7 @@ function resolvePanel(state, options) {
     selfSection(source, t),
     connectionsSection(source, t),
     exitNodesSection(source, t, opts.recentRegions || [], opts.mullvadQuery || "", opts.mullvadPickerOpen === true),
-    machinesSection(source, t)
+    machinesSection(source, t, opts.machineQuery || "")
   ]
 
   return {
