@@ -114,11 +114,37 @@ function isTaildropTarget(peer, selfUserId) {
   return owner !== "" && owner === String(selfUserId || "")
 }
 
-function peerFromStatus(id, peer) {
+// The display name first: a panel row is narrow, and "Alice Doe" fits where
+// "alice.doe@example.com" would only elide.
+function userLabel(user) {
+  if (!user) return ""
+  var display = String(user.DisplayName || user.displayName || "")
+  if (display !== "") return display
+  var login = String(user.LoginName || user.loginName || "")
+  if (login !== "") return login
+  return String(user.ID || user.id || "")
+}
+
+function usersById(raw) {
+  var users = {}
+  var source = raw || {}
+  for (var id in source) users[String(id)] = userLabel(source[id])
+  return users
+}
+
+function peerOwner(peer, users) {
+  var id = String((peer && peer.UserID) || "")
+  if (id === "") return ""
+  var map = users || {}
+  return String(map[id] || "")
+}
+
+function peerFromStatus(id, peer, users) {
   return {
     id: id,
     HostName: displayHostName(peer.HostName, peer.DNSName),
     UserID: String(peer.UserID || ""),
+    UserName: peerOwner(peer, users),
     TaildropTarget: typeof peer.TaildropTarget === "number" ? peer.TaildropTarget : 0,
     DNSName: cleanDnsName(peer.DNSName),
     DisplayName: displayHostName(peer.HostName, peer.DNSName),
@@ -352,7 +378,8 @@ function parseStatus(raw) {
     var self = data.Self || {}
     // Normalized the same way as every peer, so the local machine can carry the
     // same copy options without a second shape to keep in step.
-    var selfPeer = peerFromStatus("self", self)
+    var users = usersById(data.User)
+    var selfPeer = peerFromStatus("self", self, users)
     if (selfPeer.TailscaleIPs.length === 0 && selfPeer.TailscaleIPv6.length === 0) {
       selfPeer.TailscaleIPs = filterIPv4(data.TailscaleIPs || [])
       selfPeer.TailscaleIPv6 = filterIPv6(data.TailscaleIPs || [])
@@ -363,7 +390,7 @@ function parseStatus(raw) {
 
     for (var id in rawPeers) {
       var peer = rawPeers[id] || {}
-      var normalized = peerFromStatus(id, peer)
+      var normalized = peerFromStatus(id, peer, users)
       if (normalized.Mullvad) continue
       peers.push(normalized)
       // An exit node that is not up is not a route anywhere.
