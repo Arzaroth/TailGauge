@@ -2,6 +2,34 @@
 
 All notable changes to this project are documented here.
 
+## [0.2.0]
+
+### Added
+
+- **The owner of every machine**: `tailscale status` names each peer's owner
+  only by `UserID`, with the labels held in a separate `User` map, so the panel
+  could say what a machine was and where it lived but never whose it was. The
+  two are joined into a `UserName` on every normalized peer, Self included, and
+  the machine row carries it. On a tailnet with twenty-five people in it, that
+  was the missing half of the row. The display name comes before the login
+  name: "Alice Doe" fits where "alice.doe@example.com" would only elide.
+- **Searching by owner**: the machines search matches the owner alongside the
+  name, the MagicDNS name, either address and the OS.
+
+### Changed
+
+- The machine subtitle spends its second slot on the owner instead of the
+  MagicDNS name, which mostly repeated the machine name written above it. On a
+  50-machine tailnet that takes the widest row from 65 characters to 51 -
+  narrower than before the owner was there at all. Appending it as a third part
+  was the other option and a worse one: Plasma's sublabel elides inside a
+  fixed-width popup, so the owner would have been the first thing cut, and
+  GNOME's rides on one line with no ellipsization, so the menu would simply have
+  grown. Nothing is lost: the MagicDNS name stays a click away in the copy menu
+  and the search still matches it.
+- A daemon old enough to return no `User` map keeps the MagicDNS name in that
+  slot rather than leaving a bare address.
+
 ## [0.1.0]
 
 ### Added
