@@ -16,6 +16,10 @@ All notable changes to this project are documented here.
   need for one: both panels block on `tailscale debug watch-ipn`, so whatever
   the helper changes shows up in them within a second. Run without a terminal
   it opens the login page itself and reports failures as a notification.
+- **GNOME toggle shortcut**: a configurable global key in the extension's
+  preferences, empty by default so it cannot collide with a binding already in
+  use. It toggles in-process, so it works on a store install with no helpers on
+  `PATH`. Plasma binds `tailgauge-ctl toggle` as a custom command instead.
 
 ### Changed
 

@@ -67,6 +67,10 @@ tailgauge-ctl exit-nodes          # what this tailnet offers
 
 Run from a key binding there is no terminal to print on, so `up` opens the login page itself and a failure arrives as a notification instead.
 
+**GNOME**: *Settings* in the panel menu has a **Shortcut** row. It is empty until you set one, and it toggles Tailscale in the running extension, so it works on a store install with no helpers on `PATH`.
+
+**Plasma**: bind the helper as a custom command in *System Settings > Keyboard > Shortcuts > Add > Command*, with `tailgauge-ctl toggle` - `~/.local/bin/tailgauge-ctl` if that directory is not on the session's `PATH`. The widget's own popup is bindable without any of this, from *Configure Keyboard Shortcuts* in its context menu.
+
 ## Distribution
 
 TailGauge has no binary, so there is nothing to self-replace the way a compiled tool does. Instead both desktops already ship an update mechanism, and TailGauge uses them.
@@ -144,6 +148,7 @@ scripts/install.sh       builds, then installs helpers, unit and packages
 | Refresh interval | 30s | How often `tailscale status --json` is re-read |
 | Show the machine name | off | Puts the machine name next to the panel icon |
 | Recent Mullvad regions | - | Shortlist behind the exit node list, cleared from GNOME's preferences |
+| Toggle shortcut | none | GNOME only: a global key that turns Tailscale on and off. Plasma binds `tailgauge-ctl toggle` in System Settings instead |
 
 Plasma stores these in the widget's own configuration; GNOME in `org.gnome.shell.extensions.tailgauge`.
 
