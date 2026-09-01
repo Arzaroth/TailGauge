@@ -602,6 +602,38 @@ function updateSection(state, t) {
   }
 }
 
+// The local machine, rendered as a machine row: `tailscale status` already
+// describes it exactly the way it describes a peer, and copying your own
+// address is the one thing the header's name alone cannot do.
+function selfSection(state, t) {
+  var peer = state.selfPeer || null
+  var copyOptions = peerCopyOptions(peer)
+  var rows = []
+
+  if (copyOptions.length > 0) {
+    rows.push(panelRow({
+      id: "self",
+      kind: "self",
+      label: String(peer.DisplayName || peer.HostName || t("Unknown")),
+      sublabel: peerSubtitle(peer),
+      icon: osIconName(peer.OS),
+      glyph: osIcon(peer.OS),
+      action: "copy",
+      actions: [{ id: "copy", label: t("Copy"), icon: "edit-copy-symbolic", glyph: "󰆏" }],
+      copyOptions: copyOptions,
+      payload: peer
+    }))
+  }
+
+  return {
+    id: "self",
+    title: t("This device"),
+    visible: state.installed === true && state.active === true && rows.length > 0,
+    empty: "",
+    rows: rows
+  }
+}
+
 function connectionsSection(state, t) {
   var rows = []
   if (state.accountsAccessDenied) {
@@ -794,6 +826,7 @@ function resolvePanel(state, options) {
   var header = panelHeader(source, t, opts.phraseIndex)
   var sections = [
     updateSection(source, t),
+    selfSection(source, t),
     connectionsSection(source, t),
     exitNodesSection(source, t, opts.recentRegions || [], opts.mullvadQuery || "", opts.mullvadPickerOpen === true),
     machinesSection(source, t)
@@ -824,6 +857,16 @@ function panelRowAt(panel, navIndex) {
     }
   }
   return null
+}
+
+// What a row's single-letter keys are allowed to do follows the actions the
+// model put on it, not its kind, so a new copyable row does not have to be
+// taught to two frontends' key handlers.
+function panelRowHasAction(row, actionId) {
+  var actions = (row && row.actions) || []
+  for (var i = 0; i < actions.length; i++)
+    if (String(actions[i].id) === String(actionId)) return true
+  return false
 }
 
 function panelNavIndexOf(panel, rowId) {
