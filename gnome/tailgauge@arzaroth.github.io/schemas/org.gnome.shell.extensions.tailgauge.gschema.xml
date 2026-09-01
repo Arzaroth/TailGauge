@@ -12,6 +12,11 @@
       <summary>Show the machine name in the panel</summary>
       <description>When off, the panel shows only the Tailscale icon.</description>
     </key>
+    <key name="toggle-shortcut" type="as">
+      <default>[]</default>
+      <summary>Keyboard shortcut to turn Tailscale on and off</summary>
+      <description>Empty by default, so it cannot collide with a binding you already use.</description>
+    </key>
     <key name="recent-mullvad-regions" type="as">
       <default>[]</default>
       <summary>Recently used Mullvad exit node regions</summary>
