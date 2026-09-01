@@ -57,7 +57,7 @@ command -v tailscale >/dev/null 2>&1 ||
 # ---- helpers --------------------------------------------------------------
 bindir="$HOME/.local/bin"
 mkdir -p "$bindir"
-for helper in tailgauge-copy tailgauge-notify tailgauge-file-select tailgauge-send tailgauge-receive tailgauge-update tailgauge-watch; do
+for helper in tailgauge-copy tailgauge-notify tailgauge-file-select tailgauge-send tailgauge-receive tailgauge-update tailgauge-watch tailgauge-ctl; do
   install -m 755 "$root/bin/$helper" "$bindir/$helper"
 done
 echo "Installed helpers into $bindir"
