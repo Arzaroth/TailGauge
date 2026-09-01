@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## [0.0.2]
+
+### Fixed
+
+- **GNOME: the panel menu no longer runs off the screen.** The sections that
+  grow with the tailnet - update, connections, exit nodes, machines - now sit
+  in their own scroll view, sized to 60% of the monitor's work area, with the
+  toggle, the status line, Refresh and Settings outside it. The shell keeps a
+  tall menu on screen by moving it, never by shrinking it, so a large tailnet
+  used to push the footer rows below the bottom of the display. Key focus
+  follows the scroll, so arrow keys cannot land on a row you cannot see.
+
 ## [0.0.1]
 
 First release, and deliberately numbered as one: the Plasma widget has been
