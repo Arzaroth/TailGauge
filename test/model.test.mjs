@@ -56,6 +56,8 @@ test('parseStatus reads the running tailnet', () => {
     assert.equal(status.selfIp, '100.64.0.1');
     assert.equal(status.selfUserId, '1001');
     assert.equal(status.fileSharing, true);
+    assert.equal(status.selfPeer.DNSName, 'workstation.example.ts.net');
+    assert.deepEqual(status.selfPeer.TailscaleIPv6, ['fd7a:115c:a1e0::1']);
 });
 
 test('parseStatus keeps online non-Mullvad peers only', () => {
