@@ -135,6 +135,14 @@ test('taildrop targets follow the daemon grading', () => {
     assert.equal(M.isTaildropTarget(byName.phone, '1001'), false);
 });
 
+test('the machine subtitle spends the second slot on the owner', () => {
+    assert.equal(M.peerSubtitle({TailscaleIPs: ['100.64.0.9'], DNSName: 'box.example.ts.net', UserName: 'bob@example.com'}),
+        '100.64.0.9 · bob@example.com');
+    // No User map, an older daemon: the DNS name still holds the second slot.
+    assert.equal(M.peerSubtitle({TailscaleIPs: ['100.64.0.9'], DNSName: 'box.example.ts.net'}),
+        '100.64.0.9 · box.example.ts.net');
+});
+
 test('peers carry the owner the status map names', () => {
     const byName = Object.fromEntries(status.peers.map(p => [p.HostName, p]));
     assert.equal(byName.laptop.UserName, 'Alice');
@@ -167,7 +175,7 @@ test('this device carries the same copy options a machine row does', () => {
     const row = self.rows[0];
     assert.equal(row.id, 'self');
     assert.equal(row.label, 'workstation');
-    assert.equal(row.sublabel, '100.64.0.1 · workstation.example.ts.net');
+    assert.equal(row.sublabel, '100.64.0.1 · Alice');
     assert.deepEqual(row.copyOptions.map(o => o.kind), ['name', 'dns', 'ipv6', 'ip']);
     assert.deepEqual(row.actions.map(a => a.id), ['copy']);
     assert.equal(M.panelRowHasAction(row, 'send'), false);
@@ -233,7 +241,7 @@ test('the picker filters its regions and reports an empty result', () => {
 test('machine rows carry their subtitle, icon, copy options and actions', () => {
     const rows = section(M.resolvePanel(state(), {}), 'machines').rows;
     const laptop = rows.find(r => r.label === 'laptop');
-    assert.equal(laptop.sublabel, '100.64.0.2 · laptop.example.ts.net');
+    assert.equal(laptop.sublabel, '100.64.0.2 · Alice');
     assert.equal(laptop.icon, 'computer-symbolic');
     assert.deepEqual(laptop.copyOptions.map(o => o.kind), ['name', 'dns', 'ipv6', 'ip']);
     assert.deepEqual(laptop.actions.map(a => a.id), ['send', 'copy']);
@@ -252,7 +260,7 @@ test('offline machines are listed last, marked, and cannot be sent to', () => {
     assert.deepEqual(rows.map(r => r.label), ['laptop', 'phone', 'router', 'offline-box']);
 
     const offline = rows[rows.length - 1];
-    assert.equal(offline.sublabel, 'Offline · 100.64.0.5 · offline-box.example.ts.net');
+    assert.equal(offline.sublabel, 'Offline · 100.64.0.5 · Alice');
     assert.deepEqual(offline.actions.map(a => a.id), ['copy']);
     assert.deepEqual(offline.copyOptions.map(o => o.kind), ['name', 'dns', 'ip']);
 });
