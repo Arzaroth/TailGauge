@@ -37,6 +37,7 @@ export {
   formatText,
   peerCopyOptions,
   peerSubtitle,
+  filterMachines,
   resolvePanel,
   panelRowAt,
   panelRowHasAction,

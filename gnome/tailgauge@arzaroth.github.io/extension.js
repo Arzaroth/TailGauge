@@ -132,6 +132,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         this._phraseIndex = 0;
         this._phraseTimeoutId = 0;
         this._mullvadQuery = '';
+        this._machineQuery = '';
         this._sections = new Map();
 
         const panelBox = box(false, {style_class: 'panel-status-menu-box tailgauge-panel'});
@@ -159,8 +160,9 @@ class TailGaugeIndicator extends PanelMenu.Button {
                 this._startPhrases();
             } else {
                 this._stopPhrases();
-                if (this._mullvadQuery !== '') {
+                if (this._mullvadQuery !== '' || this._machineQuery !== '') {
                     this._mullvadQuery = '';
+                    this._machineQuery = '';
                     this._signature = '';
                 }
             }
@@ -191,6 +193,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
             recentRegions: this._settings.get_strv('recent-mullvad-regions'),
             mullvadQuery: this._mullvadQuery,
             mullvadPickerOpen: true,
+            machineQuery: this._machineQuery,
             phraseIndex: this._phraseIndex,
         });
     }
@@ -374,6 +377,9 @@ class TailGaugeIndicator extends PanelMenu.Button {
         if (row.kind === 'empty')
             return new PopupMenu.PopupMenuItem(row.label, {reactive: false, can_focus: false});
 
+        if (row.kind === 'machineSearch')
+            return this._renderMachineSearch(row);
+
         if (row.children.length > 0 || row.copyOptions.length > 0 || row.actions.length > 0)
             return this._renderSubmenuRow(row);
 
@@ -382,6 +388,48 @@ class TailGaugeIndicator extends PanelMenu.Button {
         item.setOrnament(row.current ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
         item.connect('activate', () => this._dispatch(row));
         return item;
+    }
+
+    // Typing changes which machine rows exist, so letting _sync rebuild the
+    // section would destroy this entry on every keystroke. It refills its own
+    // section instead, the way the picker does, and adopts the signature that
+    // goes with it so the next sync agrees with what is on screen.
+    _renderMachineSearch(row) {
+        const item = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
+        const entry = new St.Entry({
+            style_class: 'tailgauge-search',
+            hint_text: row.searchPlaceholder,
+            can_focus: true,
+            x_expand: true,
+        });
+        entry.set_text(this._machineQuery);
+        entry.clutter_text.connect('text-changed', () => {
+            this._machineQuery = entry.get_text();
+            this._refillMachines(entry);
+        });
+        item.add_child(entry);
+        return item;
+    }
+
+    _refillMachines(entry) {
+        const slot = this._sections.get('machines');
+        if (!slot)
+            return;
+        const panel = this._panel();
+        const machines = panel.sections.find(section => section.id === 'machines');
+        if (!machines)
+            return;
+
+        // Everything after the entry is a resolved machine row.
+        for (const item of slot.section._getMenuItems().slice(1))
+            item.destroy();
+        for (const row of machines.rows) {
+            if (row.kind !== 'machineSearch')
+                slot.section.addMenuItem(this._renderRow(row));
+        }
+
+        this._signature = this._signatureOf(panel);
+        entry.grab_key_focus();
     }
 
     _renderSubmenuRow(row) {
