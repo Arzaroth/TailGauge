@@ -61,8 +61,9 @@ test('parseStatus reads the running tailnet', () => {
     assert.deepEqual(status.selfPeer.TailscaleIPv6, ['fd7a:115c:a1e0::1']);
 });
 
-test('parseStatus keeps online non-Mullvad peers only', () => {
-    assert.deepEqual(status.peers.map(p => p.HostName), ['laptop', 'phone', 'router']);
+test('parseStatus keeps every non-Mullvad peer, online ones first', () => {
+    assert.deepEqual(status.peers.map(p => p.HostName), ['laptop', 'phone', 'router', 'offline-box']);
+    assert.equal(status.peers.find(p => p.HostName === 'offline-box').Online, false);
 });
 
 test('parseStatus separates Tailscale IPv4 from IPv6', () => {
@@ -215,6 +216,16 @@ test('the send action appears only for a Taildrop target', () => {
     assert.deepEqual(rows.find(r => r.label === 'phone').actions.map(a => a.id), ['copy']);
     const noSharing = section(M.resolvePanel(state({fileSharing: false}), {}), 'machines').rows;
     assert.equal(noSharing.every(r => !r.actions.some(a => a.id === 'send')), true);
+});
+
+test('offline machines are listed last, marked, and cannot be sent to', () => {
+    const rows = section(M.resolvePanel(state(), {}), 'machines').rows;
+    assert.deepEqual(rows.map(r => r.label), ['laptop', 'phone', 'router', 'offline-box']);
+
+    const offline = rows[rows.length - 1];
+    assert.equal(offline.sublabel, 'Offline · 100.64.0.5 · offline-box.example.ts.net');
+    assert.deepEqual(offline.actions.map(a => a.id), ['copy']);
+    assert.deepEqual(offline.copyOptions.map(o => o.kind), ['name', 'dns', 'ip']);
 });
 
 test('the machines section states its own empty case', () => {
