@@ -13,6 +13,8 @@ export {
   loginPlan,
   hasFileSharing,
   isTaildropTarget,
+  userLabel,
+  peerOwner,
   peerFromStatus,
   parseExitNodeList,
   mullvadRegionOptions,
