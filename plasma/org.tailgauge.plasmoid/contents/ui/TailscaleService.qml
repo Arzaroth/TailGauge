@@ -23,6 +23,7 @@ Item {
     property string selfDnsName: ""
     property string selfIp: ""
     property string selfUserId: ""
+    property var selfPeer: null
     property bool fileSharing: false
     property string authUrl: ""
     property var peers: []
@@ -77,6 +78,7 @@ Item {
             selfName: selfName,
             selfIp: selfIp,
             selfUserId: selfUserId,
+            selfPeer: selfPeer,
             fileSharing: fileSharing,
             peers: peers,
             tailnetExitNodes: tailnetExitNodes,
@@ -407,6 +409,7 @@ Item {
         selfDnsName = ""
         selfIp = ""
         selfUserId = ""
+        selfPeer = null
         fileSharing = false
         authUrl = ""
         peers = []
@@ -446,6 +449,7 @@ Item {
         selfDnsName = parsed.selfDnsName
         selfIp = parsed.selfIp
         selfUserId = parsed.selfUserId
+        selfPeer = parsed.selfPeer
         fileSharing = parsed.fileSharing
         peers = parsed.running ? parsed.peers : []
         tailnetExitNodes = parsed.running ? parsed.exitNodes : []

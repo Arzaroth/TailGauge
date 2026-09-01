@@ -217,7 +217,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         this._scroll._delegate = this._scrolled;
         this.menu.box.add_child(this._scroll);
 
-        for (const id of ['update', 'connections', 'exitNodes', 'machines']) {
+        for (const id of ['update', 'self', 'connections', 'exitNodes', 'machines']) {
             const header = new PopupMenu.PopupSeparatorMenuItem('');
             const section = new PopupMenu.PopupMenuSection();
             this._scrolled.addMenuItem(header);
@@ -565,16 +565,18 @@ class TailGaugeIndicator extends PanelMenu.Button {
         }
 
         const row = this._focusedRow();
-        if (!row || row.kind !== 'peer')
+        if (!row)
             return Clutter.EVENT_PROPAGATE;
 
-        if (symbol === Clutter.KEY_c || symbol === Clutter.KEY_C)
+        const copyable = row.copyOptions.length > 0;
+        if (copyable && (symbol === Clutter.KEY_c || symbol === Clutter.KEY_C))
             this._copyOption(row, 'ip');
-        else if (symbol === Clutter.KEY_n || symbol === Clutter.KEY_N)
+        else if (copyable && (symbol === Clutter.KEY_n || symbol === Clutter.KEY_N))
             this._copyOption(row, 'name');
-        else if (symbol === Clutter.KEY_d || symbol === Clutter.KEY_D)
+        else if (copyable && (symbol === Clutter.KEY_d || symbol === Clutter.KEY_D))
             this._copyOption(row, 'dns');
-        else if (symbol === Clutter.KEY_s || symbol === Clutter.KEY_S)
+        else if ((symbol === Clutter.KEY_s || symbol === Clutter.KEY_S) &&
+                 Model.panelRowHasAction(row, 'send'))
             this._sendFile(row);
         else
             return Clutter.EVENT_PROPAGATE;

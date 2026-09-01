@@ -56,6 +56,7 @@ export const TailscaleService = GObject.registerClass({
         this.selfDnsName = '';
         this.selfIp = '';
         this.selfUserId = '';
+        this.selfPeer = null;
         this.fileSharing = false;
         this.authUrl = '';
         this.peers = [];
@@ -148,6 +149,7 @@ export const TailscaleService = GObject.registerClass({
             selfName: this.selfName,
             selfIp: this.selfIp,
             selfUserId: this.selfUserId,
+            selfPeer: this.selfPeer,
             fileSharing: this.fileSharing,
             peers: this.peers,
             tailnetExitNodes: this.tailnetExitNodes,
@@ -429,6 +431,7 @@ export const TailscaleService = GObject.registerClass({
         this.selfDnsName = '';
         this.selfIp = '';
         this.selfUserId = '';
+        this.selfPeer = null;
         this.fileSharing = false;
         this.authUrl = '';
         this.peers = [];
@@ -470,6 +473,7 @@ export const TailscaleService = GObject.registerClass({
         this.selfDnsName = parsed.selfDnsName;
         this.selfIp = parsed.selfIp;
         this.selfUserId = parsed.selfUserId;
+        this.selfPeer = parsed.selfPeer;
         this.fileSharing = parsed.fileSharing;
         this.peers = parsed.running ? parsed.peers : [];
         this.tailnetExitNodes = parsed.running ? parsed.exitNodes : [];
