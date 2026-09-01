@@ -342,13 +342,15 @@ function parseStatus(raw) {
       var peer = rawPeers[id] || {}
       var normalized = peerFromStatus(id, peer)
       if (normalized.Mullvad) continue
-      if (normalized.Online) {
-        peers.push(normalized)
-        if (normalized.ExitNodeOption) exitNodes.push(normalized)
-      }
+      peers.push(normalized)
+      // An exit node that is not up is not a route anywhere.
+      if (normalized.Online && normalized.ExitNodeOption) exitNodes.push(normalized)
     }
 
+    // Online first, each half alphabetical. A machine that is up is the one
+    // being looked for; one that is asleep still has an address worth copying.
     peers.sort(function(a, b) {
+      if (a.Online !== b.Online) return a.Online ? -1 : 1
       return String(a.HostName).localeCompare(String(b.HostName))
     })
     exitNodes.sort(function(a, b) {
@@ -483,6 +485,7 @@ function formatText(template, value) {
 
 function canSendFiles(state, peer) {
   if (!state || !state.fileSharing || !state.running || !peer) return false
+  if (peer.Online !== true) return false
   // The KDE Store ships a kpackage and EGO ships an extension zip; neither can
   // put tailgauge-send on PATH. Without it the button would do nothing at all.
   if (state.helpers === false) return false
@@ -509,6 +512,15 @@ function peerSubtitle(peer) {
   if (peer.TailscaleIPs && peer.TailscaleIPs.length > 0) parts.push(String(peer.TailscaleIPs[0]))
   if (peer.DNSName) parts.push(String(peer.DNSName))
   return parts.join(" · ")
+}
+
+// An offline machine keeps its copy actions - a sleeping laptop's address is
+// exactly what someone needs to wake it - so the row has to say why it reads
+// differently from the ones above it.
+function peerRowSubtitle(peer, t) {
+  var subtitle = peerSubtitle(peer)
+  if (!peer || peer.Online === true) return subtitle
+  return subtitle === "" ? t("Offline") : formatText(t("Offline · %1"), subtitle)
 }
 
 function panelRow(row) {
@@ -773,7 +785,7 @@ function machinesSection(state, t) {
       id: "peer:" + String(peer.id || ""),
       kind: "peer",
       label: String(peer.DisplayName || peer.HostName || t("Unknown")),
-      sublabel: peerSubtitle(peer),
+      sublabel: peerRowSubtitle(peer, t),
       icon: osIconName(peer.OS),
       glyph: osIcon(peer.OS),
       action: copyOptions.length > 0 ? "copy" : "",

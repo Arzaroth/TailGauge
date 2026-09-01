@@ -14,7 +14,7 @@ There is no daemon and no service to run. Both frontends drive the `tailscale` C
 - **This device**: your own machine at the top of the panel, with the same copy actions its peers get, because copying your own tailnet address is what you came for half the time.
 - **Connections**: switch between Tailscale profiles when more than one is signed in. Offers to `pkexec tailscale set --operator=$USER` when the daemon refuses profile access.
 - **Exit nodes**: every tailnet exit node, plus a shortlist of the Mullvad regions you actually use, plus a searchable picker for the full Mullvad fleet.
-- **Machines**: every online peer with its IP and MagicDNS name, copy actions for name / DNS name / IPv4 / IPv6, and a Taildrop send button where the tailnet allows file sharing.
+- **Machines**: every peer with its IP and MagicDNS name, copy actions for name / DNS name / IPv4 / IPv6, and a Taildrop send button where the tailnet allows file sharing. Offline machines sort to the bottom and say so, because a sleeping laptop's address is exactly what you need to wake it.
 - **Taildrop receive**: a systemd user service parks on `tailscale file get --wait`, delivers into `~/Downloads`, and announces each file with a notification you can click to open.
 - **Keyboard**: `t` toggle, `r` refresh, and on any row that offers them `c` copy IP, `n` copy name, `d` copy DNS name, `s` send files. Arrows and Enter work as they do natively on each desktop.
 
