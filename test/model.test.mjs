@@ -77,6 +77,7 @@ test('parseStatus reads the running tailnet', () => {
     assert.equal(status.selfUserId, '1001');
     assert.equal(status.fileSharing, true);
     assert.equal(status.selfPeer.DNSName, 'workstation.example.ts.net');
+    assert.equal(status.selfPeer.UserName, 'Alice');
     assert.deepEqual(status.selfPeer.TailscaleIPv6, ['fd7a:115c:a1e0::1']);
 });
 
@@ -132,6 +133,15 @@ test('taildrop targets follow the daemon grading', () => {
     assert.equal(M.isTaildropTarget(byName.laptop, '1001'), true);
     assert.equal(M.isTaildropTarget(byName.router, '1001'), false);
     assert.equal(M.isTaildropTarget(byName.phone, '1001'), false);
+});
+
+test('peers carry the owner the status map names', () => {
+    const byName = Object.fromEntries(status.peers.map(p => [p.HostName, p]));
+    assert.equal(byName.laptop.UserName, 'Alice');
+    assert.equal(byName.phone.UserName, 'Bob');
+    assert.equal(M.userLabel({ID: 3003, LoginName: 'tagged-devices'}), 'tagged-devices');
+    assert.equal(M.peerOwner({UserID: 4004}, {1001: 'alice@example.com'}), '');
+    assert.equal(M.userLabel({ID: 7}), '7');
 });
 
 test('shell quoting survives an apostrophe', () => {
