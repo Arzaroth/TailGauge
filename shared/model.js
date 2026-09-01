@@ -327,7 +327,13 @@ function parseStatus(raw) {
     var data = JSON.parse(text)
     var backendState = String(data.BackendState || "Unknown")
     var self = data.Self || {}
-    var selfIps = filterIPv4(self.TailscaleIPs || data.TailscaleIPs || [])
+    // Normalized the same way as every peer, so the local machine can carry the
+    // same copy options without a second shape to keep in step.
+    var selfPeer = peerFromStatus("self", self)
+    if (selfPeer.TailscaleIPs.length === 0 && selfPeer.TailscaleIPv6.length === 0) {
+      selfPeer.TailscaleIPs = filterIPv4(data.TailscaleIPs || [])
+      selfPeer.TailscaleIPv6 = filterIPv6(data.TailscaleIPs || [])
+    }
     var peers = []
     var exitNodes = []
     var rawPeers = data.Peer || {}
@@ -356,10 +362,11 @@ function parseStatus(raw) {
       running: backendState === "Running",
       needsLogin: backendState === "NeedsLogin",
       authUrl: String(data.AuthURL || ""),
-      selfName: displayHostName(self.HostName, self.DNSName),
-      selfDnsName: cleanDnsName(self.DNSName),
-      selfIp: selfIps.length > 0 ? selfIps[0] : "",
+      selfName: selfPeer.DisplayName,
+      selfDnsName: selfPeer.DNSName,
+      selfIp: selfPeer.TailscaleIPs.length > 0 ? selfPeer.TailscaleIPs[0] : "",
       selfUserId: String(self.UserID || ""),
+      selfPeer: selfPeer,
       fileSharing: hasFileSharing(self),
       peers: peers,
       exitNodes: exitNodes
