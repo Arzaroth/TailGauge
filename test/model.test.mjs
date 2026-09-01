@@ -47,6 +47,25 @@ function state(overrides = {}) {
 
 const section = (panel, id) => panel.sections.find(s => s.id === id);
 
+// Past the threshold the machines section grows a search field, which the
+// fixture's four peers are deliberately too few to trigger.
+const manyPeers = Array.from({length: 12}, (_, i) => ({
+    id: `peer-${i}`,
+    HostName: `box-${i}`,
+    DisplayName: `box-${i}`,
+    DNSName: `box-${i}.example.ts.net`,
+    UserID: status.selfUserId,
+    TaildropTarget: 1,
+    TailscaleIPs: [`100.64.1.${i}`],
+    TailscaleIPv6: [],
+    Online: true,
+    OS: i % 2 === 0 ? 'linux' : 'windows',
+    Tags: [],
+    ExitNodeOption: false,
+    ExitNode: false,
+    Mullvad: false,
+}));
+
 // ---- parsing --------------------------------------------------------------
 
 test('parseStatus reads the running tailnet', () => {
@@ -233,6 +252,49 @@ test('the machines section states its own empty case', () => {
     assert.equal(empty.visible, true);
     assert.equal(empty.rows.length, 0);
     assert.equal(empty.empty, 'No machines found on this tailnet.');
+});
+
+test('filterMachines matches every field a row shows, and the OS', () => {
+    const names = query => M.filterMachines(status.peers, query).map(p => p.HostName);
+    assert.equal(M.filterMachines(status.peers, '').length, status.peers.length);
+    assert.deepEqual(names('ANDROID'), ['phone']);
+    assert.deepEqual(names('100.64.0.5'), ['offline-box']);
+    assert.deepEqual(names('example.ts.net'), status.peers.map(p => p.HostName));
+    assert.deepEqual(M.filterMachines(null, 'anything'), []);
+});
+
+test('the machines search appears only for a list long enough to need it', () => {
+    assert.equal(section(M.resolvePanel(state(), {}), 'machines').rows.some(r => r.kind === 'machineSearch'), false);
+
+    const long = section(M.resolvePanel(state({peers: manyPeers}), {}), 'machines');
+    assert.equal(long.rows[0].kind, 'machineSearch');
+    assert.equal(long.rows[0].navigable, false);
+    assert.equal(long.rows[0].searchPlaceholder, 'Search machines');
+
+    // Once it is on screen it stays, however few machines the query leaves.
+    const few = section(M.resolvePanel(state(), {machineQuery: 'laptop'}), 'machines');
+    assert.deepEqual(few.rows.map(r => r.kind), ['machineSearch', 'peer']);
+});
+
+test('the machines search filters the rows it leaves behind', () => {
+    const labels = query => section(M.resolvePanel(state({peers: manyPeers}), {machineQuery: query}), 'machines')
+        .rows.filter(r => r.kind === 'peer').map(r => r.label);
+    assert.deepEqual(labels('100.64.1.7'), ['box-7']);
+    assert.deepEqual(labels('BOX-11'), ['box-11']);
+    assert.deepEqual(labels('windows'), manyPeers.filter(p => p.OS === 'windows').map(p => p.DisplayName));
+});
+
+test('a search that matches nothing says so instead of looking broken', () => {
+    const rows = section(M.resolvePanel(state({peers: manyPeers}), {machineQuery: 'nowhere'}), 'machines').rows;
+    assert.deepEqual(rows.map(r => r.kind), ['machineSearch', 'empty']);
+    assert.equal(rows[1].label, 'No machines match.');
+    assert.equal(rows[1].navigable, false);
+});
+
+test('neither the search field nor its empty case is a cursor stop', () => {
+    const nav = M.resolvePanel(state({peers: manyPeers}), {machineQuery: 'nowhere'}).navigation.map(n => n.rowId);
+    assert.equal(nav.includes('machines:search'), false);
+    assert.equal(nav.includes('machines:empty'), false);
 });
 
 test('the header reflects every connection state', () => {

@@ -21,6 +21,7 @@ Item {
     property int cursorIndex: 0
     property bool mullvadPickerOpen: false
     property string mullvadQuery: ""
+    property string machineQuery: ""
     property int phraseIndex: 0
 
     // Everything the panel shows is decided in the shared model: which sections
@@ -31,6 +32,7 @@ Item {
         recentRegions: root.recentMullvadRegions,
         mullvadQuery: full.mullvadQuery,
         mullvadPickerOpen: full.mullvadPickerOpen,
+        machineQuery: full.machineQuery,
         phraseIndex: full.phraseIndex
     })
 
@@ -236,6 +238,7 @@ Item {
         _pinnedRowId = ""
         mullvadPickerOpen = false
         mullvadQuery = ""
+        machineQuery = ""
         if (scroll.contentItem) scroll.contentItem.contentY = 0
         service.refresh()
         Qt.callLater(() => full.forceActiveFocus())
@@ -394,6 +397,7 @@ Item {
 
                             readonly property bool isPicker: modelData.kind === "mullvadPicker"
                             readonly property bool isEmpty: modelData.kind === "empty"
+                            readonly property bool isSearch: modelData.kind === "machineSearch"
 
                             Layout.fillWidth: true
                             spacing: Kirigami.Units.smallSpacing
@@ -407,9 +411,30 @@ Item {
                                 font: Kirigami.Theme.smallFont
                             }
 
+                            PlasmaComponents3.TextField {
+                                visible: rowGroup.isSearch
+                                Layout.fillWidth: true
+                                placeholderText: rowGroup.isSearch ? rowGroup.modelData.searchPlaceholder : ""
+                                text: full.machineQuery
+                                onTextChanged: full.machineQuery = text
+                                Keys.onPressed: (event) => {
+                                    if (event.key === Qt.Key_Escape) {
+                                        if (text !== "") text = ""
+                                        else full.forceActiveFocus()
+                                        event.accepted = true
+                                    } else if (event.key === Qt.Key_Down || event.key === Qt.Key_Up) {
+                                        full.moveCursor(event.key === Qt.Key_Down ? 1 : -1)
+                                        event.accepted = true
+                                    } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                                        full.activateCursor()
+                                        event.accepted = true
+                                    }
+                                }
+                            }
+
                             PanelRowView {
                                 id: rowView
-                                visible: !rowGroup.isEmpty
+                                visible: !rowGroup.isEmpty && !rowGroup.isSearch
                                 Layout.fillWidth: true
                                 row: rowGroup.modelData
                                 cursorActive: full.cursorActive
