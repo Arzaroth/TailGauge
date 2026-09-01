@@ -39,5 +39,6 @@ export {
   peerSubtitle,
   resolvePanel,
   panelRowAt,
+  panelRowHasAction,
   panelNavIndexOf
 }

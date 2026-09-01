@@ -29,6 +29,7 @@ function state(overrides = {}) {
         selfName: status.selfName,
         selfIp: status.selfIp,
         selfUserId: status.selfUserId,
+        selfPeer: status.selfPeer,
         fileSharing: status.fileSharing,
         peers: status.peers,
         tailnetExitNodes: status.exitNodes,
@@ -126,7 +127,26 @@ test('shell quoting survives an apostrophe', () => {
 
 test('sections come back in a fixed order', () => {
     const panel = M.resolvePanel(state(), {});
-    assert.deepEqual(panel.sections.map(s => s.id), ['update', 'connections', 'exitNodes', 'machines']);
+    assert.deepEqual(panel.sections.map(s => s.id), ['update', 'self', 'connections', 'exitNodes', 'machines']);
+});
+
+test('this device carries the same copy options a machine row does', () => {
+    const self = section(M.resolvePanel(state(), {}), 'self');
+    assert.equal(self.visible, true);
+    assert.equal(self.rows.length, 1);
+    const row = self.rows[0];
+    assert.equal(row.id, 'self');
+    assert.equal(row.label, 'workstation');
+    assert.equal(row.sublabel, '100.64.0.1 · workstation.example.ts.net');
+    assert.deepEqual(row.copyOptions.map(o => o.kind), ['name', 'dns', 'ipv6', 'ip']);
+    assert.deepEqual(row.actions.map(a => a.id), ['copy']);
+    assert.equal(M.panelRowHasAction(row, 'send'), false);
+});
+
+test('this device disappears with the tailnet it belongs to', () => {
+    assert.equal(section(M.resolvePanel(state({active: false, running: false}), {}), 'self').visible, false);
+    assert.equal(section(M.resolvePanel(state({installed: false}), {}), 'self').visible, false);
+    assert.equal(section(M.resolvePanel(state({selfPeer: null}), {}), 'self').visible, false);
 });
 
 test('connections appear only with a choice to make', () => {

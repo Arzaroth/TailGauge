@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased]
+
+### Added
+
+- **This device**: the local machine now has its own section above Connections,
+  drawn as a machine row and carrying the same copy actions its peers get -
+  name, MagicDNS name, IPv4, IPv6. `parseStatus()` already normalized all of it
+  and threw it away; the MagicDNS name reached no frontend at all, and the IP
+  only ever showed up in a Plasma tooltip that GNOME had no counterpart for.
+
+### Changed
+
+- The single-letter keys follow what the model put on a row rather than the
+  row's kind, so `c` / `n` / `d` work anywhere there are copy options and `s`
+  no longer fires on a machine that cannot receive files.
+
 ## [0.0.2]
 
 ### Fixed

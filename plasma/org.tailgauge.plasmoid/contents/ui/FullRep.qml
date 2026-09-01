@@ -214,11 +214,16 @@ Item {
         case Qt.Key_D:
         case Qt.Key_S:
             var row = full.selectedRow()
-            if (!row || row.kind !== "peer") return
-            if (event.key === Qt.Key_C) full.copyOption(row, "ip")
-            else if (event.key === Qt.Key_N) full.copyOption(row, "name")
-            else if (event.key === Qt.Key_D) full.copyOption(row, "dns")
-            else full.sendPeerFile(row)
+            if (!row) return
+            if (event.key === Qt.Key_S) {
+                if (!Model.panelRowHasAction(row, "send")) return
+                full.sendPeerFile(row)
+            } else {
+                if (row.copyOptions.length === 0) return
+                if (event.key === Qt.Key_C) full.copyOption(row, "ip")
+                else if (event.key === Qt.Key_N) full.copyOption(row, "name")
+                else full.copyOption(row, "dns")
+            }
             event.accepted = true
             return
         }
