@@ -302,6 +302,13 @@ test('the machines search filters the rows it leaves behind', () => {
     assert.deepEqual(labels('windows'), manyPeers.filter(p => p.OS === 'windows').map(p => p.DisplayName));
 });
 
+test('the machines search matches the owner it shows', () => {
+    const labels = query => section(M.resolvePanel(state(), {machineQuery: query}), 'machines')
+        .rows.filter(r => r.kind === 'peer').map(r => r.label);
+    assert.deepEqual(labels('bob'), ['phone']);
+    assert.deepEqual(labels('alice'), ['laptop', 'router', 'offline-box']);
+});
+
 test('a search that matches nothing says so instead of looking broken', () => {
     const rows = section(M.resolvePanel(state({peers: manyPeers}), {machineQuery: 'nowhere'}), 'machines').rows;
     assert.deepEqual(rows.map(r => r.kind), ['machineSearch', 'empty']);

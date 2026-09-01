@@ -308,6 +308,7 @@ function filterMachines(peers, query) {
       String(peer.HostName || ""),
       String(peer.DNSName || ""),
       String(peer.OS || ""),
+      String(peer.UserName || ""),
       (peer.TailscaleIPs || []).join(" "),
       (peer.TailscaleIPv6 || []).join(" ")
     ].join(" ").toLowerCase()
