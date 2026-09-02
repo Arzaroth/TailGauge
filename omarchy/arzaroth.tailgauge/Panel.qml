@@ -19,6 +19,7 @@ Panel {
   property bool mullvadPickerOpen: false
   property string mullvadQuery: ""
   property string machineQuery: ""
+  property bool machineSearchActive: false
   property int phraseIndex: 0
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
@@ -196,6 +197,7 @@ Panel {
     cursorActive = false
     cursorIndex = 0
     _pinnedRowId = ""
+    machineSearchActive = false
     // A popup torn down with the panel never reports itself closed, and a
     // stale flag here leaves the key catcher blocked for good.
     copyMenuOpen = false
@@ -291,7 +293,14 @@ Panel {
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
-      blocked: root.copyMenuOpen
+      // It takes keys before any focused descendant - that is what lets j and k
+      // drive the cursor - so a search field only receives what it does not
+      // claim. Blocking whenever the catcher itself is not focused hands every
+      // key to whatever is: h, j, k, l, x and space were being swallowed
+      // outright, which is why a lowercase query behaved differently from the
+      // same query typed in capitals, and c, n, d, s, t and r fired a row
+      // action on their way through.
+      blocked: root.copyMenuOpen || !keyCatcher.activeFocus
       onMoveRequested: function (dx, dy) {
         if (!root.cursorActive) { root.cursorActive = true; return }
         if (dy !== 0) root.moveCursor(dy > 0 ? 1 : -1)
@@ -467,16 +476,26 @@ Panel {
                   }
 
                   TextField {
+                    id: machineSearch
                     visible: rowGroup.isSearch
                     width: parent.width
                     foreground: root.foreground
                     placeholderText: rowGroup.modelData.searchPlaceholder
                     text: root.machineQuery
                     onTextChanged: root.machineQuery = text
+                    onActiveFocusChanged: if (activeFocus) root.machineSearchActive = true
+                    // A tailnet change rebuilds every row, this field included.
+                    // Whoever was typing into it has to get it back, or the
+                    // next keystroke reaches the panel as a shortcut.
+                    Component.onCompleted: if (visible && root.machineSearchActive)
+                      Qt.callLater(function () { machineSearch.forceActiveFocus() })
                     Keys.onPressed: function (event) {
                       if (event.key === Qt.Key_Escape) {
                         if (text !== "") text = ""
-                        else keyCatcher.forceActiveFocus()
+                        else {
+                          root.machineSearchActive = false
+                          keyCatcher.forceActiveFocus()
+                        }
                         event.accepted = true
                       } else if (event.key === Qt.Key_Down || event.key === Qt.Key_Up) {
                         root.moveCursor(event.key === Qt.Key_Down ? 1 : -1)
@@ -507,6 +526,10 @@ Panel {
                     text: root.mullvadQuery
                     onTextChanged: root.mullvadQuery = text
                     onVisibleChanged: if (visible) Qt.callLater(function () { mullvadSearch.forceActiveFocus() })
+                    // The picker being on screen at all means it was just
+                    // opened, so a rebuilt field belongs back under the cursor.
+                    Component.onCompleted: if (visible)
+                      Qt.callLater(function () { mullvadSearch.forceActiveFocus() })
                     Keys.onPressed: function (event) {
                       if (event.key === Qt.Key_Escape) {
                         root.mullvadPickerOpen = false
