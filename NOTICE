@@ -1,5 +1,6 @@
 TailGauge is a port of the first-party Tailscale panel plugin that ships with
-Omarchy 4 (Quattro), from Hyprland/Quickshell to KDE Plasma 6 and GNOME Shell.
+Omarchy 4 (Quattro), from Hyprland/Quickshell to KDE Plasma 6 and GNOME Shell,
+plus a third-party Omarchy widget built back on the result.
 
 Upstream: https://github.com/basecamp/omarchy (MIT, Copyright (c) David
 Heinemeier Hansson), branch `quattro`:
@@ -28,6 +29,15 @@ What was carried over and what was rewritten:
       Plasma5Support.DataSource and Gio.Subprocess respectively; Panel.qml's
       layout and keyboard model are reproduced against Plasma Components and
       St/PopupMenu. No Quickshell code is used.
+
+  omarchy/arzaroth.tailgauge/
+      Quickshell again, so it rides on the same shell APIs upstream's widget
+      does (qs.Ui, qs.Commons), and TailscaleIcon.qml is upstream's dot-grid
+      mark near-verbatim. Panel.qml and Service.qml are rewritten against
+      shared/model.js: the panel is resolved by the model rather than assembled
+      in QML, and the cursor is one index into it rather than a per-section
+      focus state machine. It is a third-party plugin (arzaroth.tailgauge) and
+      does not replace or modify omarchy.tailscale.
 
 Tailscale and Mullvad are trademarks of their respective owners. TailGauge is
 not affiliated with, endorsed by, or sponsored by Tailscale Inc., Mullvad, or
