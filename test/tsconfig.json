@@ -1,0 +1,15 @@
+{
+  // rootDir reaches the repo root because the tests borrow the model's types
+  // from shared/ while importing the built artifact at runtime.
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "NodeNext",
+    "moduleResolution": "nodenext",
+    "outDir": "../build/.ts/tests",
+    "rootDir": "..",
+    "types": ["node"]
+  },
+  "include": ["**/*.ts"]
+}

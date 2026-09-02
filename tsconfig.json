@@ -1,0 +1,15 @@
+{
+  // The editor + typecheck view of the desktop sources. The tests live in their
+  // own project because Node's `global` and the shell's are different objects
+  // and the two sets of ambient types cannot describe both at once.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "noEmit": true,
+    "rootDirs": ["gnome/tailgauge@arzaroth.github.io", "shared"],
+    "types": ["@girs/gnome-shell/ambient", "@girs/gnome-shell/extensions/global"]
+  },
+  "include": ["shared/**/*.ts", "gnome/**/*.ts"]
+}
