@@ -1,0 +1,17 @@
+{
+  "name": "tailgauge",
+  "private": true,
+  "type": "module",
+  "license": "GPL-3.0-or-later",
+  "description": "Tailscale in the panel, for GNOME Shell, KDE Plasma and Omarchy.",
+  "scripts": {
+    "build": "scripts/build.sh",
+    "typecheck": "tsc -p tsconfig.json && tsc -p test/tsconfig.json --noEmit",
+    "test": "scripts/build.sh && node --test 'build/.ts/tests/test/**/*.test.js'"
+  },
+  "devDependencies": {
+    "@girs/gnome-shell": "50.0.4",
+    "@types/node": "^22.10.2",
+    "typescript": "~5.7.2"
+  }
+}

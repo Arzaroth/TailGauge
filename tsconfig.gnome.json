@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "outDir": "build/.ts/gnome",
+    // The extension ships flat, with model.js beside extension.js; rootDirs is
+    // what lets `./model.js` resolve to the shared source at check time while
+    // the emitted specifier stays the one that exists at runtime.
+    "rootDirs": ["gnome/tailgauge@arzaroth.github.io", "shared"],
+    "rootDir": ".",
+    "types": ["@girs/gnome-shell/ambient", "@girs/gnome-shell/extensions/global"]
+  },
+  "include": ["gnome/**/*.ts"]
+}

@@ -1,0 +1,15 @@
+{
+  // Both QML engines load the emitted model as a plain shared script, so the
+  // emit stays in the dialect QJSEngine has always accepted, and the ES5 lib
+  // keeps a newer built-in from being reached for by accident.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES5",
+    "lib": ["ES5"],
+    "module": "ES2015",
+    "outDir": "build/.ts/model",
+    "rootDir": "shared",
+    "types": []
+  },
+  "include": ["shared/**/*.ts"]
+}
