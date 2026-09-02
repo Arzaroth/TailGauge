@@ -2,6 +2,31 @@
 
 All notable changes to this project are documented here.
 
+## [0.3.2]
+
+### Changed
+
+- **Everything that is not QML or shell is now TypeScript**, checked under
+  `strict`. No behaviour change: the emitted JavaScript differs from what
+  0.3.1 shipped only in formatting, and in `fillPreferencesWindow` becoming
+  `async`, which is the signature `ExtensionPreferences` already declared.
+  `shared/model.ts` compiles once and ships twice - the GNOME extension
+  imports the ES module as emitted, and both QML engines get the same file
+  with its trailing `export` removed, since a QML shared script cannot carry
+  module syntax and a stray `export` there loads as a blank panel. The build
+  refuses to strip anything unless that last line really is the export, and
+  CI now checks the two copies that ship rather than the source they came
+  from. The model targets ES5 against the ES5 library, because the QML
+  engines are the oldest runtime it reaches.
+- **The types made three things explicit that were only ever implied.**
+  `parseStatus()` returned one bag of optionals and now returns a union of
+  its three real shapes, so a caller that has ruled out the failure cases is
+  handed a status whose fields are all present. Four GIO async callbacks
+  dereferenced a source the bindings type as nullable. The tests dereferenced
+  `find()` results directly, and now fail with a useful message instead of a
+  `TypeError`. Nothing was broken - the code was already type-consistent -
+  but none of it was written down.
+
 ## [0.3.1]
 
 ### Fixed
