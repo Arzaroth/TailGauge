@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "arzaroth.tailgauge",
+  "name": "TailGauge",
+  "version": "0.2.0",
+  "author": "Arzaroth",
+  "license": "MIT",
+  "description": "Tailscale connection state, account switching, exit nodes including Mullvad regions, machine browsing with copy actions, and Taildrop sending in an Omarchy bar panel.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "TailGauge",
+    "description": "Toggle Tailscale, switch connections, pick an exit node, browse machines, and send files with Taildrop.",
+    "category": "Network",
+    "defaultSection": "right",
+    "aliases": ["tailgauge", "tail-gauge"],
+    "allowMultiple": false,
+    "defaults": {
+      "refreshIntervalSec": 30
+    },
+    "schema": [
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "min": 5,
+        "max": 3600,
+        "step": 5,
+        "defaultValue": 30
+      }
+    ]
+  }
+}
