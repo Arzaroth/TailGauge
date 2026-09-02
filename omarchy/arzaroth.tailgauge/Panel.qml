@@ -196,6 +196,9 @@ Panel {
     cursorActive = false
     cursorIndex = 0
     _pinnedRowId = ""
+    // A popup torn down with the panel never reports itself closed, and a
+    // stale flag here leaves the key catcher blocked for good.
+    copyMenuOpen = false
     mullvadPickerOpen = false
     mullvadQuery = ""
     machineQuery = ""
