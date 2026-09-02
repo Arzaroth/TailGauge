@@ -121,6 +121,30 @@ test('neither QML service reports unchanged state as a change', () => {
     }
 });
 
+// The poll watchdog exists for a status call that hangs. Armed and never
+// disarmed, it instead kills whichever healthy poll is in flight when it fires,
+// which on Omarchy surfaced as the panel reporting a tailnet down that never
+// went anywhere.
+test('both QML services disarm the poll watchdog when the polls land', () => {
+    for (const [name, file] of Object.entries({
+        plasma: 'plasma/org.tailgauge.plasmoid/contents/ui/TailscaleService.qml',
+        omarchy: 'omarchy/arzaroth.tailgauge/Service.qml'
+    })) {
+        const src = read(file);
+        assert.match(src, /pollWatchdog\.stop\(\)/, `${name} never disarms the watchdog`);
+        // One per poll: status, mullvad, accounts.
+        assert.equal((src.match(/root\._pollSettled\(kind\)/g) || []).length, 3,
+            `${name} does not check every poll in`);
+    }
+});
+
+// A reaped poll produced no answer, so it must not be reported as one.
+test('the Omarchy service does not report a poll it killed', () => {
+    const src = read('omarchy/arzaroth.tailgauge/Service.qml');
+    assert.match(src, /proc\.reaped = true/);
+    assert.match(src, /if \(proc\.reaped\)/);
+});
+
 test('no frontend gates a control on background work', () => {
     for (const [name, source] of frontends) {
         assert.equal(/enabled:\s*!.*busy|setSensitive\(.*busy/.test(source), false,

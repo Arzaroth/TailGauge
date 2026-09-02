@@ -159,11 +159,27 @@ Item {
     return true
   }
 
+  // Armed by the launch and disarmed by the landing, so it only ever fires on a
+  // poll that really did hang. Left armed it reaps whichever healthy poll is in
+  // flight fifteen seconds later, which at the three-second cadence of an open
+  // panel is nearly always one.
+  function _pollSettled(kind) {
+    var polls = ["status", "mullvad", "accounts"]
+    for (var i = 0; i < polls.length; i++) {
+      if (polls[i] === kind) continue
+      var proc = _runner(polls[i])
+      if (proc && proc.running) return
+    }
+    pollWatchdog.stop()
+  }
+
   // The watcher is meant to sit there for minutes; reaping it as a hung poll
   // would restart it forever.
   function _reap(kind) {
     var proc = _runner(kind)
-    if (proc && proc.running) proc.running = false
+    if (!proc || !proc.running) return
+    proc.reaped = true
+    proc.running = false
   }
 
   function _detach(argv) {
@@ -182,12 +198,14 @@ Item {
       }
     } else if (kind === "status") {
       root.refreshing = false
+      root._pollSettled(kind)
       if (exitCode === 0) root.parseStatus(stdout)
       else {
         root.resetUnavailable("Disconnected")
         root.lastError = stderr.trim()
       }
     } else if (kind === "accounts") {
+      root._pollSettled(kind)
       if (exitCode === 0) root.parseAccounts(stdout)
       else {
         root.parseAccounts("")
@@ -199,6 +217,7 @@ Item {
         }
       }
     } else if (kind === "mullvad") {
+      root._pollSettled(kind)
       root.parseMullvadExitNodes(exitCode === 0 ? stdout : "")
     } else if (kind === "action") {
       if (exitCode !== 0) {
@@ -558,11 +577,19 @@ Item {
   component Runner: Process {
     id: proc
     property string kind: ""
+    // Set while the watchdog kills this one. A reaped poll is not a result:
+    // reporting the exit code of a command that was never allowed to answer
+    // reads as "Disconnected" from a tailnet that never went anywhere.
+    property bool reaped: false
     running: false
     command: []
     stdout: StdioCollector { id: outCollector; waitForEnd: true }
     stderr: StdioCollector { id: errCollector; waitForEnd: true }
     onExited: function (exitCode) {
+      if (proc.reaped) {
+        proc.reaped = false
+        return
+      }
       root._handle(proc.kind, exitCode, String(outCollector.text || ""), String(errCollector.text || ""))
     }
   }
