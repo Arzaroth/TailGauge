@@ -138,6 +138,22 @@ test('both QML services disarm the poll watchdog when the polls land', () => {
     }
 });
 
+// `panel` is a new object whenever anything it is derived from moves, the
+// search query included. A Repeater handed that array rebuilds every delegate
+// it holds, which on Omarchy meant the field being typed into was destroyed and
+// recreated on each keystroke. Counted models keep the delegates and re-read.
+test('the Omarchy panel binds its rows by index, not by array', () => {
+    const src = read('omarchy/arzaroth.tailgauge/Panel.qml');
+    assert.match(src, /model: root\.panel\.sections\.length/,
+        'the sections repeater is fed the array again');
+    assert.match(src, /model: sectionView\.modelData \? sectionView\.modelData\.rows\.length : 0/,
+        'the rows repeater is fed the array again');
+    assert.match(src, /model: rowGroup\.modelData && rowGroup\.modelData\.expanded/,
+        'the expanded-children repeater is fed the array again');
+    // The action and copy-option repeaters inside a row stay array-bound on
+    // purpose: a handful of buttons, nothing focusable, nothing to preserve.
+});
+
 // A reaped poll produced no answer, so it must not be reported as one.
 test('the Omarchy service does not report a poll it killed', () => {
     const src = read('omarchy/arzaroth.tailgauge/Service.qml');
