@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased]
+
+### Added
+
+- **An Omarchy frontend**, `omarchy/arzaroth.tailgauge`: the panel TailGauge
+  was ported *from*, rebuilt on the shared model and installed as a third-party
+  Quickshell widget. It exists because the port has since moved past its
+  origin - the local machine as a row of its own, offline machines, the owner
+  of each machine, a machine search, the update banner - and none of that
+  reaches an Omarchy bar through upstream's copy. `scripts/install.sh
+  --omarchy` builds and enables it; `omarchy plugin disable omarchy.tailscale`
+  drops the first-party one it duplicates.
+- The widget answers to the shell's IPC (`omarchy-shell arzaroth.tailgauge
+  <open|close|toggle|refresh|up|down|toggleTailscale|status>`), which the other
+  two frontends have no equivalent for.
+- `tailgauge-update` learned a fourth target. The Omarchy plugin has no store
+  behind it, so a release archive is the only way it updates, and the panel's
+  own update banner installs it in place.
+- `.claude/skills/upstream-check`: a maintenance skill for the drift review
+  that a vendored port needs and nothing else performs. Three frontends now
+  read from one upstream that keeps moving.
+
 ## [0.2.0]
 
 ### Added

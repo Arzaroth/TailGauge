@@ -1,10 +1,10 @@
 # TailGauge
 
-Tailscale in your **KDE Plasma 6** and **GNOME Shell** panel: connection state, on/off, account switching, exit nodes including Mullvad regions, machine browsing with copy actions, and Taildrop file sending.
+Tailscale in your **KDE Plasma 6**, **GNOME Shell** and **Omarchy** panel: connection state, on/off, account switching, exit nodes including Mullvad regions, machine browsing with copy actions, and Taildrop file sending.
 
-It is a port of the first-party `omarchy.tailscale` panel plugin that ships with [Omarchy 4 (Quattro)](https://github.com/basecamp/omarchy), moved off Hyprland/Quickshell onto the two big desktops. See [NOTICE](NOTICE) for what was carried over and what was rewritten.
+It started as a port of the first-party `omarchy.tailscale` panel plugin that ships with [Omarchy 4 (Quattro)](https://github.com/basecamp/omarchy), moved off Hyprland/Quickshell onto the two big desktops. The Omarchy widget then came back: the same panel, rebuilt on this repository's shared model, for the shell it came from. See [NOTICE](NOTICE) for what was carried over and what was rewritten.
 
-There is no daemon and no service to run. Both frontends drive the `tailscale` CLI directly and share one data model.
+There is no daemon and no service to run. All three frontends drive the `tailscale` CLI directly and share one data model.
 
 ## Features
 
@@ -21,7 +21,7 @@ There is no daemon and no service to run. Both frontends drive the `tailscale` C
 ## Requirements
 
 - `tailscale` on `PATH`
-- KDE Plasma 6.0+ or GNOME Shell 45+
+- KDE Plasma 6.0+, GNOME Shell 45+, or Omarchy 4 (Quattro)
 - `zenity` or `kdialog` for the Taildrop file chooser
 - `wl-clipboard`, `xclip`, or `xsel` for the Plasma copy actions (GNOME uses `St.Clipboard`)
 - Taildrop enabled for the tailnet, to send files
@@ -34,7 +34,7 @@ cd TailGauge
 scripts/install.sh
 ```
 
-The installer detects the running desktop. Pass `--plasma` or `--gnome` to force one, and `--no-taildrop` to skip the receive service.
+The installer detects the running desktop. Pass `--plasma`, `--gnome` or `--omarchy` to force one, and `--no-taildrop` to skip the receive service.
 
 **Plasma**: adds the widget to your library. Add it from *Add Widgets*. QML changes need the shell reloaded, and the unit name depends on how the session started it:
 
@@ -50,9 +50,11 @@ gnome-extensions enable tailgauge@arzaroth.github.io
 
 On Xorg, restart the shell with `Alt+F2` `r`. On Wayland, log out and back in.
 
+**Omarchy**: installs the widget into `~/.config/omarchy/plugins/` and enables it in the bar. Pass `--placement=left|center|right` to choose a section. Omarchy's own `omarchy.tailscale` covers the same ground, so drop it with `omarchy plugin disable omarchy.tailscale`. QML changes need `omarchy-restart-shell`. See [omarchy/arzaroth.tailgauge](omarchy/arzaroth.tailgauge/README.md).
+
 ## Outside the panel
 
-Omarchy's plugin answers to `omarchy-shell omarchy.tailscale toggle`. TailGauge has no IPC and needs none: both panels block on `tailscale debug watch-ipn`, so anything that changes tailscaled's state shows up in them within a second, whoever changed it.
+The Plasma and GNOME panels have no IPC and need none: they block on `tailscale debug watch-ipn`, so anything that changes tailscaled's state shows up in them within a second, whoever changed it. `tailgauge-ctl` drives the daemon from a key binding or a script, and the Omarchy widget additionally answers to `omarchy-shell arzaroth.tailgauge toggle` the way its first-party neighbours do.
 
 ```bash
 tailgauge-ctl status              # exits 0 connected, 3 not
@@ -79,6 +81,7 @@ TailGauge has no binary, so there is nothing to self-replace the way a compiled 
 |---|---|---|
 | [store.kde.org](https://store.kde.org) | the Plasma widget | *Add Widgets* shows updates; KNewStuff tracks the version |
 | [extensions.gnome.org](https://extensions.gnome.org) | the GNOME extension | the Extensions app applies them on next session |
+| GitHub releases | the Omarchy widget | `tailgauge-update`; there is no plugin store to go through |
 | GitHub releases | everything, including the helpers | `tailgauge-update` |
 | Distro package | everything, as one unit | the package manager |
 
@@ -106,13 +109,14 @@ Tagging `vX.Y.Z` publishes:
 
 - `tailgauge-vX.Y.Z-plasmoid.plasmoid` - `kpackagetool6 -t Plasma/Applet -i`, and the KDE Store upload
 - `tailgauge-vX.Y.Z-gnome-shell-extension.zip` - `gnome-extensions install`, and the EGO upload
+- `tailgauge-vX.Y.Z-omarchy-plugin.tar.gz` - unpacks into `~/.config/omarchy/plugins/`
 - `tailgauge-vX.Y.Z-helpers.tar.gz` - `bin/` and the systemd unit
 
-`test/distribution.test.mjs` fails the build if those names stop matching what `tailgauge-update` downloads, or if the three declared versions drift apart.
+`test/distribution.test.mjs` fails the build if those names stop matching what `tailgauge-update` downloads, or if the four declared versions drift apart.
 
 ## The parity rule
 
-The two frontends do not each decide what to draw. `shared/model.js` resolves the whole panel and hands both of them the same answer:
+The three frontends do not each decide what to draw. `shared/model.js` resolves the whole panel and hands all of them the same answer:
 
 ```js
 resolvePanel(state, {t, recentRegions, mullvadQuery, mullvadPickerOpen, machineQuery, phraseIndex})
@@ -121,9 +125,9 @@ resolvePanel(state, {t, recentRegions, mullvadQuery, mullvadPickerOpen, machineQ
 
 It owns **which sections exist, in what order, when each is visible, which rows it holds, every label and empty state, which rows are cursor stops, and in what order**. A row arrives fully formed - label, sublabel, icon, ornament state, busy state, tooltip, its actions and its copy options - and a frontend decides only which widget draws it. Keyboard traversal is an index into `panel.navigation`, so neither desktop carries a focus state machine the other could disagree with.
 
-Strings are chosen by the model and resolved by the caller: Plasma passes `i18n`, GNOME passes `gettext`.
+Strings are chosen by the model and resolved by the caller: Plasma passes `i18n`, GNOME passes `gettext`, and Omarchy - whose shell has no translation layer - passes nothing and renders them as they come.
 
-This is enforced, not remembered. `test/parity.test.mjs` fails the build if a user-visible string is written in both frontends, if either re-derives section visibility or the exit-node and copy-option lists, or if the two services stop handing `resolvePanel()` the same snapshot shape.
+This is enforced, not remembered. `test/parity.test.mjs` fails the build if a user-visible string is written in two frontends or written in the Omarchy one at all, if any of them re-derives section visibility or the exit-node and copy-option lists, or if the three services stop handing `resolvePanel()` the same snapshot shape.
 
 ## Layout
 
@@ -132,6 +136,7 @@ shared/model.js          the only copy of the data model AND the panel layout
 shared/model.exports.mjs the export footer appended for the GNOME build
 plasma/                  the Plasma 6 plasmoid (QML)
 gnome/                   the GNOME Shell extension (GJS)
+omarchy/                 the Omarchy 4 bar widget (Quickshell QML)
 bin/                     tailgauge-ctl / -send / -receive / -copy / -notify / -file-select / -update / -watch
 systemd/                 the Taildrop receive user unit
 test/                    model and parity tests, run by `node --test`
@@ -139,25 +144,25 @@ scripts/build.sh         assembles build/, wiring the shared model into both
 scripts/install.sh       builds, then installs helpers, unit and packages
 ```
 
-`shared/model.js` is written without module syntax so the QML engine can load it as a plain shared script. `scripts/build.sh` copies it into the plasmoid as-is and concatenates it with `model.exports.mjs` to produce the ES module the GNOME extension imports. **Edit `shared/model.js`, never the copies under `build/`.**
+`shared/model.js` is written without module syntax so both QML engines can load it as a plain shared script. `scripts/build.sh` copies it into the plasmoid and the Omarchy plugin as-is, and concatenates it with `model.exports.mjs` to produce the ES module the GNOME extension imports. **Edit `shared/model.js`, never the copies under `build/`.**
 
 ## Settings
 
 | Setting | Default | What it does |
 |---|---|---|
 | Refresh interval | 30s | How often `tailscale status --json` is re-read |
-| Show the machine name | off | Puts the machine name next to the panel icon |
+| Show the machine name | off | Plasma and GNOME: puts the machine name next to the panel icon |
 | Recent Mullvad regions | - | Shortlist behind the exit node list, cleared from GNOME's preferences |
 | Toggle shortcut | none | GNOME only: a global key that turns Tailscale on and off. Plasma binds `tailgauge-ctl toggle` in System Settings instead |
 
-Plasma stores these in the widget's own configuration; GNOME in `org.gnome.shell.extensions.tailgauge`.
+Plasma stores these in the widget's own configuration, GNOME in `org.gnome.shell.extensions.tailgauge`, and Omarchy inline on the widget's entry in `~/.config/omarchy/shell.json`.
 
-## Differences from the Omarchy plugin
+## Differences between the frontends
 
-- **Right click** opens the desktop's own context menu rather than toggling Tailscale. Both desktops carry the toggle and refresh as menu entries, and **middle click** on the panel icon toggles.
+- **Right click** on Plasma and GNOME opens the desktop's own context menu rather than toggling Tailscale. Both carry the toggle and refresh as menu entries, and **middle click** on the panel icon toggles. The Omarchy widget keeps upstream's bar bindings: right click toggles, middle click refreshes.
 - **GNOME** uses native `PopupMenu` rows rather than a custom keyboard-driven panel, so arrows, Enter and type-ahead behave the way every other extension does. Machines and the Mullvad picker are submenus; the copy actions live inside a machine's submenu.
 - **Clipboard** goes through `St.Clipboard` on GNOME and a helper that picks `wl-copy` / `xclip` / `xsel` on Plasma, so the copy actions also work in an X11 session.
-- **No IPC**. `tailgauge-ctl toggle` stands in for `omarchy-shell omarchy.tailscale toggle`, but it drives tailscaled rather than the panel: nothing talks to a running widget.
+- **No IPC on Plasma and GNOME**. `tailgauge-ctl toggle` stands in there, but it drives tailscaled rather than the panel: nothing talks to a running widget. The Omarchy widget has the shell's IPC and uses it.
 - **A machine's copy actions** are a popup menu on Plasma and a submenu on GNOME. Both list the same options in the same order, because the model resolves them once.
 
 ## Development
@@ -168,7 +173,7 @@ node --test 'test/**/*.test.mjs'    # model + parity tests (needs build.sh first
 scripts/install.sh                  # build and install for the running desktop
 ```
 
-CI runs those on every pull request, along with `qmllint` for QML syntax, `node --check` on the extension, `shellcheck` on the helpers, and a check that the plasmoid and the extension declare the same version. Tagging `vX.Y.Z` builds and publishes the plasmoid tarball, the GNOME extension zip and the helpers.
+CI runs those on every pull request, along with `qmllint` for QML syntax on both QML frontends, `node --check` on the extension, `shellcheck` on the helpers, and a check that all three manifests declare the same version. Tagging `vX.Y.Z` builds and publishes the plasmoid package, the GNOME extension zip, the Omarchy plugin tarball and the helpers.
 
 Plasma logs QML errors under the `plasmashell` identifier rather than a unit, because it usually runs as a transient `app-plasmashell@<hash>.service`:
 
@@ -182,6 +187,12 @@ GNOME logs extension errors to:
 
 ```bash
 journalctl --user -u org.gnome.Shell@wayland -f
+```
+
+Omarchy's shell logs its own QML errors, and a plugin that fails to load says so there:
+
+```bash
+qs log --pid "$(pgrep -f 'quickshell -n -p /usr/share/omarchy/shell')" -t 50
 ```
 
 Linting QML needs `qmllint` from the Qt 6 declarative dev package (`qt6-qtdeclarative-devel` on Fedora, `qt6-declarative` on Arch).
