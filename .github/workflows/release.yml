@@ -27,6 +27,7 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
+          cache: npm
 
       - name: Install glib tools
         run: |
@@ -36,10 +37,12 @@ jobs:
       # Nothing ships that the tests have not seen: the same build.sh output is
       # what the tests import and what the archives carry.
       - name: Build
-        run: scripts/build.sh
+        run: |
+          npm ci
+          scripts/build.sh
 
       - name: Test
-        run: node --test 'test/**/*.test.mjs'
+        run: node --test 'build/.ts/tests/test/**/*.test.js'
 
       # A tag that disagrees with the manifests would publish assets whose
       # in-app version does not match the release they came from.
