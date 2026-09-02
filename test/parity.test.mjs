@@ -48,8 +48,9 @@ test('frontend-local strings are desktop conventions only', () => {
 // strings rather than a call the test can spot. The rule is checked from the
 // other end there: nothing user-visible is written in the file at all.
 test('the Omarchy frontend writes no user-visible string', () => {
-    const written = [...omarchySource.matchAll(/\b(?:text|placeholderText|tooltipText|title|meta|label):\s*"([^"]{4,})"/g)]
-        .map(m => m[1]);
+    // QML takes either quote, and this repository writes both.
+    const written = [...omarchySource.matchAll(/\b(?:text|placeholderText|tooltipText|title|meta|label):\s*(["'])((?:(?!\1).){4,}?)\1/g)]
+        .map(m => m[2]);
     assert.deepEqual(written, [],
         `resolvePanel should be producing these: ${written.join(', ')}`);
 });
@@ -98,8 +99,8 @@ test('every service hands resolvePanel the same snapshot shape', () => {
     };
     const plasmaFields = fields(read(services.plasma));
     assert.ok(plasmaFields.length > 15, 'the Plasma snapshot was not found');
-    for (const [name, path] of Object.entries(services))
-        assert.deepEqual(fields(read(path)), plasmaFields,
+    for (const [name, file] of Object.entries(services))
+        assert.deepEqual(fields(read(file)), plasmaFields,
             `the ${name} snapshot disagrees, so its panel can disagree`);
 });
 
