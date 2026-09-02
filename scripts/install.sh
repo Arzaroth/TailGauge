@@ -1,5 +1,6 @@
 #!/bin/bash
-# Usage: scripts/install.sh [--plasma] [--gnome] [--no-taildrop]
+# Usage: scripts/install.sh [--plasma] [--gnome] [--omarchy] [--no-taildrop]
+#                           [--placement=left|center|right]
 # With no target flag, installs for whichever desktop is running.
 
 set -euo pipefail
@@ -9,11 +10,14 @@ build="$root/build"
 
 PLASMOID_ID="org.tailgauge.plasmoid"
 EXTENSION_UUID="tailgauge@arzaroth.github.io"
+PLUGIN_ID="arzaroth.tailgauge"
 
 want_plasma=false
 want_gnome=false
+want_omarchy=false
 want_taildrop=true
 explicit=false
+placement=""
 
 while (($# > 0)); do
   case "$1" in
@@ -25,9 +29,14 @@ while (($# > 0)); do
     want_gnome=true
     explicit=true
     ;;
+  --omarchy)
+    want_omarchy=true
+    explicit=true
+    ;;
+  --placement=*) placement="${1#*=}" ;;
   --no-taildrop) want_taildrop=false ;;
   -h | --help)
-    sed -n '2,4p' "$0"
+    sed -n '2,5p' "$0"
     exit 0
     ;;
   *)
@@ -42,12 +51,21 @@ if ! $explicit; then
   case "${XDG_CURRENT_DESKTOP:-}" in
   *KDE* | *plasma*) want_plasma=true ;;
   *GNOME*) want_gnome=true ;;
+  *Hyprland* | *omarchy*) want_omarchy=true ;;
   *)
-    echo "install: could not detect the desktop, pass --plasma or --gnome" >&2
+    echo "install: could not detect the desktop, pass --plasma, --gnome or --omarchy" >&2
     exit 2
     ;;
   esac
 fi
+
+case "$placement" in
+"" | left | center | right) ;;
+*)
+  echo "install: --placement must be left, center or right" >&2
+  exit 2
+  ;;
+esac
 
 command -v tailscale >/dev/null 2>&1 ||
   echo "install: warning - the tailscale CLI is not on PATH; the widget will show 'Not installed'" >&2
@@ -120,4 +138,36 @@ if $want_gnome; then
   echo "Installed $EXTENSION_UUID - enable it with:"
   echo "  gnome-extensions enable $EXTENSION_UUID"
   echo "On Xorg, restart the shell with Alt+F2 r; on Wayland, log out and back in."
+fi
+
+# ---- Omarchy --------------------------------------------------------------
+if $want_omarchy; then
+  if ! command -v omarchy-plugin-validate >/dev/null 2>&1; then
+    echo "install: omarchy-plugin-validate not found, this needs Omarchy 4 or newer" >&2
+    exit 1
+  fi
+  omarchy-plugin-validate "$build/$PLUGIN_ID"
+
+  # The plugin registry refuses symlinks anywhere inside a plugin folder, so
+  # this is a copy. Re-run the installer to pick up local edits.
+  plugindir="$HOME/.config/omarchy/plugins/$PLUGIN_ID"
+  mkdir -p "$(dirname "$plugindir")"
+  rm -rf "$plugindir"
+  cp -aL "$build/$PLUGIN_ID" "$plugindir"
+  omarchy-shell -q shell rescanPlugins >/dev/null 2>&1 || true
+
+  if omarchy-plugin-list 2>/dev/null | grep -q "^$PLUGIN_ID .*enabled"; then
+    echo "Installed $PLUGIN_ID - already enabled, leaving its bar placement alone."
+  else
+    # shellcheck disable=SC2086 # an empty placement means "use the manifest's".
+    omarchy-plugin-enable "$PLUGIN_ID" $placement
+    echo "Installed $PLUGIN_ID into the bar."
+  fi
+
+  echo "Omarchy also ships omarchy.tailscale, which covers the same ground:"
+  echo "  omarchy plugin disable omarchy.tailscale"
+  # The registry reloads a changed manifest but keeps the widget it already
+  # built, so QML edits only land on a restart.
+  echo "QML changes need the shell restarted:"
+  echo "  omarchy-restart-shell"
 fi
