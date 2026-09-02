@@ -6,7 +6,7 @@
         "Icon": "network-vpn",
         "Category": "Network",
         "License": "MIT",
-        "Version": "0.3.0",
+        "Version": "0.3.1",
         "Website": "https://github.com/Arzaroth/TailGauge",
         "Authors": [
             { "Name": "Arzaroth" }
