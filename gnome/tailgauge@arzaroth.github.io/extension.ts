@@ -1,4 +1,5 @@
 import Clutter from 'gi://Clutter';
+import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Meta from 'gi://Meta';
@@ -20,41 +21,74 @@ const MULLVAD_REGION_CAP = 200;
 const SCROLL_WORK_AREA_SHARE = 0.6;
 const SCROLL_MIN_HEIGHT = 200;
 
+// A resolved row is carried on the menu item built from it, and the shell's own
+// _delegate convention is how an actor points back at that item. Neither is in
+// the St or PopupMenu type definitions, so the shape is named once here.
+type RowItem = PopupMenu.PopupBaseMenuItem & {
+    _rowId?: string;
+    _row?: Model.PanelRow;
+    _sublabel?: St.Label;
+    readonly label?: St.Label;
+    readonly icon?: St.Icon;
+    readonly menu?: PopupMenu.PopupSubMenu;
+};
+
+type RowSection = PopupMenu.PopupMenuSection;
+
+// _getMenuItems() is typed for the shell's own uses; every item this panel puts
+// in a section is one of ours.
+function menuItems(owner: {_getMenuItems(): unknown[]}): RowItem[] {
+    return owner._getMenuItems() as RowItem[];
+}
+
+type Delegated = Clutter.Actor & {_delegate?: {_row?: Model.PanelRow}; _row?: Model.PanelRow};
+
+// The three helpers below probe for the spelling the running shell has. A
+// single release's type definitions can only describe one of them, so the
+// property tests are the point and the cast is what lets them be written.
+type Loose = Record<string, any>;
+
 // St.BoxLayout.vertical was replaced by the Clutter orientation property in
 // GNOME 48; both spellings have to work across the supported shell versions.
-function box(vertical, props = {}) {
+function box(vertical: boolean, props: Loose = {}): St.BoxLayout {
     const b = new St.BoxLayout(props);
-    if ('orientation' in b)
-        b.orientation = vertical ? Clutter.Orientation.VERTICAL : Clutter.Orientation.HORIZONTAL;
+    const loose = b as unknown as Loose;
+    if ('orientation' in loose)
+        loose.orientation = vertical ? Clutter.Orientation.VERTICAL : Clutter.Orientation.HORIZONTAL;
     else
-        b.vertical = vertical;
+        loose.vertical = vertical;
     return b;
 }
 
 // St.ScrollView took its content through add_actor until GNOME 46 turned it
 // into a property, and only gained an adjustment of its own in that release.
-function scrollView(child, props = {}) {
+function scrollView(child: Clutter.Actor, props: Loose = {}): St.ScrollView {
     const view = new St.ScrollView({
         hscrollbar_policy: St.PolicyType.NEVER,
         vscrollbar_policy: St.PolicyType.AUTOMATIC,
         ...props,
     });
-    if ('child' in view)
-        view.child = child;
+    const loose = view as unknown as Loose;
+    if ('child' in loose)
+        loose.child = child;
     else
-        view.add_actor(child);
+        loose.add_actor(child);
     return view;
 }
 
-function verticalAdjustment(view) {
-    return 'vadjustment' in view ? view.vadjustment : view.vscroll.adjustment;
+function verticalAdjustment(view: St.ScrollView): St.Adjustment {
+    const loose = view as unknown as Loose;
+    return 'vadjustment' in loose ? loose.vadjustment : loose.vscroll.adjustment;
 }
 
 // Native rendering of the Tailscale mark from the SVG: a 3x3 dot grid with the
 // inactive dots faded, plus the disconnected slash and the needs-login badge.
 const TailscaleIcon = GObject.registerClass(
 class TailscaleIcon extends St.DrawingArea {
-    _init(params = {}) {
+    declare _crossed: boolean;
+    declare _warning: boolean;
+
+    override _init(params: Loose = {}): void {
         super._init({
             style_class: 'system-status-icon tailgauge-icon',
             ...params,
@@ -64,7 +98,7 @@ class TailscaleIcon extends St.DrawingArea {
         this.connect('repaint', () => this._repaint());
     }
 
-    setState(crossed, warning) {
+    setState(crossed: boolean, warning: boolean): void {
         if (this._crossed === crossed && this._warning === warning)
             return;
         this._crossed = crossed;
@@ -72,7 +106,7 @@ class TailscaleIcon extends St.DrawingArea {
         this.queue_repaint();
     }
 
-    _repaint() {
+    _repaint(): void {
         const cr = this.get_context();
         const [width, height] = this.get_surface_size();
         const size = Math.min(width, height);
@@ -88,7 +122,7 @@ class TailscaleIcon extends St.DrawingArea {
         const radius = dot / 2;
         const positions = [0, (size - dot) / 2, size - dot];
         const faded = [[0, 0], [1, 0], [2, 0], [0, 2], [2, 2]];
-        const isFaded = (col, rowIndex) => faded.some(([c, rw]) => c === col && rw === rowIndex);
+        const isFaded = (col: number, rowIndex: number) => faded.some(([c, rw]) => c === col && rw === rowIndex);
 
         for (let rowIndex = 0; rowIndex < 3; rowIndex++) {
             for (let col = 0; col < 3; col++) {
@@ -122,7 +156,39 @@ class TailscaleIcon extends St.DrawingArea {
 
 const Indicator = GObject.registerClass(
 class TailGaugeIndicator extends PanelMenu.Button {
-    _init(extension) {
+    declare _extension: TailGaugeExtension;
+    declare _settings: Gio.Settings;
+    declare _service: InstanceType<typeof TailscaleService>;
+    declare _signature: string;
+    declare _phraseIndex: number;
+    declare _phraseTimeoutId: number;
+    declare _mullvadQuery: string;
+    declare _machineQuery: string;
+    declare _sections: Map<string, {header: PopupMenu.PopupSeparatorMenuItem; section: RowSection}>;
+    declare _panelIcon: InstanceType<typeof TailscaleIcon>;
+    declare _panelLabel: St.Label;
+    declare _headerItem: PopupMenu.PopupSwitchMenuItem;
+    declare _statusItem: PopupMenu.PopupMenuItem;
+    declare _refreshItem: PopupMenu.PopupMenuItem;
+    declare _scrolled: RowSection;
+    declare _scroll: St.ScrollView;
+    declare _changedId: number;
+    declare _settingsPanelId: number;
+    declare _keyFocusId: number;
+
+    // PanelMenu.Button types `menu` as either the real menu or the dummy one;
+    // a Button built with a menu always has the real one.
+    get _menu(): PopupMenu.PopupMenu {
+        return this.menu as PopupMenu.PopupMenu;
+    }
+
+    // The base class declares the shell's own construction overloads; GJS
+    // routes `new Indicator(extension)` through the same method, so the
+    // extension-shaped call is declared alongside them.
+    override _init(params?: Partial<PanelMenu.ButtonBox.ConstructorProps>): void;
+    override _init(menuAlignment: number, nameText: string, dontCreateMenu?: boolean): void;
+    override _init(extension: TailGaugeExtension): void;
+    override _init(extension: any): void {
         super._init(0.5, 'TailGauge');
 
         this._extension = extension;
@@ -133,7 +199,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         this._phraseTimeoutId = 0;
         this._mullvadQuery = '';
         this._machineQuery = '';
-        this._sections = new Map();
+        this._sections = new Map<string, {header: PopupMenu.PopupSeparatorMenuItem; section: RowSection}>();
 
         const panelBox = box(false, {style_class: 'panel-status-menu-box tailgauge-panel'});
         this._panelIcon = new TailscaleIcon({width: 16, height: 16, y_align: Clutter.ActorAlign.CENTER});
@@ -151,7 +217,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         this._settingsPanelId = this._settings.connect('changed::show-status-in-panel',
             () => this._syncPanel(this._panel()));
 
-        this.menu.connect('open-state-changed', (_menu, open) => {
+        this._menu.connect('open-state-changed', (_menu, open) => {
             this._service.attentive = open;
             if (open) {
                 this._updateScrollHeight();
@@ -176,7 +242,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
             return Clutter.EVENT_PROPAGATE;
         });
 
-        this.menu.box.connect('key-press-event', (_actor, event) => this._onMenuKey(event));
+        this._menu.box.connect('key-press-event', (_actor, event) => this._onMenuKey(event));
 
         this._keyFocusId = global.stage.connect('notify::key-focus',
             () => this._scrollFocusIntoView());
@@ -187,7 +253,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
     // The panel is resolved in the shared model, so what GNOME shows and what
     // Plasma shows cannot drift. The picker is always resolved open here: its
     // regions live in a submenu that PopupMenu shows and hides on its own.
-    _panel() {
+    _panel(): Model.Panel {
         return Model.resolvePanel(this._service.snapshot(), {
             t: _,
             recentRegions: this._settings.get_strv('recent-mullvad-regions'),
@@ -198,29 +264,29 @@ class TailGaugeIndicator extends PanelMenu.Button {
         });
     }
 
-    _buildStaticItems() {
+    _buildStaticItems(): void {
         this._headerItem = new PopupMenu.PopupSwitchMenuItem('Tailscale', false);
         this._headerItem.connect('toggled', () => this._service.toggleTailscale());
-        this.menu.addMenuItem(this._headerItem);
+        this._menu.addMenuItem(this._headerItem);
 
         this._statusItem = new PopupMenu.PopupMenuItem('', {reactive: false, can_focus: false});
         this._statusItem.label.add_style_class_name('tailgauge-status');
         this._statusItem.label.clutter_text.line_wrap = true;
-        this.menu.addMenuItem(this._statusItem);
+        this._menu.addMenuItem(this._statusItem);
 
         // The shell keeps a tall menu on screen by moving it, never by
         // shrinking it, so the sections that grow with the tailnet carry their
         // own scroll view; Refresh and Settings stay below it either way.
         this._scrolled = new PopupMenu.PopupMenuSection();
-        this.menu.addMenuItem(this._scrolled);
-        this.menu.box.remove_child(this._scrolled.actor);
+        this._menu.addMenuItem(this._scrolled);
+        this._menu.box.remove_child(this._scrolled.actor);
         this._scroll = scrollView(this._scrolled.actor, {
             style_class: 'tailgauge-scroll',
             x_expand: true,
             clip_to_allocation: true,
         });
-        this._scroll._delegate = this._scrolled;
-        this.menu.box.add_child(this._scroll);
+        (this._scroll as unknown as Loose)._delegate = this._scrolled;
+        this._menu.box.add_child(this._scroll);
 
         for (const id of ['update', 'self', 'connections', 'exitNodes', 'machines']) {
             const header = new PopupMenu.PopupSeparatorMenuItem('');
@@ -230,22 +296,22 @@ class TailGaugeIndicator extends PanelMenu.Button {
             this._sections.set(id, {header, section});
         }
 
-        this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        this._menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
         this._refreshItem = new PopupMenu.PopupMenuItem(_('Refresh'));
         this._refreshItem.connect('activate', () => this._service.refresh(true));
-        this.menu.addMenuItem(this._refreshItem);
+        this._menu.addMenuItem(this._refreshItem);
 
         const settingsItem = new PopupMenu.PopupMenuItem(_('Settings'));
         settingsItem.connect('activate', () => this._extension.openPreferences());
-        this.menu.addMenuItem(settingsItem);
+        this._menu.addMenuItem(settingsItem);
     }
 
     // ---- scrolling -------------------------------------------------------
 
     // Nothing hands a menu a height budget, so the scroll view takes its share
     // of the work area, resolved on every open in case the monitor changed.
-    _updateScrollHeight() {
+    _updateScrollHeight(): void {
         const monitor = Main.layoutManager.findMonitorForActor(this) ??
             Main.layoutManager.primaryMonitor;
         if (!monitor)
@@ -259,7 +325,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
 
     // PopupMenu walks key focus through the rows knowing nothing about the
     // scroll view, so a row below the fold would be focused off screen.
-    _scrollFocusIntoView() {
+    _scrollFocusIntoView(): void {
         const focus = global.stage.get_key_focus();
         if (!focus || focus === this._scroll || !this._scroll.contains(focus))
             return;
@@ -268,7 +334,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
 
     // ---- sync ------------------------------------------------------------
 
-    _sync() {
+    _sync(): void {
         const panel = this._panel();
         this._syncPanel(panel);
         this._syncHeader(panel);
@@ -284,7 +350,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         }
     }
 
-    _signatureOf(panel) {
+    _signatureOf(panel: Model.Panel): string {
         const parts = [panel.header.toggleVisible ? '1' : '0'];
         for (const section of panel.sections) {
             parts.push(`${section.id}:${section.visible ? 1 : 0}:` +
@@ -293,7 +359,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         return parts.join('|');
     }
 
-    _syncPanel(panel) {
+    _syncPanel(panel: Model.Panel): void {
         this._panelIcon.setState(panel.header.crossed, panel.header.warning);
         this._panelIcon.opacity = panel.header.dimmed ? 130 : 255;
 
@@ -303,7 +369,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         this._panelLabel.visible = this._panelLabel.text !== '';
     }
 
-    _syncHeader(panel) {
+    _syncHeader(panel: Model.Panel): void {
         this._headerItem.label.text = panel.header.title;
         this._headerItem.setSensitive(panel.header.toggleEnabled);
         if (this._headerItem.state !== panel.header.toggleChecked)
@@ -323,8 +389,8 @@ class TailGaugeIndicator extends PanelMenu.Button {
     }
 
     // Cheap pass for the things that change without the row set changing.
-    _syncRows(panel) {
-        const byId = new Map();
+    _syncRows(panel: Model.Panel): void {
+        const byId = new Map<string, Model.PanelRow>();
         for (const section of panel.sections) {
             for (const row of section.rows) {
                 byId.set(row.id, row);
@@ -333,12 +399,12 @@ class TailGaugeIndicator extends PanelMenu.Button {
             }
         }
         for (const {section} of this._sections.values()) {
-            for (const item of section._getMenuItems())
+            for (const item of menuItems(section))
                 this._applyRow(item, byId);
         }
     }
 
-    _applyRow(item, byId) {
+    _applyRow(item: RowItem, byId: Map<string, Model.PanelRow>): void {
         const row = item._rowId ? byId.get(item._rowId) : null;
         if (row) {
             item.setOrnament(row.current ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
@@ -348,12 +414,12 @@ class TailGaugeIndicator extends PanelMenu.Button {
                 item._sublabel.text = row.sublabel;
         }
         if (item.menu) {
-            for (const child of item.menu._getMenuItems())
+            for (const child of menuItems(item.menu))
                 this._applyRow(child, byId);
         }
     }
 
-    _rebuildSections(panel) {
+    _rebuildSections(panel: Model.Panel): void {
         for (const section of panel.sections) {
             const slot = this._sections.get(section.id);
             if (!slot)
@@ -373,7 +439,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         }
     }
 
-    _renderRow(row) {
+    _renderRow(row: Model.PanelRow): RowItem {
         if (row.kind === 'empty')
             return new PopupMenu.PopupMenuItem(row.label, {reactive: false, can_focus: false});
 
@@ -394,7 +460,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
     // section would destroy this entry on every keystroke. It refills its own
     // section instead, the way the picker does, and adopts the signature that
     // goes with it so the next sync agrees with what is on screen.
-    _renderMachineSearch(row) {
+    _renderMachineSearch(row: Model.PanelRow): RowItem {
         const item = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
         const entry = new St.Entry({
             style_class: 'tailgauge-search',
@@ -411,7 +477,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         return item;
     }
 
-    _refillMachines(entry) {
+    _refillMachines(entry: St.Entry): void {
         const slot = this._sections.get('machines');
         if (!slot)
             return;
@@ -421,7 +487,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
             return;
 
         // Everything after the entry is a resolved machine row.
-        for (const item of slot.section._getMenuItems().slice(1))
+        for (const item of menuItems(slot.section).slice(1))
             item.destroy();
         for (const row of machines.rows) {
             if (row.kind !== 'machineSearch')
@@ -432,9 +498,9 @@ class TailGaugeIndicator extends PanelMenu.Button {
         entry.grab_key_focus();
     }
 
-    _renderSubmenuRow(row) {
+    _renderSubmenuRow(row: Model.PanelRow): RowItem {
         const item = new PopupMenu.PopupSubMenuMenuItem(row.label, true);
-        item.icon.icon_name = row.icon;
+        item.icon!.icon_name = row.icon;
         this._decorate(item, row);
 
         // The picker's own row does nothing but hold its regions; every other
@@ -474,7 +540,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
             }));
             copyItem.connect('activate', () => {
                 this._copyOption(row, option.kind);
-                this.menu.close();
+                this._menu.close();
             });
             item.menu.addMenuItem(copyItem);
         }
@@ -497,7 +563,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
     // The sublabel rides on the trailing edge of the row rather than under it:
     // a PopupMenuItem is one line tall, and dropping it instead would put GNOME
     // and Plasma back out of step.
-    _decorate(item, row) {
+    _decorate(item: RowItem, row: Model.PanelRow): void {
         item._rowId = row.id;
         item._row = row;
         if (item.label)
@@ -514,9 +580,9 @@ class TailGaugeIndicator extends PanelMenu.Button {
         item.add_child(item._sublabel);
     }
 
-    _refillPicker(item, entry) {
+    _refillPicker(item: PopupMenu.PopupSubMenuMenuItem, entry: St.Entry): void {
         const panel = this._panel();
-        let picker = null;
+        let picker: Model.PanelRow | null = null;
         for (const section of panel.sections) {
             for (const candidate of section.rows) {
                 if (candidate.kind === 'mullvadPicker')
@@ -526,7 +592,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         if (!picker)
             return;
         // Everything after the search entry is a resolved region row.
-        const items = item.menu._getMenuItems();
+        const items = menuItems(item.menu);
         for (const child of items.slice(1))
             child.destroy();
         for (const child of picker.children.slice(0, MULLVAD_REGION_CAP))
@@ -536,12 +602,12 @@ class TailGaugeIndicator extends PanelMenu.Button {
 
     // ---- actions ---------------------------------------------------------
 
-    toggle() {
+    toggle(): void {
         this._service.toggleTailscale();
     }
 
     // The one place a resolved row turns back into a service call.
-    _dispatch(row) {
+    _dispatch(row: Model.PanelRow | null | undefined): void {
         if (!row)
             return;
         switch (row.action) {
@@ -556,11 +622,11 @@ class TailGaugeIndicator extends PanelMenu.Button {
             break;
         case 'update':
             this._service.applyUpdate();
-            this.menu.close();
+            this._menu.close();
             break;
         case 'openUrl':
             this._service.openUrl(row.payload ? row.payload.url : '');
-            this.menu.close();
+            this._menu.close();
             break;
         case 'setExitNode':
             if (row.payload.Mullvad === true) {
@@ -574,7 +640,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         }
     }
 
-    _copyOption(row, kind) {
+    _copyOption(row: Model.PanelRow | null | undefined, kind: string): void {
         if (!row)
             return;
         if (kind === 'name')
@@ -589,12 +655,12 @@ class TailGaugeIndicator extends PanelMenu.Button {
                     this._service.copyToClipboard(option.label);
     }
 
-    _sendFile(row) {
+    _sendFile(row: Model.PanelRow | null | undefined): void {
         if (!row || !row.payload)
             return;
         // The file chooser takes over from here, so get the menu out of the way.
         this._service.sendFile(row.payload);
-        this.menu.close();
+        this._menu.close();
     }
 
     // ---- keyboard --------------------------------------------------------
@@ -602,7 +668,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
     // PopupMenu already handles arrows and Enter; these are the single-letter
     // actions the Omarchy panel binds, resolved against whichever row currently
     // holds key focus.
-    _onMenuKey(event) {
+    _onMenuKey(event: Clutter.Event): boolean {
         const focus = global.stage.get_key_focus();
         if (focus instanceof Clutter.Text && focus.editable)
             return Clutter.EVENT_PROPAGATE;
@@ -636,21 +702,21 @@ class TailGaugeIndicator extends PanelMenu.Button {
             return Clutter.EVENT_PROPAGATE;
 
         if (symbol !== Clutter.KEY_s && symbol !== Clutter.KEY_S)
-            this.menu.close();
+            this._menu.close();
         return Clutter.EVENT_STOP;
     }
 
-    _focusedRow() {
-        let actor = global.stage.get_key_focus();
+    _focusedRow(): Model.PanelRow | null {
+        let actor = global.stage.get_key_focus() as Delegated | null;
         while (actor) {
             if (actor._delegate?._row)
                 return actor._delegate._row;
             if (actor._row)
                 return actor._row;
-            actor = actor.get_parent();
+            actor = actor.get_parent() as Delegated | null;
         }
         for (const {section} of this._sections.values()) {
-            for (const item of section._getMenuItems())
+            for (const item of menuItems(section))
                 if (item.active && item._row)
                     return item._row;
         }
@@ -659,7 +725,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
 
     // ---- phrases ---------------------------------------------------------
 
-    _startPhrases() {
+    _startPhrases(): void {
         this._stopPhrases();
         this._phraseTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, PHRASE_INTERVAL_MS, () => {
             this._phraseIndex += 1;
@@ -668,14 +734,14 @@ class TailGaugeIndicator extends PanelMenu.Button {
         });
     }
 
-    _stopPhrases() {
+    _stopPhrases(): void {
         if (this._phraseTimeoutId) {
             GLib.Source.remove(this._phraseTimeoutId);
             this._phraseTimeoutId = 0;
         }
     }
 
-    destroy() {
+    override destroy(): void {
         this._stopPhrases();
         if (this._keyFocusId) {
             global.stage.disconnect(this._keyFocusId);
@@ -695,9 +761,12 @@ class TailGaugeIndicator extends PanelMenu.Button {
 });
 
 export default class TailGaugeExtension extends Extension {
-    enable() {
+    declare _indicator: InstanceType<typeof Indicator> | null;
+    declare _settings: Gio.Settings | null;
+
+    override enable(): void {
         this._indicator = new Indicator(this);
-        Main.panel.addToStatusArea(this.uuid, this._indicator);
+        Main.panel.addToStatusArea(this.uuid, this._indicator as unknown as PanelMenu.Button);
 
         // The shortcut goes through the running extension rather than through
         // tailgauge-ctl, because a store install has no helpers on PATH. The
@@ -709,7 +778,7 @@ export default class TailGaugeExtension extends Extension {
             () => this._indicator?.toggle());
     }
 
-    disable() {
+    override disable(): void {
         Main.wm.removeKeybinding('toggle-shortcut');
         this._settings = null;
         this._indicator?.destroy();

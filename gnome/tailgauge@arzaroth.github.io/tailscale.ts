@@ -23,10 +23,19 @@ const WATCH_BACKOFF_MS = 30000;
 
 const USER_KINDS = ['action', 'login', 'switch', 'exitNode', 'operator', 'applyUpdate'];
 
+type RunCallback = (status: number, stdout: string, stderr: string) => void;
+
+// GJS raises GLib.Error, which carries matches(); everything else reaching a
+// catch here is a plain throw, and only its text is ever used.
+function isCancelled(error: unknown): boolean {
+    const candidate = error as {matches?: (domain: unknown, code: number) => boolean};
+    return candidate?.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED) === true;
+}
+
 // gnome-shell inherits the session PATH, which often lacks the user bin dirs
 // the installer drops the Taildrop and clipboard helpers into. `exec "$@"`
 // keeps argv intact rather than pushing it back through the shell's parser.
-function spawn(argv, flags) {
+function spawn(argv: string[], flags: Gio.SubprocessFlags): Gio.Subprocess {
     return Gio.Subprocess.new(
         ['sh', '-c', `${PATH_PREAMBLE}exec "$@"`, 'sh', ...argv], flags);
 }
@@ -34,7 +43,50 @@ function spawn(argv, flags) {
 export const TailscaleService = GObject.registerClass({
     Signals: {'changed': {}},
 }, class TailscaleService extends GObject.Object {
-    _init(settings) {
+    declare _settings: Gio.Settings;
+    declare _cancellables: Map<string, Gio.Cancellable>;
+    declare _timeouts: Map<string, number>;
+    declare _destroyed: boolean;
+    declare _desired: number;
+    declare _attentive: boolean;
+    declare _lastAccountsRefreshMs: number;
+    declare _loginInProgress: boolean;
+    declare _loginUrlOpened: boolean;
+    declare _preLoginAuthUrl: string;
+    declare _startupTicks: number;
+    declare _settingsChangedId: number;
+
+    declare installed: boolean;
+    declare running: boolean;
+    declare needsLogin: boolean;
+    declare refreshing: boolean;
+    declare backendState: string;
+    declare statusText: string;
+    declare selfName: string;
+    declare selfDnsName: string;
+    declare selfIp: string;
+    declare selfUserId: string;
+    declare selfPeer: Model.Peer | null;
+    declare fileSharing: boolean;
+    declare authUrl: string;
+    declare peers: Model.Peer[];
+    declare exitNodes: Model.Peer[];
+    declare tailnetExitNodes: Model.Peer[];
+    declare mullvadExitNodes: Model.Peer[];
+    declare mullvadRegions: Model.Peer[];
+    declare accounts: Model.Account[];
+    declare selectedAccountId: string;
+    declare selectedAccountLabel: string;
+    declare switchingAccountId: string;
+    declare settingExitNodeId: string;
+    declare accountsAccessDenied: boolean;
+    declare actionStatus: string;
+    declare lastError: string;
+    declare helpers: boolean;
+    declare update: Model.UpdateInfo;
+    declare updating: boolean;
+
+    override _init(settings: Gio.Settings): void {
         super._init();
 
         this._settings = settings;
@@ -109,14 +161,14 @@ export const TailscaleService = GObject.registerClass({
         this.refresh();
     }
 
-    get active() {
+    get active(): boolean {
         return this._desired === -1 ? this.running : this._desired === 1;
     }
 
     // Only work the user asked for. A status poll or an update check is not
     // something the panel should ever report as busy, let alone gate a control
     // on: the poll runs every few seconds and would flicker the whole panel.
-    get busy() {
+    get busy(): boolean {
         for (const kind of USER_KINDS) {
             if (this._cancellables.has(kind))
                 return true;
@@ -126,20 +178,20 @@ export const TailscaleService = GObject.registerClass({
 
     // True while the menu is on screen. Polling follows the panel: fast enough
     // to feel live while it is open, lazy while it is not.
-    set attentive(value) {
+    set attentive(value: boolean) {
         if (this._attentive === value)
             return;
         this._attentive = value;
         this._armRefresh();
     }
 
-    get attentive() {
+    get attentive(): boolean {
         return this._attentive === true;
     }
 
     // The flat state resolvePanel() reads. Both desktops hand it the same
     // shape, so the panel they get back cannot disagree.
-    snapshot() {
+    snapshot(): Model.PanelState {
         return {
             installed: this.installed,
             running: this.running,
@@ -169,12 +221,12 @@ export const TailscaleService = GObject.registerClass({
 
     // ---- plumbing --------------------------------------------------------
 
-    _emit() {
+    _emit(): void {
         if (!this._destroyed)
             this.emit('changed');
     }
 
-    _armRefresh() {
+    _armRefresh(): void {
         const seconds = this.attentive
             ? ATTENTIVE_INTERVAL_SEC
             : Math.max(5, this._settings.get_int('refresh-interval'));
@@ -185,7 +237,7 @@ export const TailscaleService = GObject.registerClass({
         }));
     }
 
-    _addTimeout(name, ms, callback) {
+    _addTimeout(name: string, ms: number, callback: () => boolean): void {
         this._removeTimeout(name);
         this._timeouts.set(name, GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
             const keep = callback();
@@ -195,7 +247,7 @@ export const TailscaleService = GObject.registerClass({
         }));
     }
 
-    _removeTimeout(name) {
+    _removeTimeout(name: string): void {
         const id = this._timeouts.get(name);
         if (id) {
             GLib.Source.remove(id);
@@ -203,14 +255,14 @@ export const TailscaleService = GObject.registerClass({
         }
     }
 
-    _run(kind, argv, callback) {
+    _run(kind: string, argv: string[], callback: RunCallback): boolean {
         if (this._cancellables.has(kind))
             return false;
 
         const cancellable = new Gio.Cancellable();
         this._cancellables.set(kind, cancellable);
 
-        let proc;
+        let proc: Gio.Subprocess;
         try {
             proc = spawn(argv, Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
         } catch (e) {
@@ -226,12 +278,12 @@ export const TailscaleService = GObject.registerClass({
             let stderr = '';
             let status = 1;
             try {
-                const [, out, err] = source.communicate_utf8_finish(result);
+                const [, out, err] = source!.communicate_utf8_finish(result);
                 stdout = out ?? '';
                 stderr = err ?? '';
-                status = source.get_exit_status();
+                status = source!.get_exit_status();
             } catch (e) {
-                if (e.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
+                if (isCancelled(e))
                     return;
                 stderr = `${e}`;
             }
@@ -243,15 +295,15 @@ export const TailscaleService = GObject.registerClass({
         return true;
     }
 
-    _detach(argv) {
+    _detach(argv: string[]): void {
         try {
             spawn(argv, Gio.SubprocessFlags.NONE);
         } catch (e) {
-            logError(e, 'TailGauge');
+            logError(e as object, 'TailGauge');
         }
     }
 
-    _cancel(kind) {
+    _cancel(kind: string): void {
         const cancellable = this._cancellables.get(kind);
         if (!cancellable)
             return;
@@ -263,7 +315,7 @@ export const TailscaleService = GObject.registerClass({
 
     // A long poll that returns the moment tailscaled reports a change, so an
     // external `tailscale up` shows up at once instead of on the next tick.
-    watch() {
+    watch(): void {
         if (!this.installed || this._destroyed)
             return;
         this._run('watch', ['tailgauge-watch', String(WATCH_TIMEOUT_SEC)], status => {
@@ -279,7 +331,7 @@ export const TailscaleService = GObject.registerClass({
         });
     }
 
-    checkUpdate(force = false) {
+    checkUpdate(force = false): void {
         const argv = ['tailgauge-update', '--check', '--json'];
         if (force)
             argv.push('--force');
@@ -296,7 +348,7 @@ export const TailscaleService = GObject.registerClass({
         });
     }
 
-    applyUpdate() {
+    applyUpdate(): void {
         if (this.updating || this.update?.updatable !== true)
             return;
         this.updating = true;
@@ -314,13 +366,13 @@ export const TailscaleService = GObject.registerClass({
         this._emit();
     }
 
-    openUrl(url) {
+    openUrl(url: string): void {
         const target = String(url || '');
         if (target !== '')
             Gio.AppInfo.launch_default_for_uri(target, null);
     }
 
-    refresh(forceAccounts = false) {
+    refresh(forceAccounts = false): void {
         if (this.installed) {
             this._refreshStatusAndAccounts(forceAccounts);
             return;
@@ -340,7 +392,7 @@ export const TailscaleService = GObject.registerClass({
             this.refreshing = true;
     }
 
-    _refreshStatusAndAccounts(forceAccounts) {
+    _refreshStatusAndAccounts(forceAccounts: boolean): void {
         if (!this.installed)
             return;
         let launched = false;
@@ -403,14 +455,14 @@ export const TailscaleService = GObject.registerClass({
         }
     }
 
-    _delayedRefresh() {
+    _delayedRefresh(): void {
         this._addTimeout('delayed', DELAYED_REFRESH_MS, () => {
             this.refresh();
             return GLib.SOURCE_REMOVE;
         });
     }
 
-    _flashStatus(message) {
+    _flashStatus(message: string): void {
         this.actionStatus = message;
         this._addTimeout('actionStatus', ACTION_STATUS_MS, () => {
             this.actionStatus = '';
@@ -421,7 +473,7 @@ export const TailscaleService = GObject.registerClass({
 
     // ---- parsing ---------------------------------------------------------
 
-    _resetUnavailable(message) {
+    _resetUnavailable(message: string): void {
         this.running = false;
         this.needsLogin = false;
         this._desired = -1;
@@ -447,7 +499,7 @@ export const TailscaleService = GObject.registerClass({
         this.accountsAccessDenied = false;
     }
 
-    _parseStatus(raw) {
+    _parseStatus(raw: string): void {
         const parsed = Model.parseStatus(raw);
         if (!parsed.ok) {
             this._resetUnavailable(parsed.message || _('Status error'));
@@ -495,7 +547,7 @@ export const TailscaleService = GObject.registerClass({
         this.lastError = '';
     }
 
-    _parseAccounts(raw) {
+    _parseAccounts(raw: string): void {
         const parsed = Model.parseAccounts(raw);
         this.accounts = parsed.accounts;
         this.selectedAccountId = parsed.selectedAccountId;
@@ -503,7 +555,7 @@ export const TailscaleService = GObject.registerClass({
         this.accountsAccessDenied = false;
     }
 
-    _parseMullvadExitNodes(raw) {
+    _parseMullvadExitNodes(raw: string): void {
         this.mullvadExitNodes = Model.parseExitNodeList(raw);
         this.mullvadRegions = Model.mullvadRegionOptions(this.mullvadExitNodes);
         this.exitNodes = this.running ? this.tailnetExitNodes.concat(this.mullvadRegions) : [];
@@ -511,7 +563,7 @@ export const TailscaleService = GObject.registerClass({
 
     // ---- actions ---------------------------------------------------------
 
-    toggleTailscale() {
+    toggleTailscale(): void {
         if (!this.installed)
             return;
         if (this.active)
@@ -520,7 +572,7 @@ export const TailscaleService = GObject.registerClass({
             this.loginOrUp();
     }
 
-    down() {
+    down(): void {
         // No progress status here: the greyed icon and header line already
         // convey the optimistic off, so only a failure is worth a message.
         this._desired = 0;
@@ -538,7 +590,7 @@ export const TailscaleService = GObject.registerClass({
         this._emit();
     }
 
-    loginOrUp() {
+    loginOrUp(): void {
         if (!this.installed || this._cancellables.has('login'))
             return;
         this._desired = -1;
@@ -573,11 +625,11 @@ export const TailscaleService = GObject.registerClass({
     // `tailscale up` prints the authorization URL and then blocks until the
     // browser round-trip finishes, so the line has to be read as it arrives
     // rather than collected at exit.
-    _startLogin(argv) {
+    _startLogin(argv: string[]): void {
         const cancellable = new Gio.Cancellable();
         this._cancellables.set('login', cancellable);
 
-        let proc;
+        let proc: Gio.Subprocess;
         try {
             proc = spawn(argv, Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
         } catch (e) {
@@ -589,7 +641,7 @@ export const TailscaleService = GObject.registerClass({
             return;
         }
 
-        const collected = [];
+        const collected: string[] = [];
         for (const stream of [proc.get_stdout_pipe(), proc.get_stderr_pipe()]) {
             if (!stream)
                 continue;
@@ -602,10 +654,10 @@ export const TailscaleService = GObject.registerClass({
                 this._cancellables.delete('login');
             let status = 1;
             try {
-                source.wait_finish(result);
-                status = source.get_exit_status();
+                source!.wait_finish(result);
+                status = source!.get_exit_status();
             } catch (e) {
-                if (e.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
+                if (isCancelled(e))
                     return;
             }
             if (this._destroyed)
@@ -627,11 +679,11 @@ export const TailscaleService = GObject.registerClass({
         });
     }
 
-    _readLoginLine(reader, cancellable, collected) {
+    _readLoginLine(reader: Gio.DataInputStream, cancellable: Gio.Cancellable, collected: string[]): void {
         reader.read_line_async(GLib.PRIORITY_DEFAULT, cancellable, (source, result) => {
-            let line = null;
+            let line: string | null = null;
             try {
-                [line] = source.read_line_finish_utf8(result);
+                [line] = source!.read_line_finish_utf8(result);
             } catch (e) {
                 return;
             }
@@ -640,11 +692,11 @@ export const TailscaleService = GObject.registerClass({
             collected.push(line);
             if (this._loginInProgress && !this._loginUrlOpened)
                 this._openAuthUrlFrom(line, false);
-            this._readLoginLine(source, cancellable, collected);
+            this._readLoginLine(source!, cancellable, collected);
         });
     }
 
-    _openAuthUrlFrom(text, allowFallback) {
+    _openAuthUrlFrom(text: string, allowFallback: boolean): boolean {
         if (this._loginUrlOpened)
             return true;
         const url = Model.firstUrl(text, allowFallback ? this.authUrl : '');
@@ -659,7 +711,7 @@ export const TailscaleService = GObject.registerClass({
         return true;
     }
 
-    switchAccount(id) {
+    switchAccount(id: string): void {
         const accountId = String(id || '');
         if (!this.installed || accountId === '' || accountId === this.selectedAccountId)
             return;
@@ -681,7 +733,7 @@ export const TailscaleService = GObject.registerClass({
         }
     }
 
-    setExitNode(peer) {
+    setExitNode(peer: Model.Peer | null | undefined): void {
         if (!this.installed || !this.running || !peer)
             return;
         const isActive = peer.ExitNode === true;
@@ -705,7 +757,7 @@ export const TailscaleService = GObject.registerClass({
         }
     }
 
-    authorizeTailscaleOperator() {
+    authorizeTailscaleOperator(): void {
         if (!this.installed)
             return;
         const user = GLib.get_user_name();
@@ -729,39 +781,39 @@ export const TailscaleService = GObject.registerClass({
 
     // ---- clipboard and Taildrop -----------------------------------------
 
-    copyToClipboard(value) {
+    copyToClipboard(value: string): void {
         const text = String(value || '');
         if (text === '')
             return;
         St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, text);
     }
 
-    copyPeerIp(peer) {
+    copyPeerIp(peer: Model.Peer | null | undefined): void {
         if (!peer)
             return;
         const ips = Model.filterIPv4(peer.TailscaleIPs || []);
         this.copyToClipboard(ips.length > 0 ? ips[0] : '');
     }
 
-    copyPeerName(peer) {
+    copyPeerName(peer: Model.Peer | null | undefined): void {
         if (!peer)
             return;
         this.copyToClipboard(Model.displayHostName(peer.HostName, peer.DNSName));
     }
 
-    copyPeerDnsName(peer) {
+    copyPeerDnsName(peer: Model.Peer | null | undefined): void {
         if (!peer)
             return;
         this.copyToClipboard(Model.cleanDnsName(peer.DNSName));
     }
 
-    canSendFiles(peer) {
+    canSendFiles(peer: Model.Peer | null | undefined): boolean {
         if (!this.fileSharing || !this.running || !peer)
             return false;
         return Model.isTaildropTarget(peer, this.selfUserId);
     }
 
-    sendFile(peer) {
+    sendFile(peer: Model.Peer | null | undefined): void {
         if (!this.canSendFiles(peer))
             return;
         const target = Model.peerAddress(peer);
@@ -770,7 +822,7 @@ export const TailscaleService = GObject.registerClass({
         this._detach(['tailgauge-send', target]);
     }
 
-    destroy() {
+    destroy(): void {
         this._destroyed = true;
         for (const cancellable of this._cancellables.values())
             cancellable.cancel();

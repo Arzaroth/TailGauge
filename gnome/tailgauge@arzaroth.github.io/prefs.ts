@@ -6,7 +6,7 @@ import Gtk from 'gi://Gtk';
 import {ExtensionPreferences, gettext as _} from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 export default class TailGaugePreferences extends ExtensionPreferences {
-    fillPreferencesWindow(window) {
+    override async fillPreferencesWindow(window: Adw.PreferencesWindow): Promise<void> {
         const settings = this.getSettings();
 
         const page = new Adw.PreferencesPage({
@@ -110,7 +110,7 @@ export default class TailGaugePreferences extends ExtensionPreferences {
 
 // A modifier is required: a global binding on a bare letter would swallow that
 // key everywhere, including inside whatever you are typing in.
-function captureShortcut(window, settings) {
+function captureShortcut(window: Adw.PreferencesWindow, settings: Gio.Settings): void {
     const dialog = new Gtk.Window({
         transient_for: window,
         modal: true,
@@ -134,7 +134,7 @@ function captureShortcut(window, settings) {
     dialog.set_child(box);
 
     const keys = new Gtk.EventControllerKey();
-    keys.connect('key-pressed', (_controller, keyval, keycode, state) => {
+    keys.connect('key-pressed', (_controller: Gtk.EventControllerKey, keyval: number, keycode: number, state: Gdk.ModifierType) => {
         const mask = state & Gtk.accelerator_get_default_mod_mask() & ~Gdk.ModifierType.LOCK_MASK;
 
         if (mask === 0 && keyval === Gdk.KEY_Escape) {
@@ -160,7 +160,7 @@ function captureShortcut(window, settings) {
 
 // Regions are stored as "Country\nCity" so the key survives a rename of either
 // half; nothing else should ever see that spelling.
-function describeRecent(regions) {
+function describeRecent(regions: string[] | null | undefined): string {
     if (!regions || regions.length === 0)
         return _('None yet');
     return regions
