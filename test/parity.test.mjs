@@ -138,20 +138,41 @@ test('both QML services disarm the poll watchdog when the polls land', () => {
     }
 });
 
-// `panel` is a new object whenever anything it is derived from moves, the
-// search query included. A Repeater handed that array rebuilds every delegate
-// it holds, which on Omarchy meant the field being typed into was destroyed and
-// recreated on each keystroke. Counted models keep the delegates and re-read.
-test('the Omarchy panel binds its rows by index, not by array', () => {
-    const src = read('omarchy/arzaroth.tailgauge/Panel.qml');
-    assert.match(src, /model: root\.panel\.sections\.length/,
-        'the sections repeater is fed the array again');
-    assert.match(src, /model: sectionView\.modelData \? sectionView\.modelData\.rows\.length : 0/,
-        'the rows repeater is fed the array again');
-    assert.match(src, /model: rowGroup\.modelData && rowGroup\.modelData\.expanded/,
-        'the expanded-children repeater is fed the array again');
+// `panel` is a new object whenever anything it derives from moves, the search
+// query included. A QML Repeater handed that array rebuilds every delegate it
+// holds, which destroyed the field being typed into on every keystroke. Counted
+// models keep the delegates and re-read them by index. GNOME arrives at the same
+// place from the other side: it rebuilds only when its panel signature changes.
+test('no QML frontend rebuilds its rows just to redraw them', () => {
+    for (const [name, file] of Object.entries({
+        plasma: 'plasma/org.tailgauge.plasmoid/contents/ui/FullRep.qml',
+        omarchy: 'omarchy/arzaroth.tailgauge/Panel.qml'
+    })) {
+        const src = read(file);
+        assert.match(src, /model: (full|root)\.panel\.sections\.length/,
+            `${name} hands the sections array to a Repeater`);
+        assert.match(src, /\.modelData\.rows\.length : 0/,
+            `${name} hands the rows array to a Repeater`);
+        assert.match(src, /\.children\.length : 0/,
+            `${name} hands the children array to a Repeater`);
+    }
     // The action and copy-option repeaters inside a row stay array-bound on
     // purpose: a handful of buttons, nothing focusable, nothing to preserve.
+});
+
+// Whatever a frontend does to redraw, the field someone is typing into has to
+// come out the other side.
+test('every frontend keeps its search field across a redraw', () => {
+    for (const file of ['plasma/org.tailgauge.plasmoid/contents/ui/PanelRowView.qml',
+                        'omarchy/arzaroth.tailgauge/Panel.qml'])
+        assert.match(read(file), /function syncRegistration\(\)/,
+            `${file} registers rows by component lifetime, which no longer tracks the row`);
+
+    // GNOME rebuilds its menu outright, so it refills the machine rows around
+    // the entry instead and gates every other rebuild on the signature.
+    const gnome = read('gnome/tailgauge@arzaroth.github.io/extension.js');
+    assert.match(gnome, /_refillMachines\(entry\)/);
+    assert.match(gnome, /signature !== this\._signature/);
 });
 
 // A reaped poll produced no answer, so it must not be reported as one.
