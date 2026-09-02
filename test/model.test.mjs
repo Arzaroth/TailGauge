@@ -281,6 +281,23 @@ test('filterMachines matches every field a row shows, and the OS', () => {
     assert.deepEqual(M.filterMachines(null, 'anything'), []);
 });
 
+// Reported as "the search is case sensitive", which it never was: the panel's
+// key catcher was swallowing lowercase h, j, k, l and x before they reached the
+// field, so the same query typed in capitals arrived intact and the one typed
+// normally did not. The filter is pinned here so a future change cannot make
+// the complaint true.
+test('both searches ignore case, in the query and in what they match', () => {
+    const names = query => M.filterMachines(status.peers, query).map(p => p.HostName);
+    assert.deepEqual(names('android'), names('ANDROID'));
+    assert.deepEqual(names('android'), names('AnDrOiD'));
+    assert.ok(names('android').length > 0, 'the fixture no longer carries an Android peer');
+
+    const cities = query => M.filterMullvadRegions(mullvadRegions, query).map(r => r.City);
+    const anyCity = mullvadRegions[0].City;
+    assert.deepEqual(cities(anyCity.toUpperCase()), cities(anyCity.toLowerCase()));
+    assert.ok(cities(anyCity.toUpperCase()).length > 0);
+});
+
 test('the machines search appears only for a list long enough to need it', () => {
     assert.equal(section(M.resolvePanel(state(), {}), 'machines').rows.some(r => r.kind === 'machineSearch'), false);
 
