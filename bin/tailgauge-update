@@ -294,8 +294,14 @@ for entry in "${targets[@]}"; do
       fail "the plugin archive did not extract"
     [[ -f "$work/plugin/$PLUGIN_ID/manifest.json" ]] ||
       fail "the plugin archive does not carry $PLUGIN_ID"
+    staging="$dir.new.$$"
+    rm -rf "$staging"
+    cp -a "$work/plugin/$PLUGIN_ID" "$staging" || {
+      rm -rf "$staging"
+      fail "could not stage the new plugin"
+    }
     rm -rf "$dir"
-    cp -a "$work/plugin/$PLUGIN_ID" "$dir" || fail "could not replace the plugin"
+    mv "$staging" "$dir" || fail "could not replace the plugin"
     omarchy-shell -q shell rescanPlugins >/dev/null 2>&1 || true
     updated+=("Omarchy widget")
     ;;
