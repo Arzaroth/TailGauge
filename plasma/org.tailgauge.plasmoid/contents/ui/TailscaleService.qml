@@ -172,6 +172,19 @@ Item {
         }
     }
 
+    // Armed by the launch and disarmed by the landing, so it only ever fires on
+    // a poll that really did hang. Left armed it reaps whichever healthy poll is
+    // in flight fifteen seconds later, which at the three-second cadence of an
+    // open popup is nearly always one - a refresh silently skipped.
+    function _pollSettled(kind) {
+        var polls = ["status", "mullvad", "accounts"]
+        for (var i = 0; i < polls.length; i++) {
+            if (polls[i] === kind) continue
+            if (root._inflight[polls[i]]) return
+        }
+        pollWatchdog.stop()
+    }
+
     // The watcher is meant to sit there for minutes; reaping it as a hung poll
     // would restart it forever.
     function _reap(kind) {
@@ -203,12 +216,14 @@ Item {
             }
         } else if (kind === "status") {
             root.refreshing = false
+            root._pollSettled(kind)
             if (exitCode === 0) root.parseStatus(stdout)
             else {
                 root.resetUnavailable("Disconnected")
                 root.lastError = stderr.trim()
             }
         } else if (kind === "accounts") {
+            root._pollSettled(kind)
             if (exitCode === 0) root.parseAccounts(stdout)
             else {
                 root.parseAccounts("")
@@ -220,6 +235,7 @@ Item {
                 }
             }
         } else if (kind === "mullvad") {
+            root._pollSettled(kind)
             root.parseMullvadExitNodes(exitCode === 0 ? stdout : "")
         } else if (kind === "action") {
             if (exitCode !== 0) {
