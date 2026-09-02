@@ -1,8 +1,8 @@
 {
   "uuid": "tailgauge@arzaroth.github.io",
-  "version": 5,
+  "version": 6,
   "name": "TailGauge",
-  "version-name": "0.3.0",
+  "version-name": "0.3.1",
   "description": "Tailscale in the GNOME panel: connection state, on/off, account switching, exit nodes including Mullvad regions, machine browsing with copy actions, and Taildrop file sending. Drives the tailscale CLI directly.",
   "shell-version": [
     "45",

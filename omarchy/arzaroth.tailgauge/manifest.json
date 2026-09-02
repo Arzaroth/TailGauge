@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "arzaroth.tailgauge",
   "name": "TailGauge",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "author": "Arzaroth",
   "license": "MIT",
   "description": "Tailscale connection state, account switching, exit nodes including Mullvad regions, machine browsing with copy actions, and Taildrop sending in an Omarchy bar panel.",

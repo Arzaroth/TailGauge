@@ -2,6 +2,40 @@
 
 All notable changes to this project are documented here.
 
+## [0.3.1]
+
+### Fixed
+
+- **Typing in a search field reached the panel instead of the field.** The
+  Omarchy widget never told the shell's key catcher to stand down while an
+  editor had focus, and that catcher takes keys before any focused descendant.
+  So `h`, `j`, `k`, `l`, `x` and space were swallowed outright and never
+  arrived, while `c`, `n`, `d`, `s`, `t` and `r` fired a row action on the way
+  through - copying an address, opening a Taildrop file picker, or toggling
+  Tailscale. This is also the whole of "the search is case sensitive": the
+  catcher matches `"j"` and not `"J"`, so a query typed in capitals arrived
+  intact and the same query typed normally lost letters. The filter always
+  lowercased both sides, and a test now pins it.
+- **The panel reported a tailnet that never went down.** The watchdog that
+  reaps a hung `tailscale status` was armed on launch and never disarmed, so it
+  fired on a schedule rather than on a symptom - and at the three-second cadence
+  of an open panel, whatever it found in flight was nearly always a healthy
+  poll. Killing a Quickshell process still emits `exited`, and the kill's exit
+  code was read as an answer, so a command that was never allowed to respond
+  became "Disconnected" until the next poll landed. It is disarmed on landing
+  now, and a reaped poll reports nothing. The plasmoid was silent about it but
+  had been discarding one refresh every fifteen seconds.
+- **The search field lost focus, then blinked on every keystroke.** Two causes.
+  Both QML services assigned freshly parsed arrays on every poll whether or not
+  anything had moved, and a new array is a new panel, which rebuilds every row
+  it holds - taking the field with it several times a minute. And `panel` is a
+  new object on each keystroke anyway, because the query is one of its inputs,
+  so the repeaters rebuilt again per character. The services compare before
+  assigning, and the repeaters bind by count and read their rows by index, so a
+  delegate survives and re-reads. GNOME already worked this way; the two QML
+  frontends were the ones out of line, and the parity tests now hold all three
+  to it.
+
 ## [0.3.0]
 
 ### Added
