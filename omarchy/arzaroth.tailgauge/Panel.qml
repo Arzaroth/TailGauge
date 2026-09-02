@@ -154,10 +154,15 @@ Panel {
 
   property var rowItems: ({})
 
-  function registerRow(id, item) {
+  // `claim` false releases. Delegates are reused by index, so a row can already
+  // have been claimed by another delegate before the one that used to hold it
+  // gets round to letting go - releasing by id alone would take the newer entry
+  // with it, and the copy menu it points at would stop opening.
+  function registerRow(id, item, claim) {
     var items = rowItems
-    if (item) items[id] = item
-    else delete items[id]
+    if (claim) items[id] = item
+    else if (items[id] === item) delete items[id]
+    else return
     rowItems = items
   }
 
@@ -598,14 +603,14 @@ Panel {
       // menu is open, which would offer the new one's addresses under the name
       // that was clicked.
       if (copyPopup.opened) copyPopup.close()
-      if (registeredId !== "") root.registerRow(registeredId, null)
+      if (registeredId !== "") root.registerRow(registeredId, surface, false)
       registeredId = id
-      if (id !== "") root.registerRow(id, surface)
+      if (id !== "") root.registerRow(id, surface, true)
     }
 
     onRowChanged: syncRegistration()
     Component.onCompleted: syncRegistration()
-    Component.onDestruction: if (registeredId !== "") root.registerRow(registeredId, null)
+    Component.onDestruction: if (registeredId !== "") root.registerRow(registeredId, surface, false)
 
     function openCopyMenu() {
       if (!row || row.copyOptions.length === 0) return

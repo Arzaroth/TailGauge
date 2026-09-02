@@ -140,10 +140,15 @@ Item {
 
     property var rowItems: ({})
 
-    function registerRow(id, item) {
+    // `claim` false releases. Delegates are reused by index, so a row can
+    // already have been claimed by another delegate before the one that used to
+    // hold it gets round to letting go - releasing by id alone would take the
+    // newer entry with it, and the copy menu it points at would stop opening.
+    function registerRow(id, item, claim) {
         var items = rowItems
-        if (item) items[id] = item
-        else delete items[id]
+        if (claim) items[id] = item
+        else if (items[id] === item) delete items[id]
+        else return
         rowItems = items
     }
 

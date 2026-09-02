@@ -28,14 +28,14 @@ RowSurface {
         // otherwise offer the new one's addresses under the name that was
         // clicked.
         copyMenu.dismiss()
-        if (registeredId !== "") register(registeredId, null)
+        if (registeredId !== "") register(registeredId, surface, false)
         registeredId = id
-        if (id !== "") register(id, surface)
+        if (id !== "") register(id, surface, true)
     }
 
     onRowChanged: syncRegistration()
     Component.onCompleted: syncRegistration()
-    Component.onDestruction: if (register && registeredId !== "") register(registeredId, null)
+    Component.onDestruction: if (register && registeredId !== "") register(registeredId, surface, false)
     property bool cursorActive: false
     property string cursorRowId: ""
     property color dimColor: Qt.darker(Kirigami.Theme.textColor, 1.55)
