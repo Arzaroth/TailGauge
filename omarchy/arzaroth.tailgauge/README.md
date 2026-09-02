@@ -87,6 +87,7 @@ qs log --pid "$(pgrep -f 'quickshell -n -p /usr/share/omarchy/shell')" -t 50
 ```
 
 Symlinks are refused anywhere inside a plugin folder, so the installer copies
-this directory rather than linking it, and `scripts/build.sh` copies
-the compiled `shared/model.ts` in as `Model.js`. **Edit `shared/model.ts`, never the copy.**
+this directory rather than linking it, and `scripts/build.sh` copies the
+JavaScript it compiles from `shared/model.ts` in as `Model.js`. `Model.js` is
+build output, not a source file. **Edit `shared/model.ts`, never the copy.**
 Re-run `scripts/install.sh --omarchy` to push local edits.
