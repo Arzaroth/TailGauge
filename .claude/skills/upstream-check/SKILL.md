@@ -118,7 +118,6 @@ against the real thing rather than against the release notes:
 
 ```bash
 tailscale exit-node list | head -5
-node -e 'const m=require("./build/tailgauge@arzaroth.github.io/model.js");' # or run the model tests
 node --test test/model.test.mjs
 ```
 
