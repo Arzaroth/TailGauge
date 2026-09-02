@@ -50,8 +50,9 @@ jobs:
           version="${REF_NAME#v}"
           plasmoid=$(node -e 'process.stdout.write(require("./plasma/org.tailgauge.plasmoid/metadata.json").KPlugin.Version)')
           extension=$(node -e 'process.stdout.write(require("./gnome/tailgauge@arzaroth.github.io/metadata.json")["version-name"])')
-          echo "tag=$version plasmoid=$plasmoid extension=$extension"
-          if [[ $plasmoid != "$version" || $extension != "$version" ]]; then
+          plugin=$(node -e 'process.stdout.write(require("./omarchy/arzaroth.tailgauge/manifest.json").version)')
+          echo "tag=$version plasmoid=$plasmoid extension=$extension plugin=$plugin"
+          if [[ $plasmoid != "$version" || $extension != "$version" || $plugin != "$version" ]]; then
             echo "::error::tag $REF_NAME does not match the manifests"
             exit 1
           fi
@@ -72,6 +73,10 @@ jobs:
           # The extension, as gnome-extensions install takes it.
           cp "build/tailgauge@arzaroth.github.io.shell-extension.zip" \
              "dist/tailgauge-$safe-gnome-shell-extension.zip"
+
+          # The Omarchy plugin, as a folder the shell's registry can take
+          # verbatim under ~/.config/omarchy/plugins/.
+          tar -czf "dist/tailgauge-$safe-omarchy-plugin.tar.gz" -C build arzaroth.tailgauge
 
           # The helpers and the unit, for a packager who wants only those.
           tar -czf "dist/tailgauge-$safe-helpers.tar.gz" bin systemd
