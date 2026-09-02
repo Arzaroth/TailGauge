@@ -357,16 +357,23 @@ Item {
                 wrapMode: Text.WordWrap
             }
 
+            // Counted, not fed the array: a Repeater handed a new JS array
+            // destroys and rebuilds every delegate it holds, and `panel` is a
+            // new object on every keystroke because the machine query is one of
+            // its inputs. That took the field being typed into with it. Bound by
+            // index, a delegate survives and re-reads its row - which is what
+            // the GNOME extension has always done through its panel signature.
             Repeater {
-                model: full.panel.sections
+                model: full.panel.sections.length
 
                 ColumnLayout {
                     id: sectionView
-                    required property var modelData
+                    required property int index
+                    readonly property var modelData: full.panel.sections[sectionView.index]
 
                     Layout.fillWidth: true
                     spacing: Kirigami.Units.smallSpacing
-                    visible: modelData.visible
+                    visible: !!modelData && modelData.visible
 
                     Kirigami.Separator {
                         visible: sectionView.modelData.title !== ""
@@ -389,15 +396,19 @@ Item {
                     }
 
                     Repeater {
-                        model: sectionView.modelData.rows
+                        model: sectionView.modelData ? sectionView.modelData.rows.length : 0
 
                         ColumnLayout {
                             id: rowGroup
-                            required property var modelData
+                            required property int index
+                            // A shrinking list can evaluate this before the
+                            // delegate goes, so every reader below takes null.
+                            readonly property var modelData: sectionView.modelData
+                                ? (sectionView.modelData.rows[rowGroup.index] || null) : null
 
-                            readonly property bool isPicker: modelData.kind === "mullvadPicker"
-                            readonly property bool isEmpty: modelData.kind === "empty"
-                            readonly property bool isSearch: modelData.kind === "machineSearch"
+                            readonly property bool isPicker: !!modelData && modelData.kind === "mullvadPicker"
+                            readonly property bool isEmpty: !!modelData && modelData.kind === "empty"
+                            readonly property bool isSearch: !!modelData && modelData.kind === "machineSearch"
 
                             Layout.fillWidth: true
                             spacing: Kirigami.Units.smallSpacing
@@ -406,7 +417,7 @@ Item {
                                 visible: rowGroup.isEmpty
                                 Layout.fillWidth: true
                                 horizontalAlignment: Text.AlignHCenter
-                                text: rowGroup.modelData.label
+                                text: rowGroup.modelData ? rowGroup.modelData.label : ""
                                 color: full.dimColor
                                 font: Kirigami.Theme.smallFont
                             }
@@ -433,10 +444,10 @@ Item {
                             }
 
                             PanelRowView {
-                                id: rowView
                                 visible: !rowGroup.isEmpty && !rowGroup.isSearch
                                 Layout.fillWidth: true
                                 row: rowGroup.modelData
+                                register: full.registerRow
                                 cursorActive: full.cursorActive
                                 cursorRowId: full.cursorRowId()
                                 dimColor: full.dimColor
@@ -444,8 +455,6 @@ Item {
                                 onHoveredRow: full.focusRow(rowGroup.modelData.id)
                                 onActionTriggered: (actionId) => full.rowAction(rowGroup.modelData, actionId)
                                 onCopyRequested: (kind) => full.copyOption(rowGroup.modelData, kind)
-                                Component.onCompleted: full.registerRow(rowGroup.modelData.id, rowView)
-                                Component.onDestruction: full.registerRow(rowGroup.modelData.id, null)
                             }
 
                             PlasmaComponents3.TextField {
@@ -475,22 +484,23 @@ Item {
                             // so the children render through the same view
                             // without the component having to recurse.
                             Repeater {
-                                model: rowGroup.modelData.expanded ? rowGroup.modelData.children : []
+                                model: rowGroup.modelData && rowGroup.modelData.expanded
+                                    ? rowGroup.modelData.children.length : 0
 
                                 PanelRowView {
                                     id: childView
-                                    required property var modelData
+                                    required property int index
                                     Layout.fillWidth: true
                                     Layout.leftMargin: Kirigami.Units.gridUnit
-                                    row: modelData
+                                    row: rowGroup.modelData
+                                        ? (rowGroup.modelData.children[childView.index] || null) : null
+                                    register: full.registerRow
                                     cursorActive: full.cursorActive
                                     cursorRowId: full.cursorRowId()
                                     dimColor: full.dimColor
-                                    onActivated: full.dispatch(childView.modelData)
-                                    onHoveredRow: full.focusRow(childView.modelData.id)
-                                    onCopyRequested: (kind) => full.copyOption(childView.modelData, kind)
-                                    Component.onCompleted: full.registerRow(childView.modelData.id, childView)
-                                    Component.onDestruction: full.registerRow(childView.modelData.id, null)
+                                    onActivated: full.dispatch(childView.row)
+                                    onHoveredRow: full.focusRow(childView.row.id)
+                                    onCopyRequested: (kind) => full.copyOption(childView.row, kind)
                                 }
                             }
                         }

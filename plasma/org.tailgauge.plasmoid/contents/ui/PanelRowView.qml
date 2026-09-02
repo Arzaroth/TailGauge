@@ -12,6 +12,30 @@ RowSurface {
 
     property var row: null
     property var panel: null
+
+    // A delegate now outlives the row it happens to be showing, so registration
+    // follows the row rather than the component. `register` is the registry's
+    // own function, handed in by whoever owns it - it is what scrolls the
+    // cursor into view and opens a machine's copy menu from the keyboard.
+    property var register: null
+    property string registeredId: ""
+
+    function syncRegistration() {
+        if (!register) return
+        var id = row ? String(row.id) : ""
+        if (id === registeredId) return
+        // Handed a different machine with its copy menu open, this row would
+        // otherwise offer the new one's addresses under the name that was
+        // clicked.
+        copyMenu.dismiss()
+        if (registeredId !== "") register(registeredId, null)
+        registeredId = id
+        if (id !== "") register(id, surface)
+    }
+
+    onRowChanged: syncRegistration()
+    Component.onCompleted: syncRegistration()
+    Component.onDestruction: if (register && registeredId !== "") register(registeredId, null)
     property bool cursorActive: false
     property string cursorRowId: ""
     property color dimColor: Qt.darker(Kirigami.Theme.textColor, 1.55)
