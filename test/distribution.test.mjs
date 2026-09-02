@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import {fileURLToPath} from 'node:url';
 
-// Distribution is a contract spread across four files: the release workflow
+// Distribution is a contract spread across five files: the release workflow
 // names the assets, the update helper downloads them by name, and three
 // manifests declare a version. Nothing at runtime notices when they disagree -
 // the updater just 404s - so it is checked here instead.
@@ -17,6 +17,7 @@ const release = read('.github/workflows/release.yml');
 const updater = read('bin/tailgauge-update');
 const plasmoidManifest = JSON.parse(read('plasma/org.tailgauge.plasmoid/metadata.json'));
 const extensionManifest = JSON.parse(read('gnome/tailgauge@arzaroth.github.io/metadata.json'));
+const pluginManifest = JSON.parse(read('omarchy/arzaroth.tailgauge/manifest.json'));
 
 // The workflow writes dist/tailgauge-$safe-<suffix>; the updater fetches
 // tailgauge-v$latest-<suffix>. Compare the suffixes.
@@ -26,7 +27,7 @@ const downloadedSuffixes = [...updater.matchAll(/"tailgauge-v\$latest-([\w.-]+)"
     .map(m => m[1]).sort();
 
 test('the updater downloads exactly the assets the release publishes', () => {
-    assert.ok(publishedSuffixes.length >= 3, `found only ${publishedSuffixes.length} published assets`);
+    assert.ok(publishedSuffixes.length >= 4, `found only ${publishedSuffixes.length} published assets`);
     assert.deepEqual(downloadedSuffixes, publishedSuffixes);
 });
 
@@ -53,13 +54,24 @@ test('the plasmoid ships as a .plasmoid zip', () => {
     assert.match(release, /cd build\/org\.tailgauge\.plasmoid && zip/);
 });
 
-test('all three versions agree', () => {
+test('all four versions agree', () => {
     const plasmoid = plasmoidManifest.KPlugin.Version;
     const extension = extensionManifest['version-name'];
+    const plugin = pluginManifest.version;
     const helpers = updater.match(/^VERSION="([^"]+)"$/m)?.[1];
     assert.equal(extension, plasmoid, 'the GNOME extension disagrees with the plasmoid');
+    assert.equal(plugin, plasmoid, 'the Omarchy plugin disagrees with the plasmoid');
     assert.equal(helpers, plasmoid, 'bin/tailgauge-update disagrees with the plasmoid');
     assert.match(plasmoid, /^\d+\.\d+\.\d+$/);
+});
+
+// The registry reads the manifest the archive carries, so a tarball that
+// unpacks under any other name installs a plugin the updater cannot find again.
+test('the Omarchy plugin ships under the id its manifest declares', () => {
+    assert.match(release, new RegExp(`tar -czf "dist/tailgauge-\\$safe-omarchy-plugin.tar.gz" -C build ${pluginManifest.id}`));
+    assert.match(pluginManifest.id, /^[A-Za-z0-9][A-Za-z0-9._-]*$/);
+    assert.ok(!pluginManifest.id.startsWith('omarchy.'),
+        'omarchy.* is reserved for first-party plugins');
 });
 
 test('the extension carries the integer version EGO expects', () => {
@@ -77,6 +89,7 @@ test('the updater points at the repository the manifests name', () => {
 test('the updater knows the package ids the manifests declare', () => {
     assert.match(updater, new RegExp(`PLASMOID_ID="${plasmoidManifest.KPlugin.Id}"`));
     assert.match(updater, new RegExp(`EXTENSION_UUID="${extensionManifest.uuid}"`));
+    assert.match(updater, new RegExp(`PLUGIN_ID="${pluginManifest.id}"`));
 });
 
 test('the release refuses to publish a tag the manifests disagree with', () => {

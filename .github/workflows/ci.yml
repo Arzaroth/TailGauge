@@ -97,12 +97,12 @@ jobs:
       - name: Lint QML
         run: |
           shopt -s globstar nullglob
-          files=(build/org.tailgauge.plasmoid/contents/ui/*.qml)
+          files=(build/org.tailgauge.plasmoid/contents/ui/*.qml build/arzaroth.tailgauge/*.qml)
           if [[ ${#files[@]} -eq 0 ]]; then
             echo "no QML found - the glob has gone stale" >&2
             exit 1
           fi
-          # Every Plasma and Kirigami import is unresolvable here, and some
+          # Every Plasma, Kirigami and Quickshell import is unresolvable here, and some
           # qmllint builds exit non-zero on those warnings while others exit 0.
           # So the exit code is not the signal: a `[syntax]` diagnostic is. That
           # is the failure that actually ships, since a plasmoid with a syntax
@@ -136,7 +136,7 @@ jobs:
       - name: Check the manifests
         run: |
           shopt -s globstar nullglob
-          files=(gnome/**/metadata.json plasma/**/metadata.json)
+          files=(gnome/**/metadata.json plasma/**/metadata.json omarchy/**/manifest.json)
           if [[ ${#files[@]} -eq 0 ]]; then
             echo "no manifests found - the glob has gone stale" >&2
             exit 1
@@ -151,16 +151,17 @@ jobs:
           python3 -c "import xml.dom.minidom, sys; xml.dom.minidom.parse(sys.argv[1])" \
             plasma/org.tailgauge.plasmoid/contents/config/main.xml
 
-      # The plasmoid and the extension both declare a version; a release that
-      # bumps one and forgets the other ships two different products.
+      # The three frontends each declare a version; a release that bumps one and
+      # forgets another ships two different products.
       - name: Check the versions agree
         run: |
           plasmoid=$(node -e 'process.stdout.write(require("./plasma/org.tailgauge.plasmoid/metadata.json").KPlugin.Version)')
           extension=$(node -e 'process.stdout.write(require("./gnome/tailgauge@arzaroth.github.io/metadata.json")["version-name"])')
+          plugin=$(node -e 'process.stdout.write(require("./omarchy/arzaroth.tailgauge/manifest.json").version)')
           helpers=$(sed -n 's/^VERSION="\(.*\)"$/\1/p' bin/tailgauge-update)
-          echo "plasmoid=$plasmoid extension=$extension helpers=$helpers"
-          if [[ $plasmoid != "$extension" || $plasmoid != "$helpers" ]]; then
-            echo "::error::version mismatch across the plasmoid, the extension and bin/tailgauge-update"
+          echo "plasmoid=$plasmoid extension=$extension plugin=$plugin helpers=$helpers"
+          if [[ $plasmoid != "$extension" || $plasmoid != "$plugin" || $plasmoid != "$helpers" ]]; then
+            echo "::error::version mismatch across the plasmoid, the extension, the Omarchy plugin and bin/tailgauge-update"
             exit 1
           fi
 
