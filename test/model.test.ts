@@ -2,24 +2,39 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import {fileURLToPath} from 'node:url';
+import {root, testDir} from './paths.js';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(here, '..');
+import type * as ModelTypes from '../shared/model.js';
+
 const built = path.join(root, 'build', 'tailgauge@arzaroth.github.io', 'model.js');
 
 if (!fs.existsSync(built))
     throw new Error('run scripts/build.sh before the tests: the ES module build is missing');
 
-const M = await import(built);
-const fixture = name => fs.readFileSync(path.join(here, 'fixtures', name), 'utf8');
+// The tests run against the artifact the build ships, typed by the source it
+// was compiled from.
+const M = await import(built) as typeof ModelTypes;
+const fixture = (name: string): string => fs.readFileSync(path.join(testDir, 'fixtures', name), 'utf8');
 
-const status = M.parseStatus(fixture('status.json'));
+const status = parsedStatus(fixture('status.json'));
 const accounts = M.parseAccounts(fixture('accounts.json'));
 const mullvadNodes = M.parseExitNodeList(fixture('exit-nodes.txt'));
 const mullvadRegions = M.mullvadRegionOptions(mullvadNodes);
 
-function state(overrides = {}) {
+function parsedStatus(raw: string): ModelTypes.StatusOk {
+    const parsed = M.parseStatus(raw);
+    assert.ok(parsed.ok && !parsed.unavailable, 'the fixture should parse as a running tailnet');
+    return parsed;
+}
+
+// A find() that fails the test rather than handing the assertions an undefined.
+function only<T>(values: T[], predicate: (value: T) => boolean, what: string): T {
+    const found = values.find(predicate);
+    assert.ok(found, `no ${what} in ${JSON.stringify(values.map(v => (v as {id?: string}).id))}`);
+    return found;
+}
+
+function state(overrides: Partial<ModelTypes.PanelState> = {}): ModelTypes.PanelState {
     return {
         installed: true,
         running: status.running,
@@ -45,11 +60,12 @@ function state(overrides = {}) {
     };
 }
 
-const section = (panel, id) => panel.sections.find(s => s.id === id);
+const section = (panel: ModelTypes.Panel, id: string): ModelTypes.PanelSection =>
+    only(panel.sections, s => s.id === id, `section ${id}`);
 
 // Past the threshold the machines section grows a search field, which the
 // fixture's four peers are deliberately too few to trigger.
-const manyPeers = Array.from({length: 12}, (_, i) => ({
+const manyPeers: ModelTypes.Peer[] = Array.from({length: 12}, (_, i) => ({
     id: `peer-${i}`,
     HostName: `box-${i}`,
     DisplayName: `box-${i}`,
@@ -83,11 +99,11 @@ test('parseStatus reads the running tailnet', () => {
 
 test('parseStatus keeps every non-Mullvad peer, online ones first', () => {
     assert.deepEqual(status.peers.map(p => p.HostName), ['laptop', 'phone', 'router', 'offline-box']);
-    assert.equal(status.peers.find(p => p.HostName === 'offline-box').Online, false);
+    assert.equal(only(status.peers, p => p.HostName === 'offline-box', 'offline-box peer').Online, false);
 });
 
 test('parseStatus separates Tailscale IPv4 from IPv6', () => {
-    const laptop = status.peers.find(p => p.HostName === 'laptop');
+    const laptop = only(status.peers, p => p.HostName === 'laptop', 'laptop peer');
     assert.deepEqual(laptop.TailscaleIPs, ['100.64.0.2']);
     assert.deepEqual(laptop.TailscaleIPv6, ['fd7a:115c:a1e0::2']);
 });
@@ -121,7 +137,7 @@ test('mullvadRegionOptions drops the "Any" city and dedupes', () => {
 });
 
 test('recent Mullvad regions dedupe and put the active one first', () => {
-    let recent = [];
+    let recent: string[] = [];
     for (const region of ['France\nParis', 'Germany\nBerlin', 'France\nParis'])
         recent = M.pushRecentMullvad(recent, region, 5);
     assert.deepEqual(recent, ['France\nParis', 'Germany\nBerlin']);
@@ -228,8 +244,9 @@ test('the active exit node is current and carries the disconnect hint', () => {
 });
 
 test('the picker filters its regions and reports an empty result', () => {
-    const open = q => section(M.resolvePanel(state(), {mullvadQuery: q, mullvadPickerOpen: true}), 'exitNodes')
-        .rows.find(r => r.kind === 'mullvadPicker');
+    const open = (q: string) => only(
+        section(M.resolvePanel(state(), {mullvadQuery: q, mullvadPickerOpen: true}), 'exitNodes').rows,
+        r => r.kind === 'mullvadPicker', 'Mullvad picker row');
     assert.deepEqual(open('par').children.map(c => c.label), ['Paris']);
     assert.deepEqual(open('france').children.map(c => c.label), ['Marseille', 'Paris']);
     const none = open('zzz').children;
@@ -240,7 +257,7 @@ test('the picker filters its regions and reports an empty result', () => {
 
 test('machine rows carry their subtitle, icon, copy options and actions', () => {
     const rows = section(M.resolvePanel(state(), {}), 'machines').rows;
-    const laptop = rows.find(r => r.label === 'laptop');
+    const laptop = only(rows, r => r.label === 'laptop', 'laptop row');
     assert.equal(laptop.sublabel, '100.64.0.2 · Alice');
     assert.equal(laptop.icon, 'computer-symbolic');
     assert.deepEqual(laptop.copyOptions.map(o => o.kind), ['name', 'dns', 'ipv6', 'ip']);
@@ -249,8 +266,8 @@ test('machine rows carry their subtitle, icon, copy options and actions', () => 
 
 test('the send action appears only for a Taildrop target', () => {
     const rows = section(M.resolvePanel(state(), {}), 'machines').rows;
-    assert.deepEqual(rows.find(r => r.label === 'router').actions.map(a => a.id), ['copy']);
-    assert.deepEqual(rows.find(r => r.label === 'phone').actions.map(a => a.id), ['copy']);
+    assert.deepEqual(only(rows, r => r.label === 'router', 'router row').actions.map(a => a.id), ['copy']);
+    assert.deepEqual(only(rows, r => r.label === 'phone', 'phone row').actions.map(a => a.id), ['copy']);
     const noSharing = section(M.resolvePanel(state({fileSharing: false}), {}), 'machines').rows;
     assert.equal(noSharing.every(r => !r.actions.some(a => a.id === 'send')), true);
 });
@@ -273,7 +290,7 @@ test('the machines section states its own empty case', () => {
 });
 
 test('filterMachines matches every field a row shows, and the OS', () => {
-    const names = query => M.filterMachines(status.peers, query).map(p => p.HostName);
+    const names = (query: string) => M.filterMachines(status.peers, query).map(p => p.HostName);
     assert.equal(M.filterMachines(status.peers, '').length, status.peers.length);
     assert.deepEqual(names('ANDROID'), ['phone']);
     assert.deepEqual(names('100.64.0.5'), ['offline-box']);
@@ -287,13 +304,13 @@ test('filterMachines matches every field a row shows, and the OS', () => {
 // normally did not. The filter is pinned here so a future change cannot make
 // the complaint true.
 test('both searches ignore case, in the query and in what they match', () => {
-    const names = query => M.filterMachines(status.peers, query).map(p => p.HostName);
+    const names = (query: string) => M.filterMachines(status.peers, query).map(p => p.HostName);
     assert.deepEqual(names('android'), names('ANDROID'));
     assert.deepEqual(names('android'), names('AnDrOiD'));
     assert.ok(names('android').length > 0, 'the fixture no longer carries an Android peer');
 
-    const cities = query => M.filterMullvadRegions(mullvadRegions, query).map(r => r.City);
-    const anyCity = mullvadRegions[0].City;
+    const cities = (query: string) => M.filterMullvadRegions(mullvadRegions, query).map(r => r.City);
+    const anyCity = mullvadRegions[0].City!;
     assert.deepEqual(cities(anyCity.toUpperCase()), cities(anyCity.toLowerCase()));
     assert.ok(cities(anyCity.toUpperCase()).length > 0);
 });
@@ -312,7 +329,7 @@ test('the machines search appears only for a list long enough to need it', () =>
 });
 
 test('the machines search filters the rows it leaves behind', () => {
-    const labels = query => section(M.resolvePanel(state({peers: manyPeers}), {machineQuery: query}), 'machines')
+    const labels = (query: string) => section(M.resolvePanel(state({peers: manyPeers}), {machineQuery: query}), 'machines')
         .rows.filter(r => r.kind === 'peer').map(r => r.label);
     assert.deepEqual(labels('100.64.1.7'), ['box-7']);
     assert.deepEqual(labels('BOX-11'), ['box-11']);
@@ -320,7 +337,7 @@ test('the machines search filters the rows it leaves behind', () => {
 });
 
 test('the machines search matches the owner it shows', () => {
-    const labels = query => section(M.resolvePanel(state(), {machineQuery: query}), 'machines')
+    const labels = (query: string) => section(M.resolvePanel(state(), {machineQuery: query}), 'machines')
         .rows.filter(r => r.kind === 'peer').map(r => r.label);
     assert.deepEqual(labels('bob'), ['phone']);
     assert.deepEqual(labels('alice'), ['laptop', 'router', 'offline-box']);
@@ -362,7 +379,7 @@ test('the header reflects every connection state', () => {
 });
 
 test('the hero phrase rotates and wraps in both directions', () => {
-    const phrase = i => M.resolvePanel(state(), {phraseIndex: i}).header.meta;
+    const phrase = (i: number) => M.resolvePanel(state(), {phraseIndex: i}).header.meta;
     assert.equal(phrase(0), M.ACTIVE_PHRASES[0]);
     assert.equal(phrase(M.ACTIVE_PHRASES.length), M.ACTIVE_PHRASES[0]);
     assert.equal(phrase(-1), M.ACTIVE_PHRASES[M.ACTIVE_PHRASES.length - 1]);
@@ -426,7 +443,7 @@ test('every row is fully formed, so neither frontend has to fill a gap', () => {
     const keys = ['id', 'kind', 'label', 'sublabel', 'icon', 'glyph', 'action', 'current', 'busy',
                   'bold', 'navigable', 'hint', 'actions', 'copyOptions', 'children', 'expanded',
                   'searchPlaceholder', 'payload'];
-    const visit = row => {
+    const visit = (row: ModelTypes.PanelRow): void => {
         for (const key of keys)
             assert.ok(key in row, `${row.id} is missing ${key}`);
         assert.equal(typeof row.label, 'string');
@@ -455,8 +472,8 @@ test('the translator reaches every user-visible string', () => {
 
 test('a busy row reports which command it is waiting on', () => {
     const switching = section(M.resolvePanel(state({switchingAccountId: 'bbbb'}), {}), 'connections').rows;
-    assert.equal(switching.find(r => r.label === 'personal').busy, true);
-    assert.equal(switching.find(r => r.label === 'work').busy, false);
+    assert.equal(only(switching, r => r.label === 'personal', 'personal account row').busy, true);
+    assert.equal(only(switching, r => r.label === 'work', 'work account row').busy, false);
 
     const settingId = status.exitNodes[0].id;
     const setting = section(M.resolvePanel(state({settingExitNodeId: settingId}), {}), 'exitNodes').rows;

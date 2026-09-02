@@ -2,16 +2,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import {fileURLToPath} from 'node:url';
+import {read} from './paths.js';
 
 // Distribution is a contract spread across five files: the release workflow
 // names the assets, the update helper downloads them by name, and three
 // manifests declare a version. Nothing at runtime notices when they disagree -
 // the updater just 404s - so it is checked here instead.
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(here, '..');
-const read = p => fs.readFileSync(path.join(root, p), 'utf8');
+
 
 const release = read('.github/workflows/release.yml');
 const updater = read('bin/tailgauge-update');
@@ -35,7 +33,7 @@ test('every packaged asset is actually uploaded', () => {
     const block = release.match(/files: \|\n((?:\s+\S+\n)+)/)?.[1];
     assert.ok(block, 'the release publishes no files block');
     const globs = block.trim().split('\n').map(l => l.trim()).filter(Boolean);
-    const matches = name => globs.some(g => {
+    const matches = (name: string) => globs.some(g => {
         const re = new RegExp('^' + g.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$');
         return re.test('dist/' + name);
     });

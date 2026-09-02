@@ -2,21 +2,19 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import {fileURLToPath} from 'node:url';
+import {read} from './paths.js';
 
-// The parity rule, enforced rather than remembered: shared/model.js decides what
+// The parity rule, enforced rather than remembered: shared/model.ts decides what
 // the panel contains, and a frontend decides only how a row looks. These tests
 // fail when a layout decision leaks back into one desktop, which is how the
 // three would start to disagree.
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(here, '..');
-const read = p => fs.readFileSync(path.join(root, p), 'utf8');
+
 
 const plasma = ['plasma/org.tailgauge.plasmoid/contents/ui/FullRep.qml',
                 'plasma/org.tailgauge.plasmoid/contents/ui/PanelRowView.qml',
                 'plasma/org.tailgauge.plasmoid/contents/ui/CompactRep.qml'];
-const gnome = ['gnome/tailgauge@arzaroth.github.io/extension.js'];
+const gnome = ['gnome/tailgauge@arzaroth.github.io/extension.ts'];
 const omarchy = ['omarchy/arzaroth.tailgauge/Panel.qml'];
 
 const plasmaSource = plasma.map(read).join('\n');
@@ -35,7 +33,7 @@ const gnomeStrings = new Set([...gnomeSource.matchAll(/\b_\('([^']{4,})'\)/g)].m
 test('no user-visible string is written in both frontends', () => {
     const shared = [...plasmaStrings].filter(s => gnomeStrings.has(s));
     assert.deepEqual(shared, [],
-        `these belong in shared/model.js, not in each frontend: ${shared.join(', ')}`);
+        `these belong in shared/model.ts, not in each frontend: ${shared.join(', ')}`);
 });
 
 test('frontend-local strings are desktop conventions only', () => {
@@ -86,12 +84,12 @@ test('every frontend reads the panel through resolvePanel', () => {
 test('every service hands resolvePanel the same snapshot shape', () => {
     const services = {
         plasma: 'plasma/org.tailgauge.plasmoid/contents/ui/TailscaleService.qml',
-        gnome: 'gnome/tailgauge@arzaroth.github.io/tailscale.js',
+        gnome: 'gnome/tailgauge@arzaroth.github.io/tailscale.ts',
         omarchy: 'omarchy/arzaroth.tailgauge/Service.qml'
     };
     // The object literal is flat, so its first closing brace ends the field
     // list whatever the file indents with.
-    const fields = src => {
+    const fields = (src: string): string[] => {
         const body = src.split('snapshot()')[1] ?? '';
         const start = body.indexOf('return {');
         const block = body.slice(start, body.indexOf('}', start));
@@ -170,7 +168,7 @@ test('every frontend keeps its search field across a redraw', () => {
 
     // GNOME rebuilds its menu outright, so it refills the machine rows around
     // the entry instead and gates every other rebuild on the signature.
-    const gnome = read('gnome/tailgauge@arzaroth.github.io/extension.js');
+    const gnome = read('gnome/tailgauge@arzaroth.github.io/extension.ts');
     assert.match(gnome, /_refillMachines\(entry\)/);
     assert.match(gnome, /signature !== this\._signature/);
 });
@@ -196,7 +194,7 @@ test('every frontend tells the service when the panel is on screen', () => {
 });
 
 test('the shared model owns the layout vocabulary', () => {
-    const model = read('shared/model.js');
+    const model = read('shared/model.ts');
     for (const word of ['sections', 'navigation', 'visible', 'rows', 'empty'])
         assert.match(model, new RegExp(`\\b${word}\\b`));
 });
