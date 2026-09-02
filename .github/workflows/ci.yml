@@ -24,12 +24,19 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Build
         run: scripts/build.sh
 
+      - name: Typecheck
+        run: npm run typecheck
+
       - name: Test
-        run: node --test 'test/**/*.test.mjs'
+        run: node --test 'build/.ts/tests/test/**/*.test.js'
 
       - name: Check the generated ES module resolves
         run: |
@@ -44,30 +51,39 @@ jobs:
             console.log(Object.keys(m).length + " exports");
           '
 
-      # shared/model.js is loaded by the QML engine as a plain shared script.
+      # The QML engines load their copy of the model as a plain shared script.
       # A stray `export` or `import` in it loads as a blank panel on Plasma,
-      # and nothing else in CI would notice.
-      - name: Check the shared model stays module-free
+      # and nothing else in CI would notice. The check is on the emitted copies
+      # rather than the source, because the compiler is what produces them.
+      - name: Check the shipped QML model stays module-free
         run: |
-          if grep -nE '^\s*(export|import)\s' shared/model.js; then
-            echo "::error::shared/model.js must not use module syntax - the export footer lives in shared/model.exports.mjs"
-            exit 1
-          fi
+          for file in build/org.tailgauge.plasmoid/contents/code/model.js \
+                      build/arzaroth.tailgauge/Model.js; do
+            if [[ ! -f $file ]]; then
+              echo "::error::$file was not built"
+              exit 1
+            fi
+            if grep -nE '^\s*(export|import)\s' "$file"; then
+              echo "::error::$file must not use module syntax - build.sh strips the export statement for the QML copies"
+              exit 1
+            fi
+          done
 
-      - name: Check every model function is exported or deliberately private
+      # The QML copy is the ES module minus its last line, so the two can only
+      # ship in step if they carry the same functions.
+      - name: Check the two model copies agree
         run: |
           node -e '
             const fs = require("fs");
-            const src = fs.readFileSync("shared/model.js", "utf8");
-            const defined = [...src.matchAll(/^(?:function|var|const|let)\s+(\w+)/gm)].map(m => m[1]);
-            const footer = fs.readFileSync("shared/model.exports.mjs", "utf8");
-            const exported = new Set([...footer.matchAll(/^\s*(\w+),?$/gm)].map(m => m[1]));
-            const missing = [...exported].filter(name => !defined.includes(name));
-            if (missing.length) {
-              console.error("exported but not defined: " + missing.join(", "));
+            const esm = fs.readFileSync("build/tailgauge@arzaroth.github.io/model.js", "utf8");
+            const plain = fs.readFileSync("build/org.tailgauge.plasmoid/contents/code/model.js", "utf8");
+            const names = src => [...src.matchAll(/^function\s+(\w+)/gm)].map(m => m[1]).sort();
+            const a = names(esm), b = names(plain);
+            if (a.join(",") !== b.join(",")) {
+              console.error("the ES module and the QML copy define different functions");
               process.exit(1);
             }
-            console.log(defined.length + " functions, " + exported.size + " exported");
+            console.log(a.length + " functions in both copies");
           '
 
   # The frontends install separately from anything the model job builds, so a
@@ -84,12 +100,16 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
+          cache: npm
 
       - name: Install qmllint and glib tools
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             qt6-declarative-dev-tools libglib2.0-bin
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Build
         run: scripts/build.sh
