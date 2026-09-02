@@ -150,10 +150,15 @@ if $want_omarchy; then
 
   # The plugin registry refuses symlinks anywhere inside a plugin folder, so
   # this is a copy. Re-run the installer to pick up local edits.
+  # Copy beside the target and swap, so a copy that runs out of disk halfway
+  # leaves the installed widget alone rather than deleted.
   plugindir="$HOME/.config/omarchy/plugins/$PLUGIN_ID"
+  staging="$plugindir.new.$$"
   mkdir -p "$(dirname "$plugindir")"
+  rm -rf "$staging"
+  cp -aL "$build/$PLUGIN_ID" "$staging"
   rm -rf "$plugindir"
-  cp -aL "$build/$PLUGIN_ID" "$plugindir"
+  mv "$staging" "$plugindir"
   omarchy-shell -q shell rescanPlugins >/dev/null 2>&1 || true
 
   if omarchy-plugin-list 2>/dev/null | grep -q "^$PLUGIN_ID .*enabled"; then
