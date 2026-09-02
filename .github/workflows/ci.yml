@@ -160,7 +160,7 @@ jobs:
           plugin=$(node -e 'process.stdout.write(require("./omarchy/arzaroth.tailgauge/manifest.json").version)')
           helpers=$(sed -n 's/^VERSION="\(.*\)"$/\1/p' bin/tailgauge-update)
           echo "plasmoid=$plasmoid extension=$extension plugin=$plugin helpers=$helpers"
-          if [[ $plasmoid != "$extension" || $plasmoid != "$plugin" || $plasmoid != "$helpers" ]]; then
+          if ! [[ $plasmoid == "$extension" && $plasmoid == "$plugin" && $plasmoid == "$helpers" ]]; then
             echo "::error::version mismatch across the plasmoid, the extension, the Omarchy plugin and bin/tailgauge-update"
             exit 1
           fi
