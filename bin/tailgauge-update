@@ -15,6 +15,7 @@ VERSION="0.2.0"
 REPO="Arzaroth/TailGauge"
 PLASMOID_ID="org.tailgauge.plasmoid"
 EXTENSION_UUID="tailgauge@arzaroth.github.io"
+PLUGIN_ID="arzaroth.tailgauge"
 CACHE_TTL_SEC=21600
 
 cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/tailgauge"
@@ -84,6 +85,14 @@ extension_dir() {
     }
   done
   return 1
+}
+
+# Third-party Omarchy plugins live in exactly one place, and no store installs
+# them, so a copy that is there is always ours to replace.
+plugin_dir() {
+  local dir="$HOME/.config/omarchy/plugins/$PLUGIN_ID"
+  [[ -f "$dir/manifest.json" ]] || return 1
+  printf '%s\n' "$dir"
 }
 
 # Who owns this copy decides whether we may replace it. A store-managed install
@@ -172,6 +181,9 @@ if dir=$(plasmoid_dir); then
 fi
 if dir=$(extension_dir); then
   add_target extension "$(read_json_string "$dir/metadata.json" version-name)" "$(extension_managed "$dir")" "$dir"
+fi
+if dir=$(plugin_dir); then
+  add_target plugin "$(read_json_string "$dir/manifest.json" version)" manual "$dir"
 fi
 add_target helpers "$VERSION" manual "$(dirname "$(readlink -f "$0")")"
 
@@ -273,6 +285,19 @@ for entry in "${targets[@]}"; do
     gnome-extensions install --force "$work/extension.zip" >/dev/null ||
       fail "gnome-extensions refused the new extension"
     updated+=("GNOME extension")
+    ;;
+  plugin)
+    download "tailgauge-v$latest-omarchy-plugin.tar.gz" plugin.tar.gz ||
+      fail "could not download the Omarchy plugin for $latest"
+    mkdir -p "$work/plugin" || fail "could not stage the plugin"
+    tar -C "$work/plugin" -xzf "$work/plugin.tar.gz" ||
+      fail "the plugin archive did not extract"
+    [[ -f "$work/plugin/$PLUGIN_ID/manifest.json" ]] ||
+      fail "the plugin archive does not carry $PLUGIN_ID"
+    rm -rf "$dir"
+    cp -a "$work/plugin/$PLUGIN_ID" "$dir" || fail "could not replace the plugin"
+    omarchy-shell -q shell rescanPlugins >/dev/null 2>&1 || true
+    updated+=("Omarchy widget")
     ;;
   helpers)
     download "tailgauge-v$latest-helpers.tar.gz" helpers.tar.gz ||
