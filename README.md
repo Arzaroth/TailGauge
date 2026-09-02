@@ -88,7 +88,7 @@ TailGauge has no binary, so there is nothing to self-replace the way a compiled 
 **Neither store can install `bin/` or the systemd unit** - the KDE Store ships a kpackage, EGO ships an extension zip. A store-installed TailGauge is the panel only: status, toggle, connections, exit nodes, machines and copy actions all work; **Taildrop send does not appear**, because the panel checks for `tailgauge-send` before offering it. Install the helpers from the release archive to get it back:
 
 ```bash
-curl -fsSL https://github.com/Arzaroth/TailGauge/releases/latest/download/tailgauge-v0.2.0-helpers.tar.gz | tar -xz
+curl -fsSL https://github.com/Arzaroth/TailGauge/releases/latest/download/tailgauge-v0.3.0-helpers.tar.gz | tar -xz
 install -m 755 bin/* ~/.local/bin/
 ```
 
