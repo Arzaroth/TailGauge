@@ -104,6 +104,23 @@ test('every service hands resolvePanel the same snapshot shape', () => {
             `the ${name} snapshot disagrees, so its panel can disagree`);
 });
 
+// A service that hands resolvePanel a fresh array on every poll reports a
+// change that did not happen, and the panel rebuilds every row it holds -
+// which is how a search field loses focus mid-word several times a minute.
+test('neither QML service reports unchanged state as a change', () => {
+    const services = {
+        plasma: 'plasma/org.tailgauge.plasmoid/contents/ui/TailscaleService.qml',
+        omarchy: 'omarchy/arzaroth.tailgauge/Service.qml'
+    };
+    for (const [name, file] of Object.entries(services)) {
+        const src = read(file);
+        assert.match(src, /function _stable\(/, `${name} never compares before it assigns`);
+        for (const field of ['selfPeer', 'peers', 'tailnetExitNodes', 'mullvadRegions', 'accounts'])
+            assert.match(src, new RegExp(`\\b${field} = _stable\\(`),
+                `${name} reassigns ${field} unconditionally, rebuilding the panel on every poll`);
+    }
+});
+
 test('no frontend gates a control on background work', () => {
     for (const [name, source] of frontends) {
         assert.equal(/enabled:\s*!.*busy|setSensitive\(.*busy/.test(source), false,
