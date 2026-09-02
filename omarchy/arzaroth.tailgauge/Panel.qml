@@ -415,15 +415,21 @@ Panel {
             wrapMode: Text.WordWrap
           }
 
+          // Counted, not fed the array: a Repeater handed a new JS array
+          // destroys and rebuilds every delegate it holds, and `panel` is a new
+          // object on every keystroke because the query is one of its inputs.
+          // That took the field being typed into with it. Bound by index, a
+          // delegate survives and simply re-reads its row.
           Repeater {
-            model: root.panel.sections
+            model: root.panel.sections.length
 
             Column {
               id: sectionView
-              required property var modelData
+              required property int index
+              readonly property var modelData: root.panel.sections[sectionView.index]
 
               width: column.width
-              visible: modelData.visible
+              visible: !!modelData && modelData.visible
               spacing: Style.space(10)
 
               PanelSeparator {
@@ -451,15 +457,19 @@ Panel {
               }
 
               Repeater {
-                model: sectionView.modelData.rows
+                model: sectionView.modelData ? sectionView.modelData.rows.length : 0
 
                 Column {
                   id: rowGroup
-                  required property var modelData
+                  required property int index
+                  // A shrinking list can evaluate this before the delegate goes,
+                  // so every reader below tolerates null.
+                  readonly property var modelData: sectionView.modelData
+                    ? (sectionView.modelData.rows[rowGroup.index] || null) : null
 
-                  readonly property bool isPicker: modelData.kind === "mullvadPicker"
-                  readonly property bool isEmpty: modelData.kind === "empty"
-                  readonly property bool isSearch: modelData.kind === "machineSearch"
+                  readonly property bool isPicker: !!modelData && modelData.kind === "mullvadPicker"
+                  readonly property bool isEmpty: !!modelData && modelData.kind === "empty"
+                  readonly property bool isSearch: !!modelData && modelData.kind === "machineSearch"
 
                   width: sectionView.width
                   spacing: Style.space(6)
@@ -468,7 +478,7 @@ Panel {
                     textFormat: Text.PlainText
                     visible: rowGroup.isEmpty
                     width: parent.width
-                    text: rowGroup.modelData.label
+                    text: rowGroup.modelData ? rowGroup.modelData.label : ""
                     color: root.dim
                     font.family: root.fontFamily
                     font.pixelSize: Style.font.bodySmall
@@ -480,7 +490,7 @@ Panel {
                     visible: rowGroup.isSearch
                     width: parent.width
                     foreground: root.foreground
-                    placeholderText: rowGroup.modelData.searchPlaceholder
+                    placeholderText: rowGroup.modelData ? rowGroup.modelData.searchPlaceholder : ""
                     text: root.machineQuery
                     onTextChanged: root.machineQuery = text
                     onActiveFocusChanged: if (activeFocus) root.machineSearchActive = true
@@ -508,12 +518,9 @@ Panel {
                   }
 
                   RowView {
-                    id: rowView
                     visible: !rowGroup.isEmpty && !rowGroup.isSearch
                     width: parent.width
                     row: rowGroup.modelData
-                    Component.onCompleted: root.registerRow(rowGroup.modelData.id, rowView)
-                    Component.onDestruction: root.registerRow(rowGroup.modelData.id, null)
                   }
 
                   TextField {
@@ -522,7 +529,7 @@ Panel {
                     width: parent.width - Style.space(16)
                     x: Style.space(16)
                     foreground: root.foreground
-                    placeholderText: rowGroup.modelData.searchPlaceholder
+                    placeholderText: rowGroup.modelData ? rowGroup.modelData.searchPlaceholder : ""
                     text: root.mullvadQuery
                     onTextChanged: root.mullvadQuery = text
                     onVisibleChanged: if (visible) Qt.callLater(function () { mullvadSearch.forceActiveFocus() })
@@ -549,16 +556,16 @@ Panel {
                   // children render through the same view without the component
                   // having to recurse.
                   Repeater {
-                    model: rowGroup.modelData.expanded ? rowGroup.modelData.children : []
+                    model: rowGroup.modelData && rowGroup.modelData.expanded
+                      ? rowGroup.modelData.children.length : 0
 
                     RowView {
                       id: childView
-                      required property var modelData
+                      required property int index
                       width: rowGroup.width - Style.space(16)
                       x: Style.space(16)
-                      row: modelData
-                      Component.onCompleted: root.registerRow(childView.modelData.id, childView)
-                      Component.onDestruction: root.registerRow(childView.modelData.id, null)
+                      row: rowGroup.modelData
+                        ? (rowGroup.modelData.children[childView.index] || null) : null
                     }
                   }
                 }
@@ -578,6 +585,27 @@ Panel {
     id: surface
 
     property var row: null
+
+    // A delegate outlives the row it happens to be showing now, so the registry
+    // has to follow the id rather than the component. It is what scrolls the
+    // cursor into view and opens a machine's copy menu from the keyboard.
+    property string registeredId: ""
+
+    function syncRegistration() {
+      var id = row ? String(row.id) : ""
+      if (id === registeredId) return
+      // A persistent delegate can be handed a different machine while its copy
+      // menu is open, which would offer the new one's addresses under the name
+      // that was clicked.
+      if (copyPopup.opened) copyPopup.close()
+      if (registeredId !== "") root.registerRow(registeredId, null)
+      registeredId = id
+      if (id !== "") root.registerRow(id, surface)
+    }
+
+    onRowChanged: syncRegistration()
+    Component.onCompleted: syncRegistration()
+    Component.onDestruction: if (registeredId !== "") root.registerRow(registeredId, null)
 
     function openCopyMenu() {
       if (!row || row.copyOptions.length === 0) return
