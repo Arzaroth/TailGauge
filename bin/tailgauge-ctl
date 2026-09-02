@@ -55,7 +55,7 @@ json_field() {
 self_name() { json_field HostName; }
 self_ip() { sed -n 's/.*"\(100\.[0-9][0-9.]*\)".*/\1/p' <<<"$status_raw" | head -1; }
 
-# The same column slicing shared/model.js does, for the same reason: CITY holds
+# The same column slicing shared/model.ts does, for the same reason: CITY holds
 # names with spaces in them, so the fields cannot be split on whitespace.
 current_exit_node() {
   tailscale exit-node list 2>/dev/null | awk '
