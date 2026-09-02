@@ -77,10 +77,11 @@ error the QML lint in CI cannot see, because those imports do not resolve on a
 CI runner at all.
 
 `PluginRegistry.qml` owns the manifest schema and the rule that a plugin folder
-carries no symlinks - which is why `scripts/build.sh` copies `shared/model.ts`
-in rather than linking it. `omarchy-plugin-validate` mirrors those checks, and
-running it against `build/arzaroth.tailgauge` is the cheapest way to find out
-that the schema moved:
+carries no symlinks - which is why `scripts/build.sh` copies the JavaScript it
+compiles from `shared/model.ts` in rather than linking it.
+`omarchy-plugin-validate` mirrors those checks, and running it against
+`build/arzaroth.tailgauge` is the cheapest way to find out that the schema
+moved:
 
 ```bash
 scripts/build.sh && omarchy-plugin-validate build/arzaroth.tailgauge

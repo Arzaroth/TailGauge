@@ -138,8 +138,8 @@ gnome/                   the GNOME Shell extension (GJS, TypeScript)
 omarchy/                 the Omarchy 4 bar widget (Quickshell QML)
 bin/                     tailgauge-ctl / -send / -receive / -copy / -notify / -file-select / -update / -watch
 systemd/                 the Taildrop receive user unit
-test/                    model and parity tests, run by `node --test`
-tsconfig*.json           one checking project, two emitting ones (model, GNOME)
+test/                    model and parity tests, and their own tsconfig
+tsconfig*.json           one checking project, three emitting ones (model, GNOME, tests)
 scripts/build.sh         compiles TypeScript, then assembles build/
 scripts/install.sh       builds, then installs helpers, unit and packages
 ```
