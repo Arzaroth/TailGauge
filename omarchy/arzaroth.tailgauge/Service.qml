@@ -96,6 +96,14 @@ Item {
     }
   }
 
+  // A poll that changed nothing must not look like a change. Every parse builds
+  // fresh arrays, and a new one reaches resolvePanel() as a different panel,
+  // which rebuilds every row in it - several times a minute, destroying
+  // whatever a search field held along with the focus that was in it.
+  function _stable(current, next) {
+    return JSON.stringify(current) === JSON.stringify(next) ? current : next
+  }
+
   function setting(name, fallback) {
     var value = settings ? settings[name] : undefined
     return value === undefined || value === null ? fallback : value
@@ -241,19 +249,19 @@ Item {
       root.settingExitNodeId = ""
       delayedRefresh.restart()
     } else if (kind === "watch") {
-      // 0 means something changed, 2 means the wait simply expired. Anything
-      // else is a broken watcher, so back off rather than spin.
+    // 0 means something changed, 2 means the wait simply expired. Anything
+    // else is a broken watcher, so back off rather than spin.
       if (exitCode === 0) root.refresh()
       rearmWatch.interval = (exitCode === 0 || exitCode === 2) ? 250 : 30000
       rearmWatch.restart()
     } else if (kind === "helpers") {
       root.helpers = exitCode === 0
     } else if (kind === "update") {
-      // --check exits 2 when an update is available, which is a result, not a
-      // failure.
+    // --check exits 2 when an update is available, which is a result, not a
+    // failure.
       if (exitCode === 0 || exitCode === 2) {
         try {
-          root.update = JSON.parse(stdout)
+          root.update = root._stable(root.update, JSON.parse(stdout))
         } catch (e) {
           root.update = { available: false, updatable: false, latest: "", url: "", error: "" }
         }
@@ -372,10 +380,10 @@ Item {
         launched = true
       }
     }
-    // Arm on the launch that needs watching and leave it alone after that.
-    // Restarting it every refresh pushes the deadline out ahead of a hung
-    // process forever once the refresh interval is shorter than the timeout,
-    // and refreshIntervalSec goes down to five seconds.
+  // Arm on the launch that needs watching and leave it alone after that.
+  // Restarting it every refresh pushes the deadline out ahead of a hung
+  // process forever once the refresh interval is shorter than the timeout,
+  // and refreshIntervalSec goes down to five seconds.
     if (launched && !pollWatchdog.running) pollWatchdog.start()
   }
 
@@ -420,7 +428,7 @@ Item {
 
     backendState = parsed.backendState
     running = parsed.running
-    // Reality caught up to the pending toggle, so stop overriding.
+  // Reality caught up to the pending toggle, so stop overriding.
     if (_desired !== -1 && running === (_desired === 1)) _desired = -1
     needsLogin = parsed.needsLogin
     authUrl = parsed.authUrl
@@ -430,10 +438,10 @@ Item {
     selfDnsName = parsed.selfDnsName
     selfIp = parsed.selfIp
     selfUserId = parsed.selfUserId
-    selfPeer = parsed.selfPeer
+    selfPeer = _stable(selfPeer, parsed.selfPeer)
     fileSharing = parsed.fileSharing
-    peers = parsed.running ? parsed.peers : []
-    tailnetExitNodes = parsed.running ? parsed.exitNodes : []
+    peers = _stable(peers, parsed.running ? parsed.peers : [])
+    tailnetExitNodes = _stable(tailnetExitNodes, parsed.running ? parsed.exitNodes : [])
     exitNodes = parsed.running ? tailnetExitNodes.concat(mullvadRegions) : []
 
     if (needsLogin) statusText = "Needs login"
@@ -453,7 +461,7 @@ Item {
 
   function parseAccounts(raw) {
     var parsed = Model.parseAccounts(raw)
-    accounts = parsed.accounts
+    accounts = _stable(accounts, parsed.accounts)
     selectedAccountId = parsed.selectedAccountId
     selectedAccountLabel = parsed.selectedAccountLabel
     accountsAccessDenied = false
@@ -461,7 +469,7 @@ Item {
 
   function parseMullvadExitNodes(raw) {
     mullvadExitNodes = Model.parseExitNodeList(raw)
-    mullvadRegions = Model.mullvadRegionOptions(mullvadExitNodes)
+    mullvadRegions = _stable(mullvadRegions, Model.mullvadRegionOptions(mullvadExitNodes))
     exitNodes = running ? tailnetExitNodes.concat(mullvadRegions) : []
   }
 
@@ -472,8 +480,8 @@ Item {
   }
 
   function down() {
-    // No progress status here: the greyed icon and hero line already convey the
-    // optimistic off, so only a failure is worth a message.
+  // No progress status here: the greyed icon and hero line already convey the
+  // optimistic off, so only a failure is worth a message.
     _desired = 0
     _run("action", ["tailscale", "down"])
   }
@@ -527,7 +535,7 @@ Item {
     if (_loginUrlOpened) return true
     var url = Model.firstUrl(text, allowFallback === true ? authUrl : "")
     if (url !== "") {
-      // Turning on ended up needing browser auth, so stop pretending we're up.
+    // Turning on ended up needing browser auth, so stop pretending we're up.
       _desired = -1
       _loginUrlOpened = true
       _loginInProgress = false
@@ -595,8 +603,8 @@ Item {
   }
 
   Timer {
-    // The watcher carries the news; this is the floor under it, and the only
-    // thing running when the watcher is unavailable.
+  // The watcher carries the news; this is the floor under it, and the only
+  // thing running when the watcher is unavailable.
     interval: (root.attentive ? 3 : Math.max(5, root.refreshIntervalSec)) * 1000
     repeat: true
     running: true
@@ -605,9 +613,9 @@ Item {
   }
 
   Timer {
-    // After a fresh login session the first poll usually lands before tailscaled
-    // has connected, which left the icon stale until the next periodic refresh.
-    // Poll quickly until the service shows up, or give up after ~30 seconds.
+  // After a fresh login session the first poll usually lands before tailscaled
+  // has connected, which left the icon stale until the next periodic refresh.
+  // Poll quickly until the service shows up, or give up after ~30 seconds.
     id: startupRamp
     property int ticks: 0
     interval: 2000
@@ -621,8 +629,8 @@ Item {
   }
 
   Timer {
-    // The helper caches its GitHub answer, so this mostly reads a file; the
-    // interval is about how stale the banner may be, not about rate limits.
+  // The helper caches its GitHub answer, so this mostly reads a file; the
+  // interval is about how stale the banner may be, not about rate limits.
     interval: 6 * 3600 * 1000
     repeat: true
     running: true
@@ -638,11 +646,11 @@ Item {
   }
 
   Timer {
-    // Every poll is skipped while its own command is still running, so one that
-    // never exits - tailscale can hang on a network that is coming and going -
-    // silently stops the panel refreshing at all, and it stays stopped. Reap
-    // anything still running well inside the refresh interval so the next tick
-    // starts clean.
+  // Every poll is skipped while its own command is still running, so one that
+  // never exits - tailscale can hang on a network that is coming and going -
+  // silently stops the panel refreshing at all, and it stays stopped. Reap
+  // anything still running well inside the refresh interval so the next tick
+  // starts clean.
     id: pollWatchdog
     interval: 15000
     repeat: false
