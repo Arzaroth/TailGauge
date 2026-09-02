@@ -10,7 +10,7 @@ ship. Nothing tells us when either moves except this check.
 
 | Upstream | What we took | What can rot |
 | --- | --- | --- |
-| [basecamp/omarchy](https://github.com/basecamp/omarchy) (MIT, default branch `quattro`) | `shared/model.js` from their `Model.js`, the Taildrop helpers from their `omarchy-tailscale-*` scripts, and `omarchy/arzaroth.tailgauge` rides on the shell's own QML components | Their widget grows a feature ours lacks or fixes a parse bug still in ours; the shell APIs our widget imports move, and the project is `4.x.alpha` with no stability promise |
+| [basecamp/omarchy](https://github.com/basecamp/omarchy) (MIT, default branch `quattro`) | `shared/model.ts` from their `Model.js`, the Taildrop helpers from their `omarchy-tailscale-*` scripts, and `omarchy/arzaroth.tailgauge` rides on the shell's own QML components | Their widget grows a feature ours lacks or fixes a parse bug still in ours; the shell APIs our widget imports move, and the project is `4.x.alpha` with no stability promise |
 | [tailscale/tailscale](https://github.com/tailscale/tailscale) | Nothing copied. The model parses `status --json`, `exit-node list`, `switch --list --json`, and the helpers drive `file get` and `debug watch-ipn` | A field is renamed or dropped, the exit-node table changes columns, a flag moves. Every frontend goes blank at once and CI cannot see it |
 
 Read `BASELINES.md` in this folder first: it records what each upstream looked
@@ -21,7 +21,7 @@ like at the last check. Update it at the end of every run.
 Two questions, one repo.
 
 **1. Did their Tailscale widget grow something ours lacks, or fix something ours
-still has wrong?** This is the one that matters most: `shared/model.js` is their
+still has wrong?** This is the one that matters most: `shared/model.ts` is their
 `Model.js` with our additions, so their parser fixes are our parser fixes.
 
 ```bash
@@ -37,7 +37,7 @@ our copy is reorganized, so a hunk that looks unrelated usually is not:
 ```bash
 gh api repos/basecamp/omarchy/contents/shell/plugins/panels/tailscale/Model.js \
   --jq '.content' | base64 -d >/tmp/upstream-model.js
-diff /tmp/upstream-model.js shared/model.js
+diff /tmp/upstream-model.js shared/model.ts
 ```
 
 Expect a large diff: the panel resolver, the layout vocabulary, the owner
@@ -77,7 +77,7 @@ error the QML lint in CI cannot see, because those imports do not resolve on a
 CI runner at all.
 
 `PluginRegistry.qml` owns the manifest schema and the rule that a plugin folder
-carries no symlinks - which is why `scripts/build.sh` copies `shared/model.js`
+carries no symlinks - which is why `scripts/build.sh` copies `shared/model.ts`
 in rather than linking it. `omarchy-plugin-validate` mirrors those checks, and
 running it against `build/arzaroth.tailgauge` is the cheapest way to find out
 that the schema moved:

@@ -12,7 +12,7 @@ Heinemeier Hansson), branch `quattro`:
 
 What was carried over and what was rewritten:
 
-  shared/model.js
+  shared/model.ts
       Derived from Model.js, near-verbatim. The status, account and exit-node
       parsing, the Mullvad region grouping and the Taildrop capability checks
       are upstream's. Added here: osIconName, the recent-region helpers that
@@ -34,7 +34,7 @@ What was carried over and what was rewritten:
       Quickshell again, so it rides on the same shell APIs upstream's widget
       does (qs.Ui, qs.Commons), and TailscaleIcon.qml is upstream's dot-grid
       mark near-verbatim. Panel.qml and Service.qml are rewritten against
-      shared/model.js: the panel is resolved by the model rather than assembled
+      shared/model.ts: the panel is resolved by the model rather than assembled
       in QML, and the cursor is one index into it rather than a per-section
       focus state machine. It is a third-party plugin (arzaroth.tailgauge) and
       does not replace or modify omarchy.tailscale.

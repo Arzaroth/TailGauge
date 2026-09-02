@@ -112,13 +112,13 @@ Tagging `vX.Y.Z` publishes:
 - `tailgauge-vX.Y.Z-omarchy-plugin.tar.gz` - unpacks into `~/.config/omarchy/plugins/`
 - `tailgauge-vX.Y.Z-helpers.tar.gz` - `bin/` and the systemd unit
 
-`test/distribution.test.mjs` fails the build if those names stop matching what `tailgauge-update` downloads, or if the four declared versions drift apart.
+`test/distribution.test.ts` fails the build if those names stop matching what `tailgauge-update` downloads, or if the four declared versions drift apart.
 
 ## The parity rule
 
-The three frontends do not each decide what to draw. `shared/model.js` resolves the whole panel and hands all of them the same answer:
+The three frontends do not each decide what to draw. `shared/model.ts` resolves the whole panel and hands all of them the same answer:
 
-```js
+```ts
 resolvePanel(state, {t, recentRegions, mullvadQuery, mullvadPickerOpen, machineQuery, phraseIndex})
   -> {header, status, sections: [{id, title, visible, empty, rows}], navigation}
 ```
@@ -127,24 +127,32 @@ It owns **which sections exist, in what order, when each is visible, which rows 
 
 Strings are chosen by the model and resolved by the caller: Plasma passes `i18n`, GNOME passes `gettext`, and Omarchy - whose shell has no translation layer - passes nothing and renders them as they come.
 
-This is enforced, not remembered. `test/parity.test.mjs` fails the build if a user-visible string is written in two frontends or written in the Omarchy one at all, if any of them re-derives section visibility or the exit-node and copy-option lists, or if the three services stop handing `resolvePanel()` the same snapshot shape.
+This is enforced, not remembered. `test/parity.test.ts` fails the build if a user-visible string is written in two frontends or written in the Omarchy one at all, if any of them re-derives section visibility or the exit-node and copy-option lists, or if the three services stop handing `resolvePanel()` the same snapshot shape.
 
 ## Layout
 
 ```
-shared/model.js          the only copy of the data model AND the panel layout
-shared/model.exports.mjs the export footer appended for the GNOME build
+shared/model.ts          the only copy of the data model AND the panel layout
 plasma/                  the Plasma 6 plasmoid (QML)
-gnome/                   the GNOME Shell extension (GJS)
+gnome/                   the GNOME Shell extension (GJS, TypeScript)
 omarchy/                 the Omarchy 4 bar widget (Quickshell QML)
 bin/                     tailgauge-ctl / -send / -receive / -copy / -notify / -file-select / -update / -watch
 systemd/                 the Taildrop receive user unit
 test/                    model and parity tests, run by `node --test`
-scripts/build.sh         assembles build/, wiring the shared model into both
+tsconfig*.json           one checking project, two emitting ones (model, GNOME)
+scripts/build.sh         compiles TypeScript, then assembles build/
 scripts/install.sh       builds, then installs helpers, unit and packages
 ```
 
-`shared/model.js` is written without module syntax so both QML engines can load it as a plain shared script. `scripts/build.sh` copies it into the plasmoid and the Omarchy plugin as-is, and concatenates it with `model.exports.mjs` to produce the ES module the GNOME extension imports. **Edit `shared/model.js`, never the copies under `build/`.**
+### TypeScript
+
+Everything that is not QML or shell is TypeScript, checked under `strict`. Nothing is authored in JavaScript, and nothing under `build/` is edited by hand.
+
+`shared/model.ts` compiles once and ships twice. The GNOME extension imports the ES module as emitted; both QML engines load a copy with the trailing `export` statement removed, because a QML shared script cannot carry module syntax - a stray `export` there loads as a blank panel on Plasma. `scripts/build.sh` makes both copies and CI checks the shipped ones rather than the source. The model targets ES5 with the ES5 library so a newer built-in cannot be reached for by accident, since the QML engines are the oldest runtime it lands in.
+
+The GNOME sources are typed against [`@girs/gnome-shell`](https://www.npmjs.com/package/@girs/gnome-shell), pinned to the newest shell the extension supports. `tsconfig.gnome.json` uses `rootDirs` so `import * as Model from './model.js'` resolves to `shared/model.ts` when checking while the emitted specifier stays the flat one the packaged extension actually has. The tests live in their own project because Node's `global` and the shell's are different objects, and one set of ambient types cannot describe both.
+
+**Edit the `.ts` sources, never the copies under `build/`.**
 
 ## Settings
 
@@ -168,12 +176,14 @@ Plasma stores these in the widget's own configuration, GNOME in `org.gnome.shell
 ## Development
 
 ```bash
-scripts/build.sh                    # assemble build/ without installing
-node --test 'test/**/*.test.mjs'    # model + parity tests (needs build.sh first)
+npm install                         # once, for the TypeScript toolchain
+npm run build                       # compile and assemble build/ without installing
+npm run typecheck                   # tsc over every project, emitting nothing
+npm test                            # build, then the model, parity and distribution tests
 scripts/install.sh                  # build and install for the running desktop
 ```
 
-CI runs those on every pull request, along with `qmllint` for QML syntax on both QML frontends, `node --check` on the extension, `shellcheck` on the helpers, and a check that all three manifests declare the same version. Tagging `vX.Y.Z` builds and publishes the plasmoid package, the GNOME extension zip, the Omarchy plugin tarball and the helpers.
+CI runs those on every pull request, along with `qmllint` for QML syntax on both QML frontends, `node --check` on the emitted extension, `shellcheck` on the helpers, and a check that all three manifests declare the same version. Tagging `vX.Y.Z` builds and publishes the plasmoid package, the GNOME extension zip, the Omarchy plugin tarball and the helpers.
 
 Plasma logs QML errors under the `plasmashell` identifier rather than a unit, because it usually runs as a transient `app-plasmashell@<hash>.service`:
 
