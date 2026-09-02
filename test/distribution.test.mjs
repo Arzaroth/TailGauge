@@ -68,7 +68,9 @@ test('all four versions agree', () => {
 // The registry reads the manifest the archive carries, so a tarball that
 // unpacks under any other name installs a plugin the updater cannot find again.
 test('the Omarchy plugin ships under the id its manifest declares', () => {
-    assert.match(release, new RegExp(`tar -czf "dist/tailgauge-\\$safe-omarchy-plugin.tar.gz" -C build ${pluginManifest.id}`));
+    // The id carries a dot, which would otherwise match any character here.
+    const id = pluginManifest.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    assert.match(release, new RegExp(`tar -czf "dist/tailgauge-\\$safe-omarchy-plugin\\.tar\\.gz" -C build ${id}`));
     assert.match(pluginManifest.id, /^[A-Za-z0-9][A-Za-z0-9._-]*$/);
     assert.ok(!pluginManifest.id.startsWith('omarchy.'),
         'omarchy.* is reserved for first-party plugins');
@@ -89,7 +91,7 @@ test('the updater points at the repository the manifests name', () => {
 test('the updater knows the package ids the manifests declare', () => {
     assert.match(updater, new RegExp(`PLASMOID_ID="${plasmoidManifest.KPlugin.Id}"`));
     assert.match(updater, new RegExp(`EXTENSION_UUID="${extensionManifest.uuid}"`));
-    assert.match(updater, new RegExp(`PLUGIN_ID="${pluginManifest.id}"`));
+    assert.match(updater, new RegExp(`PLUGIN_ID="${pluginManifest.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`));
 });
 
 test('the release refuses to publish a tag the manifests disagree with', () => {
