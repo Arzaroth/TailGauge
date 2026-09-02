@@ -1,10 +1,222 @@
-// Canonical Tailscale data model, shared by the Plasma plasmoid and the GNOME
-// extension. Free of module syntax so the QML engine can load it as a plain
-// shared script; scripts/build.sh appends model.exports.mjs to produce the ES
-// module the GNOME extension imports.
+// Canonical Tailscale data model, shared by the Plasma plasmoid, the GNOME
+// extension and the Omarchy plugin. scripts/build.sh compiles this file once
+// and ships the result twice: as the ES module the GNOME extension imports,
+// and with the export footer stripped as the plain shared script both QML
+// engines load.
 
-function filterIPv4(ips) {
-  var result = []
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+// Everything `tailscale` hands back is parsed JSON of a shape the daemon is
+// free to change between releases, so the parsers take it loosely and every
+// value is coerced on the way in. Only what this model *produces* is precise.
+type Raw = any
+
+export type Translate = (text: string) => string
+
+export interface Peer {
+  id: string
+  HostName: string
+  UserID?: string
+  UserName?: string
+  TaildropTarget?: number
+  DNSName: string
+  DisplayName: string
+  TailscaleIPs: string[]
+  TailscaleIPv6: string[]
+  Online: boolean
+  OS: string
+  Tags: string[]
+  ExitNodeOption: boolean
+  ExitNode: boolean
+  Mullvad: boolean
+  Country?: string
+  City?: string
+  Status?: string
+  MullvadRegion?: boolean
+}
+
+export interface Account {
+  id: string
+  nickname?: string
+  tailnet?: string
+  account?: string
+  selected?: boolean
+}
+
+// A union rather than one bag of optionals, so a consumer that has ruled out
+// the two failure shapes is handed a status whose fields are all there.
+export interface StatusError {
+  ok: false
+  unavailable: true
+  message: string
+  error: string
+}
+
+export interface StatusUnavailable {
+  ok: true
+  unavailable: true
+  message: string
+}
+
+export interface StatusOk {
+  ok: true
+  unavailable: false
+  backendState: string
+  running: boolean
+  needsLogin: boolean
+  authUrl: string
+  selfName: string
+  selfDnsName: string
+  selfIp: string
+  selfUserId: string
+  selfPeer: Peer
+  fileSharing: boolean
+  peers: Peer[]
+  exitNodes: Peer[]
+}
+
+export type StatusResult = StatusOk | StatusUnavailable | StatusError
+
+export interface AccountsResult {
+  accounts: Account[]
+  selectedAccountId: string
+  selectedAccountLabel: string
+}
+
+export interface LoginPlan {
+  authUrl: string
+  command: string[]
+}
+
+export interface CopyOption {
+  kind: string
+  label: string
+}
+
+export interface RowAction {
+  id: string
+  label: string
+  icon: string
+  glyph: string
+}
+
+export interface UpdateInfo {
+  available?: boolean
+  updatable?: boolean
+  latest?: string
+  url?: string
+  error?: string
+}
+
+export interface PanelRow {
+  id: string
+  kind: string
+  label: string
+  sublabel: string
+  icon: string
+  glyph: string
+  action: string
+  current: boolean
+  busy: boolean
+  bold: boolean
+  navigable: boolean
+  hint: string
+  actions: RowAction[]
+  copyOptions: CopyOption[]
+  children: PanelRow[]
+  expanded: boolean
+  searchPlaceholder: string
+  payload: Raw
+}
+
+// What panelRow() accepts: the same shape, with everything but the identity
+// optional, since each caller sets only the fields its row actually uses.
+type PanelRowInput = Partial<PanelRow> & { id: string }
+
+export interface PanelSection {
+  id: string
+  title: string
+  visible: boolean
+  empty: string
+  rows: PanelRow[]
+}
+
+export interface PanelHeader {
+  id: string
+  title: string
+  meta: string
+  action: string
+  toggleVisible: boolean
+  toggleEnabled: boolean
+  toggleChecked: boolean
+  busy: boolean
+  toggleHint: string
+  crossed: boolean
+  warning: boolean
+  dimmed: boolean
+}
+
+export interface PanelStatus {
+  text: string
+  tone: string
+}
+
+export interface NavEntry {
+  sectionId: string
+  rowId: string
+  action: string
+}
+
+export interface Panel {
+  header: PanelHeader
+  status: PanelStatus
+  sections: PanelSection[]
+  navigation: NavEntry[]
+}
+
+// The frontend-owned view state the resolver reads. Every field is optional:
+// a frontend that has not polled yet passes what it has.
+export interface PanelState {
+  installed?: boolean
+  running?: boolean
+  active?: boolean
+  needsLogin?: boolean
+  busy?: boolean
+  helpers?: boolean
+  updating?: boolean
+  selfName?: string
+  selfIp?: string
+  selfUserId?: string
+  selfPeer?: Peer | null
+  fileSharing?: boolean
+  peers?: Peer[]
+  tailnetExitNodes?: Peer[]
+  mullvadRegions?: Peer[]
+  accounts?: Account[]
+  selectedAccountId?: string
+  switchingAccountId?: string
+  settingExitNodeId?: string
+  accountsAccessDenied?: boolean
+  actionStatus?: string
+  lastError?: string
+  update?: UpdateInfo
+}
+
+export interface ResolveOptions {
+  t?: Translate
+  phraseIndex?: number
+  recentRegions?: string[]
+  mullvadQuery?: string
+  mullvadPickerOpen?: boolean
+  machineQuery?: string
+}
+
+// ---------------------------------------------------------------------------
+
+function filterIPv4(ips: Raw): string[] {
+  var result: string[] = []
   if (!ips || typeof ips.length !== "number") return result
   for (var i = 0; i < ips.length; i++) {
     var ip = String(ips[i] || "")
@@ -13,8 +225,8 @@ function filterIPv4(ips) {
   return result
 }
 
-function filterIPv6(ips) {
-  var result = []
+function filterIPv6(ips: Raw): string[] {
+  var result: string[] = []
   if (!ips || typeof ips.length !== "number") return result
   for (var i = 0; i < ips.length; i++) {
     var ip = String(ips[i] || "")
@@ -23,37 +235,37 @@ function filterIPv6(ips) {
   return result
 }
 
-function cleanDnsName(name) {
+function cleanDnsName(name: Raw): string {
   var value = String(name || "")
   return value.charAt(value.length - 1) === "." ? value.slice(0, -1) : value
 }
 
-function shortDnsName(name) {
+function shortDnsName(name: Raw): string {
   var clean = cleanDnsName(name)
   if (clean === "") return ""
   return clean.split(".")[0] || clean
 }
 
-function displayHostName(hostName, dnsName) {
+function displayHostName(hostName: Raw, dnsName: Raw): string {
   var host = String(hostName || "")
   if (host !== "" && host.toLowerCase() !== "localhost") return host
   return shortDnsName(dnsName) || host || "Unknown"
 }
 
-function isMullvadHost(name) {
+function isMullvadHost(name: Raw): boolean {
   var value = String(name || "").toLowerCase()
   var suffix = ".mullvad.ts.net"
   return value.length > suffix.length && value.indexOf(suffix) === value.length - suffix.length
 }
 
-function isMullvadPeer(peer) {
+function isMullvadPeer(peer: Raw): boolean {
   var hostName = String((peer && peer.HostName) || "")
   var dnsName = cleanDnsName((peer && peer.DNSName) || "")
   return isMullvadHost(dnsName) || isMullvadHost(hostName)
 }
 
 // Nerd Font glyphs, matching what the panel fonts on both desktops carry.
-function osIcon(os) {
+function osIcon(os: Raw): string {
   var value = String(os || "").toLowerCase()
   if (value === "linux") return "󰌽"
   if (value === "macos" || value === "ios") return "󰀵"
@@ -65,7 +277,7 @@ function osIcon(os) {
 
 // Freedesktop icon names for the same set, for GNOME's symbolic icon theme
 // and any Plasma fallback that would rather not depend on a Nerd Font.
-function osIconName(os) {
+function osIconName(os: Raw): string {
   var value = String(os || "").toLowerCase()
   if (value === "linux") return "computer-symbolic"
   if (value === "macos") return "computer-symbolic"
@@ -75,7 +287,7 @@ function osIconName(os) {
   return "network-server-symbolic"
 }
 
-function accountLabel(account) {
+function accountLabel(account: Account | null | undefined): string {
   if (!account) return "Unknown account"
   if (account.nickname) return String(account.nickname)
   if (account.tailnet) return String(account.tailnet)
@@ -83,7 +295,7 @@ function accountLabel(account) {
   return String(account.id || "Unknown account")
 }
 
-function loginPlan(needsLogin, authUrl) {
+function loginPlan(needsLogin: Raw, authUrl: Raw): LoginPlan {
   var url = String(authUrl || "").trim()
   if (needsLogin === true && /^https?:\/\//.test(url)) {
     return { authUrl: url, command: [] }
@@ -93,7 +305,7 @@ function loginPlan(needsLogin, authUrl) {
 
 // Taildrop is a tailnet feature the admin can turn off, so the button for it
 // only makes sense when this profile actually carries the capability.
-function hasFileSharing(self) {
+function hasFileSharing(self: Raw): boolean {
   var capability = "https://tailscale.com/cap/file-sharing"
   var capMap = (self && self.CapMap) || null
   if (capMap && capMap[capability] !== undefined) return true
@@ -107,7 +319,7 @@ function hasFileSharing(self) {
 // Tailscale grades every peer itself - offline, wrong owner, an OS without
 // Taildrop, no peer API - so take its word when the status carries one, and
 // fall back to same-owner for daemons too old to say.
-function isTaildropTarget(peer, selfUserId) {
+function isTaildropTarget(peer: Raw, selfUserId: Raw): boolean {
   var target = peer && peer.TaildropTarget
   if (typeof target === "number" && target !== 0) return target === 1
   var owner = String((peer && peer.UserID) || "")
@@ -116,7 +328,7 @@ function isTaildropTarget(peer, selfUserId) {
 
 // The display name first: a panel row is narrow, and "Alice Doe" fits where
 // "alice.doe@example.com" would only elide.
-function userLabel(user) {
+function userLabel(user: Raw): string {
   if (!user) return ""
   var display = String(user.DisplayName || user.displayName || "")
   if (display !== "") return display
@@ -125,21 +337,21 @@ function userLabel(user) {
   return String(user.ID || user.id || "")
 }
 
-function usersById(raw) {
-  var users = {}
+function usersById(raw: Raw): { [id: string]: string } {
+  var users: { [id: string]: string } = {}
   var source = raw || {}
   for (var id in source) users[String(id)] = userLabel(source[id])
   return users
 }
 
-function peerOwner(peer, users) {
+function peerOwner(peer: Raw, users: Raw): string {
   var id = String((peer && peer.UserID) || "")
   if (id === "") return ""
   var map = users || {}
   return String(map[id] || "")
 }
 
-function peerFromStatus(id, peer, users) {
+function peerFromStatus(id: string, peer: Raw, users: Raw): Peer {
   return {
     id: id,
     HostName: displayHostName(peer.HostName, peer.DNSName),
@@ -159,14 +371,14 @@ function peerFromStatus(id, peer, users) {
   }
 }
 
-function sliceTableColumn(line, start, end) {
+function sliceTableColumn(line: Raw, start: number, end: number): string {
   var text = String(line || "")
   if (start < 0 || start >= text.length) return ""
   if (end < 0) return text.substring(start).trim()
   return text.substring(start, Math.min(end, text.length)).trim()
 }
 
-function parseExitNodeList(raw) {
+function parseExitNodeList(raw: Raw): Peer[] {
   var lines = String(raw || "").split(/\r?\n/)
   var header = ""
   var headerIndex = -1
@@ -184,7 +396,7 @@ function parseExitNodeList(raw) {
   var countryStart = header.indexOf("COUNTRY")
   var cityStart = header.indexOf("CITY")
   var statusStart = header.indexOf("STATUS")
-  var byHost = {}
+  var byHost: { [host: string]: Peer } = {}
 
   for (var j = headerIndex + 1; j < lines.length; j++) {
     var line = lines[j]
@@ -216,7 +428,7 @@ function parseExitNodeList(raw) {
     }
   }
 
-  var result = []
+  var result: Peer[] = []
   for (var hostName in byHost) result.push(byHost[hostName])
   result.sort(function(a, b) {
     var countryCompare = String(a.Country).localeCompare(String(b.Country))
@@ -226,9 +438,9 @@ function parseExitNodeList(raw) {
   return result
 }
 
-function mullvadRegionOptions(nodes) {
-  var byRegion = {}
-  var values = Array.isArray(nodes) ? nodes : []
+function mullvadRegionOptions(nodes: Raw): Peer[] {
+  var byRegion: { [key: string]: Peer } = {}
+  var values: Raw[] = Array.isArray(nodes) ? nodes : []
   for (var i = 0; i < values.length; i++) {
     var node = values[i] || {}
     if (node.Mullvad !== true) continue
@@ -240,7 +452,7 @@ function mullvadRegionOptions(nodes) {
     var key = country + "\n" + city
     if (byRegion[key]) continue
 
-    var option = {}
+    var option: Raw = {}
     for (var propertyName in node) option[propertyName] = node[propertyName]
     option.id = "mullvad-region:" + key
     option.DisplayName = city + ", " + country
@@ -250,7 +462,7 @@ function mullvadRegionOptions(nodes) {
     byRegion[key] = option
   }
 
-  var result = []
+  var result: Peer[] = []
   for (var name in byRegion) result.push(byRegion[name])
   result.sort(function(a, b) {
     var countryCompare = String(a.Country).localeCompare(String(b.Country))
@@ -260,7 +472,7 @@ function mullvadRegionOptions(nodes) {
   return result
 }
 
-function mullvadRegionKey(node) {
+function mullvadRegionKey(node: Raw): string {
   if (!node) return ""
   var country = String(node.Country || "")
   var city = String(node.City || "")
@@ -268,7 +480,7 @@ function mullvadRegionKey(node) {
   return country + "\n" + city
 }
 
-function mullvadRegionTitle(peer) {
+function mullvadRegionTitle(peer: Raw): string {
   if (!peer) return "Unknown"
   var city = String(peer.City || "").trim()
   var country = String(peer.Country || "").trim()
@@ -276,15 +488,15 @@ function mullvadRegionTitle(peer) {
   return city
 }
 
-function mullvadRegionSubtitle(peer) {
+function mullvadRegionSubtitle(peer: Raw): string {
   if (!peer) return ""
   return String(peer.Country || "").trim()
 }
 
-function filterMullvadRegions(regions, query) {
+function filterMullvadRegions(regions: Raw, query: Raw): Peer[] {
   var needle = String(query || "").trim().toLowerCase()
-  var values = Array.isArray(regions) ? regions : []
-  var result = []
+  var values: Raw[] = Array.isArray(regions) ? regions : []
+  var result: Peer[] = []
   for (var i = 0; i < values.length; i++) {
     var node = values[i]
     var label = (String(node.City || "") + " " + String(node.Country || "")).toLowerCase()
@@ -295,12 +507,12 @@ function filterMullvadRegions(regions, query) {
 
 // Everything a machine row shows is searchable, plus the OS, so "linux" or a
 // half-remembered address finds a machine as readily as its name does.
-function filterMachines(peers, query) {
+function filterMachines(peers: Raw, query: Raw): Peer[] {
   var needle = String(query || "").trim().toLowerCase()
-  var values = Array.isArray(peers) ? peers : []
+  var values: Raw[] = Array.isArray(peers) ? peers : []
   if (needle === "") return values.slice(0)
 
-  var result = []
+  var result: Peer[] = []
   for (var i = 0; i < values.length; i++) {
     var peer = values[i]
     var haystack = [
@@ -317,8 +529,8 @@ function filterMachines(peers, query) {
   return result
 }
 
-function mullvadRegionNode(regions, region) {
-  var values = Array.isArray(regions) ? regions : []
+function mullvadRegionNode(regions: Raw, region: Raw): Peer | null {
+  var values: Raw[] = Array.isArray(regions) ? regions : []
   for (var i = 0; i < values.length; i++) {
     var node = values[i]
     if (mullvadRegionKey(node) === String(region || "")) return node
@@ -329,12 +541,12 @@ function mullvadRegionNode(regions, region) {
 
 // The active region first, then the most recently used ones, capped at `limit`
 // so the exit-node list stays a shortlist rather than the whole Mullvad fleet.
-function recentMullvadNodes(regions, recent, limit) {
+function recentMullvadNodes(regions: Raw, recent: Raw, limit?: number): Peer[] {
   var cap = typeof limit === "number" ? limit : 5
-  var values = Array.isArray(regions) ? regions : []
-  var history = Array.isArray(recent) ? recent : []
-  var nodes = []
-  var seen = {}
+  var values: Raw[] = Array.isArray(regions) ? regions : []
+  var history: Raw[] = Array.isArray(recent) ? recent : []
+  var nodes: Peer[] = []
+  var seen: { [key: string]: boolean } = {}
 
   for (var a = 0; a < values.length && nodes.length < cap; a++) {
     var active = values[a]
@@ -356,11 +568,11 @@ function recentMullvadNodes(regions, recent, limit) {
   return nodes
 }
 
-function pushRecentMullvad(recent, region, limit) {
+function pushRecentMullvad(recent: Raw, region: Raw, limit?: number): string[] {
   var cap = typeof limit === "number" ? limit : 5
   var name = String(region || "")
   if (name === "") return Array.isArray(recent) ? recent.slice(0) : []
-  var history = Array.isArray(recent) ? recent : []
+  var history: Raw[] = Array.isArray(recent) ? recent : []
   var next = [name]
   for (var i = 0; i < history.length && next.length < cap; i++) {
     var existing = String(history[i] || "")
@@ -369,7 +581,7 @@ function pushRecentMullvad(recent, region, limit) {
   return next
 }
 
-function parseStatus(raw) {
+function parseStatus(raw: Raw): StatusResult {
   var text = String(raw || "").trim()
   if (text === "") return { ok: true, unavailable: true, message: "Disconnected" }
 
@@ -385,8 +597,8 @@ function parseStatus(raw) {
       selfPeer.TailscaleIPs = filterIPv4(data.TailscaleIPs || [])
       selfPeer.TailscaleIPv6 = filterIPv6(data.TailscaleIPs || [])
     }
-    var peers = []
-    var exitNodes = []
+    var peers: Peer[] = []
+    var exitNodes: Peer[] = []
     var rawPeers = data.Peer || {}
 
     for (var id in rawPeers) {
@@ -429,14 +641,14 @@ function parseStatus(raw) {
   }
 }
 
-function parseAccounts(raw) {
+function parseAccounts(raw: Raw): AccountsResult {
   var text = String(raw || "").trim()
   if (text === "") return { accounts: [], selectedAccountId: "", selectedAccountLabel: "" }
 
   try {
     var parsed = JSON.parse(text)
-    var next = []
-    var selected = null
+    var next: Account[] = []
+    var selected: Account | null = null
     if (parsed && typeof parsed.length === "number") {
       for (var i = 0; i < parsed.length; i++) {
         var rawAccount = parsed[i] || {}
@@ -461,7 +673,7 @@ function parseAccounts(raw) {
   }
 }
 
-function peerAddress(peer) {
+function peerAddress(peer: Raw): string {
   if (!peer) return ""
   if (peer.DNSName) return cleanDnsName(peer.DNSName)
   if (peer.HostName) return String(peer.HostName)
@@ -469,7 +681,7 @@ function peerAddress(peer) {
   return ips.length > 0 ? ips[0] : ""
 }
 
-function exitNodeTarget(peer) {
+function exitNodeTarget(peer: Raw): string {
   if (!peer) return ""
   if (peer.Mullvad === true) {
     var mullvadIps = filterIPv4(peer.TailscaleIPs || [])
@@ -478,30 +690,30 @@ function exitNodeTarget(peer) {
   return peerAddress(peer)
 }
 
-function firstUrl(text, fallback) {
+function firstUrl(text: Raw, fallback: Raw): string {
   var match = String(text || "").match(/https?:\/\/\S+/)
   if (match && match[0]) return match[0]
   return String(fallback || "")
 }
 
-function elideStatus(text, limit) {
+function elideStatus(text: Raw, limit?: number): string {
   var cap = typeof limit === "number" ? limit : 140
   var value = String(text || "").replace(/\s+/g, " ").trim()
   return value.length > cap ? value.substring(0, cap - 3) + "…" : value
 }
 
-function isProfilesAccessDenied(text) {
+function isProfilesAccessDenied(text: Raw): boolean {
   return /profiles access denied/i.test(String(text || ""))
 }
 
 // Plasma's executable data engine takes a command line rather than an argv, so
 // every value interpolated into one has to survive the shell verbatim.
-function shellQuote(value) {
+function shellQuote(value: Raw): string {
   return "'" + String(value === null || value === undefined ? "" : value).replace(/'/g, "'\\''") + "'"
 }
 
-function shellCommand(argv) {
-  var parts = []
+function shellCommand(argv: Raw): string {
+  var parts: string[] = []
   for (var i = 0; i < argv.length; i++) parts.push(shellQuote(argv[i]))
   return parts.join(" ")
 }
@@ -528,13 +740,13 @@ var ACTIVE_PHRASES = [
   "Watching machines"
 ]
 
-function identityText(text) { return text }
+function identityText(text: string): string { return text }
 
-function formatText(template, value) {
+function formatText(template: Raw, value: Raw): string {
   return String(template).replace("%1", String(value === null || value === undefined ? "" : value))
 }
 
-function canSendFiles(state, peer) {
+function canSendFiles(state: PanelState | null | undefined, peer: Peer | null | undefined): boolean {
   if (!state || !state.fileSharing || !state.running || !peer) return false
   if (peer.Online !== true) return false
   // The KDE Store ships a kpackage and EGO ships an extension zip; neither can
@@ -543,13 +755,13 @@ function canSendFiles(state, peer) {
   return isTaildropTarget(peer, state.selfUserId)
 }
 
-function peerCopyOptions(peer) {
+function peerCopyOptions(peer: Raw): CopyOption[] {
   if (!peer) return []
   var name = String(peer.DisplayName || peer.HostName || "")
   var dns = String(peer.DNSName || "")
   var ipv6 = peer.TailscaleIPv6 && peer.TailscaleIPv6.length > 0 ? String(peer.TailscaleIPv6[0]) : ""
   var ip = peer.TailscaleIPs && peer.TailscaleIPs.length > 0 ? String(peer.TailscaleIPs[0]) : ""
-  var options = []
+  var options: CopyOption[] = []
   if (name !== "") options.push({ kind: "name", label: name })
   if (dns !== "") options.push({ kind: "dns", label: dns })
   if (ipv6 !== "") options.push({ kind: "ipv6", label: ipv6 })
@@ -560,9 +772,9 @@ function peerCopyOptions(peer) {
 // The owner takes the DNS name's place rather than sitting after it: the row
 // already names the machine, the full name is one click away in the copy menu,
 // and a third part would only elide on Plasma and widen the menu on GNOME.
-function peerSubtitle(peer) {
+function peerSubtitle(peer: Raw): string {
   if (!peer) return ""
-  var parts = []
+  var parts: string[] = []
   if (peer.TailscaleIPs && peer.TailscaleIPs.length > 0) parts.push(String(peer.TailscaleIPs[0]))
   if (peer.UserName) parts.push(String(peer.UserName))
   else if (peer.DNSName) parts.push(String(peer.DNSName))
@@ -572,13 +784,13 @@ function peerSubtitle(peer) {
 // An offline machine keeps its copy actions - a sleeping laptop's address is
 // exactly what someone needs to wake it - so the row has to say why it reads
 // differently from the ones above it.
-function peerRowSubtitle(peer, t) {
+function peerRowSubtitle(peer: Raw, t: Translate): string {
   var subtitle = peerSubtitle(peer)
   if (!peer || peer.Online === true) return subtitle
   return subtitle === "" ? t("Offline") : formatText(t("Offline · %1"), subtitle)
 }
 
-function panelRow(row) {
+function panelRow(row: PanelRowInput): PanelRow {
   return {
     id: String(row.id || ""),
     kind: String(row.kind || ""),
@@ -601,7 +813,7 @@ function panelRow(row) {
   }
 }
 
-function panelHeader(state, t, phraseIndex) {
+function panelHeader(state: PanelState, t: Translate, phraseIndex?: number): PanelHeader {
   var index = typeof phraseIndex === "number" ? phraseIndex : 0
   var meta = state.active
     ? t(ACTIVE_PHRASES[((index % ACTIVE_PHRASES.length) + ACTIVE_PHRASES.length) % ACTIVE_PHRASES.length])
@@ -629,17 +841,17 @@ function panelHeader(state, t, phraseIndex) {
 
 // Precedence, in one place: a command's own progress beats a stale error, and
 // both beat the idle line.
-function panelStatus(state, t) {
+function panelStatus(state: PanelState, t: Translate): PanelStatus {
   if (!state.installed) return { text: t("Tailscale CLI is not installed or not on PATH."), tone: "dim" }
   if (state.actionStatus) return { text: String(state.actionStatus), tone: "dim" }
   if (state.lastError) return { text: String(state.lastError), tone: "error" }
   return { text: "", tone: "" }
 }
 
-function updateSection(state, t) {
+function updateSection(state: PanelState, t: Translate): PanelSection {
   var update = state.update || {}
   var available = update.available === true
-  var rows = []
+  var rows: PanelRow[] = []
 
   if (available) {
     var updatable = update.updatable === true
@@ -672,12 +884,12 @@ function updateSection(state, t) {
 // The local machine, rendered as a machine row: `tailscale status` already
 // describes it exactly the way it describes a peer, and copying your own
 // address is the one thing the header's name alone cannot do.
-function selfSection(state, t) {
+function selfSection(state: PanelState, t: Translate): PanelSection {
   var peer = state.selfPeer || null
   var copyOptions = peerCopyOptions(peer)
-  var rows = []
+  var rows: PanelRow[] = []
 
-  if (copyOptions.length > 0) {
+  if (copyOptions.length > 0 && peer) {
     rows.push(panelRow({
       id: "self",
       kind: "self",
@@ -701,8 +913,8 @@ function selfSection(state, t) {
   }
 }
 
-function connectionsSection(state, t) {
-  var rows = []
+function connectionsSection(state: PanelState, t: Translate): PanelSection {
+  var rows: PanelRow[] = []
   if (state.accountsAccessDenied) {
     rows.push(panelRow({
       id: "auth",
@@ -742,8 +954,8 @@ function connectionsSection(state, t) {
   }
 }
 
-function exitNodeRows(state, t, recentRegions, mullvadQuery, pickerOpen) {
-  var rows = []
+function exitNodeRows(state: PanelState, t: Translate, recentRegions: string[], mullvadQuery: string, pickerOpen: boolean): PanelRow[] {
+  var rows: PanelRow[] = []
   var tailnet = state.tailnetExitNodes || []
   var regions = state.mullvadRegions || []
   var i
@@ -755,7 +967,7 @@ function exitNodeRows(state, t, recentRegions, mullvadQuery, pickerOpen) {
 
   if (regions.length > 0) {
     var matches = filterMullvadRegions(regions, mullvadQuery)
-    var children = []
+    var children: PanelRow[] = []
     if (matches.length === 0) {
       children.push(panelRow({
         id: "mullvad:empty",
@@ -797,7 +1009,7 @@ function exitNodeRows(state, t, recentRegions, mullvadQuery, pickerOpen) {
   return rows
 }
 
-function exitNodeRow(state, node, t) {
+function exitNodeRow(state: PanelState, node: Peer, t: Translate): PanelRow {
   var active = node.ExitNode === true
   return panelRow({
     id: "exit:" + String(node.id || ""),
@@ -814,7 +1026,7 @@ function exitNodeRow(state, node, t) {
   })
 }
 
-function exitNodesSection(state, t, recentRegions, mullvadQuery, pickerOpen) {
+function exitNodesSection(state: PanelState, t: Translate, recentRegions: string[], mullvadQuery: string, pickerOpen: boolean): PanelSection {
   var rows = state.active ? exitNodeRows(state, t, recentRegions, mullvadQuery, pickerOpen) : []
   return {
     id: "exitNodes",
@@ -827,10 +1039,10 @@ function exitNodesSection(state, t, recentRegions, mullvadQuery, pickerOpen) {
 
 var MACHINE_SEARCH_MIN = 8
 
-function machinesSection(state, t, machineQuery) {
+function machinesSection(state: PanelState, t: Translate, machineQuery: string): PanelSection {
   var query = String(machineQuery || "")
   var all = state.active ? (state.peers || []) : []
-  var rows = []
+  var rows: PanelRow[] = []
 
   // A field over three machines is clutter; over eighty it is the only way to
   // find one. Once it is on screen it stays, so it cannot disappear from under
@@ -857,7 +1069,7 @@ function machinesSection(state, t, machineQuery) {
   for (var i = 0; i < peers.length; i++) {
     var peer = peers[i]
     var copyOptions = peerCopyOptions(peer)
-    var actions = []
+    var actions: RowAction[] = []
     if (canSendFiles(state, peer))
       actions.push({ id: "send", label: t("Send files"), icon: "document-send-symbolic", glyph: "󰒊" })
     if (copyOptions.length > 0)
@@ -888,8 +1100,8 @@ function machinesSection(state, t, machineQuery) {
 // of every visible section, in the order they are drawn. Cursor movement is an
 // index into this, so neither frontend carries a focus state machine that the
 // other one could disagree with.
-function panelNavigation(header, sections) {
-  var nav = [{ sectionId: "header", rowId: header.id, action: header.action }]
+function panelNavigation(header: PanelHeader, sections: PanelSection[]): NavEntry[] {
+  var nav: NavEntry[] = [{ sectionId: "header", rowId: header.id, action: header.action }]
   for (var s = 0; s < sections.length; s++) {
     var section = sections[s]
     if (!section.visible) continue
@@ -911,7 +1123,7 @@ function panelNavigation(header, sections) {
   return nav
 }
 
-function resolvePanel(state, options) {
+function resolvePanel(state: PanelState | null | undefined, options?: ResolveOptions | null): Panel {
   var opts = options || {}
   var t = typeof opts.t === "function" ? opts.t : identityText
   var source = state || {}
@@ -935,7 +1147,7 @@ function resolvePanel(state, options) {
 
 // Resolve a navigation entry back to the row it points at, so a frontend can
 // act on the cursor without keeping its own copy of the panel.
-function panelRowAt(panel, navIndex) {
+function panelRowAt(panel: Panel | null | undefined, navIndex: number): PanelRow | null {
   if (!panel || !panel.navigation || navIndex < 0 || navIndex >= panel.navigation.length) return null
   var entry = panel.navigation[navIndex]
   if (entry.sectionId === "header") return null
@@ -955,16 +1167,63 @@ function panelRowAt(panel, navIndex) {
 // What a row's single-letter keys are allowed to do follows the actions the
 // model put on it, not its kind, so a new copyable row does not have to be
 // taught to two frontends' key handlers.
-function panelRowHasAction(row, actionId) {
+function panelRowHasAction(row: PanelRow | null | undefined, actionId: Raw): boolean {
   var actions = (row && row.actions) || []
   for (var i = 0; i < actions.length; i++)
     if (String(actions[i].id) === String(actionId)) return true
   return false
 }
 
-function panelNavIndexOf(panel, rowId) {
+function panelNavIndexOf(panel: Panel | null | undefined, rowId: Raw): number {
   if (!panel || !panel.navigation) return 0
   for (var i = 0; i < panel.navigation.length; i++)
     if (panel.navigation[i].rowId === String(rowId)) return i
   return 0
+}
+
+export {
+  filterIPv4,
+  filterIPv6,
+  cleanDnsName,
+  shortDnsName,
+  displayHostName,
+  isMullvadHost,
+  isMullvadPeer,
+  osIcon,
+  osIconName,
+  accountLabel,
+  loginPlan,
+  hasFileSharing,
+  isTaildropTarget,
+  userLabel,
+  peerOwner,
+  peerFromStatus,
+  parseExitNodeList,
+  mullvadRegionOptions,
+  mullvadRegionKey,
+  mullvadRegionTitle,
+  mullvadRegionSubtitle,
+  filterMullvadRegions,
+  mullvadRegionNode,
+  recentMullvadNodes,
+  pushRecentMullvad,
+  parseStatus,
+  parseAccounts,
+  peerAddress,
+  exitNodeTarget,
+  firstUrl,
+  elideStatus,
+  isProfilesAccessDenied,
+  shellQuote,
+  shellCommand,
+  ACTIVE_PHRASES,
+  canSendFiles,
+  formatText,
+  peerCopyOptions,
+  peerSubtitle,
+  filterMachines,
+  resolvePanel,
+  panelRowAt,
+  panelRowHasAction,
+  panelNavIndexOf
 }
