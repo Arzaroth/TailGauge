@@ -522,6 +522,33 @@ test('the version substitutes into the translated template', () => {
     assert.equal(M.formatText('a %1 b', 'X'), 'a X b');
 });
 
+// ---- the footer reports what is installed ---------------------------------
+
+test('the footer carries the version the frontend passed', () => {
+    assert.equal(M.resolvePanel(state({version: '1.2.3'}), {}).footer, 'TailGauge v1.2.3');
+    assert.equal(M.resolvePanel(state({version: '1.2.3'}), {t: s => `«${s}»`}).footer,
+        '«TailGauge v%1»'.replace('%1', '1.2.3'));
+});
+
+test('a frontend that knows no version gets no footer', () => {
+    assert.equal(M.resolvePanel(state(), {}).footer, '');
+    assert.equal(M.resolvePanel(state({version: ''}), {}).footer, '');
+});
+
+test('helpers left behind by a half-applied update show next to the widget', () => {
+    const targets = [{kind: 'plugin', current: '1.2.3'}, {kind: 'helpers', current: '1.2.2'}];
+    assert.equal(M.resolvePanel(state({version: '1.2.3', update: {targets}}), {}).footer,
+        'TailGauge v1.2.3 · helpers v1.2.2');
+});
+
+test('helpers on the widget version are not worth a second number', () => {
+    const targets = [{kind: 'helpers', current: '1.2.3'}];
+    assert.equal(M.resolvePanel(state({version: '1.2.3', update: {targets}}), {}).footer,
+        'TailGauge v1.2.3');
+    assert.equal(M.resolvePanel(state({version: '1.2.3', update: {targets: []}}), {}).footer,
+        'TailGauge v1.2.3');
+});
+
 // ---- Taildrop needs the helpers, not just the capability -------------------
 
 test('the send action disappears when the helpers are not installed', () => {
