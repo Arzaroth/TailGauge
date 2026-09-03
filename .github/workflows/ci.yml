@@ -171,19 +171,29 @@ jobs:
           python3 -c "import xml.dom.minidom, sys; xml.dom.minidom.parse(sys.argv[1])" \
             plasma/org.tailgauge.plasmoid/contents/config/main.xml
 
-      # The three frontends each declare a version; a release that bumps one and
-      # forgets another ships two different products.
+      # The three frontends and every helper declare a version; a release that
+      # bumps one and forgets another ships two different products, and each
+      # helper answers --version for itself.
       - name: Check the versions agree
         run: |
           plasmoid=$(node -e 'process.stdout.write(require("./plasma/org.tailgauge.plasmoid/metadata.json").KPlugin.Version)')
-          extension=$(node -e 'process.stdout.write(require("./gnome/tailgauge@arzaroth.github.io/metadata.json")["version-name"])')
-          plugin=$(node -e 'process.stdout.write(require("./omarchy/arzaroth.tailgauge/manifest.json").version)')
-          helpers=$(sed -n 's/^VERSION="\(.*\)"$/\1/p' bin/tailgauge-update)
-          echo "plasmoid=$plasmoid extension=$extension plugin=$plugin helpers=$helpers"
-          if ! [[ $plasmoid == "$extension" && $plasmoid == "$plugin" && $plasmoid == "$helpers" ]]; then
-            echo "::error::version mismatch across the plasmoid, the extension, the Omarchy plugin and bin/tailgauge-update"
-            exit 1
-          fi
+          echo "plasmoid=$plasmoid"
+          declare -A declared=(
+            [gnome/tailgauge@arzaroth.github.io/metadata.json]=$(node -e 'process.stdout.write(require("./gnome/tailgauge@arzaroth.github.io/metadata.json")["version-name"])')
+            [omarchy/arzaroth.tailgauge/manifest.json]=$(node -e 'process.stdout.write(require("./omarchy/arzaroth.tailgauge/manifest.json").version)')
+          )
+          for helper in bin/*; do
+            declared[$helper]=$(sed -n 's/^VERSION="\(.*\)"$/\1/p' "$helper" | head -1)
+          done
+          status=0
+          for file in "${!declared[@]}"; do
+            echo "$file=${declared[$file]}"
+            if [[ ${declared[$file]} != "$plasmoid" ]]; then
+              echo "::error file=$file::declares '${declared[$file]}', but the plasmoid declares '$plasmoid'"
+              status=1
+            fi
+          done
+          exit $status
 
   helpers:
     runs-on: ubuntu-latest

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import {read} from './paths.js';
+import {read, root} from './paths.js';
 
 // Distribution is a contract spread across five files: the release workflow
 // names the assets, the update helper downloads them by name, and three
@@ -52,15 +52,25 @@ test('the plasmoid ships as a .plasmoid zip', () => {
     assert.match(release, /cd build\/org\.tailgauge\.plasmoid && zip/);
 });
 
-test('all four versions agree', () => {
+const helperNames = fs.readdirSync(path.join(root, 'bin')).sort();
+
+test('every declared version agrees', () => {
     const plasmoid = plasmoidManifest.KPlugin.Version;
-    const extension = extensionManifest['version-name'];
-    const plugin = pluginManifest.version;
-    const helpers = updater.match(/^VERSION="([^"]+)"$/m)?.[1];
-    assert.equal(extension, plasmoid, 'the GNOME extension disagrees with the plasmoid');
-    assert.equal(plugin, plasmoid, 'the Omarchy plugin disagrees with the plasmoid');
-    assert.equal(helpers, plasmoid, 'bin/tailgauge-update disagrees with the plasmoid');
     assert.match(plasmoid, /^\d+\.\d+\.\d+$/);
+    assert.equal(extensionManifest['version-name'], plasmoid, 'the GNOME extension disagrees with the plasmoid');
+    assert.equal(pluginManifest.version, plasmoid, 'the Omarchy plugin disagrees with the plasmoid');
+    for (const name of helperNames) {
+        const declared = read(`bin/${name}`).match(/^VERSION="([^"]+)"$/m)?.[1];
+        assert.equal(declared, plasmoid, `bin/${name} disagrees with the plasmoid`);
+    }
+});
+
+// A helper reports the version of the file you actually ran, which is the only
+// thing that distinguishes a half-applied update from a finished one.
+test('every helper answers --version', () => {
+    for (const name of helperNames)
+        assert.match(read(`bin/${name}`), /--version\)|== --version/,
+            `bin/${name} declares a version it will not print`);
 });
 
 // The registry reads the manifest the archive carries, so a tarball that

@@ -8,6 +8,7 @@
 # exit-node [NAME]    print the current exit node, or route through NAME;
 #                     "off" clears it
 # exit-nodes          list the exit nodes this tailnet offers
+# version             print the version of the helpers, not of the widgets
 #
 # Both panels watch the IPN bus, so whatever this changes shows up in them at
 # once. That is the whole mechanism: there is no socket to talk to, which is
@@ -18,6 +19,8 @@
 
 set -uo pipefail
 
+VERSION="0.3.2"
+
 here="$(dirname "$(readlink -f "$0")")"
 notify="$here/tailgauge-notify"
 command -v tailgauge-notify >/dev/null 2>&1 && notify="tailgauge-notify"
@@ -25,7 +28,7 @@ command -v tailgauge-notify >/dev/null 2>&1 && notify="tailgauge-notify"
 status_raw=""
 
 usage() {
-  sed -n '2,17p' "$0"
+  sed -n '2,18p' "$0"
 }
 
 die() {
@@ -162,6 +165,13 @@ cmd_exit_node() {
   announce --urgency critical "Could not set the exit node" "${1}"
   return 1
 }
+
+# Answered before the tailscale check: which helpers are installed is a fair
+# question on a machine where the CLI is missing or half-installed.
+if [[ ${1:-} == version || ${1:-} == --version ]]; then
+  echo "tailgauge-ctl $VERSION"
+  exit 0
+fi
 
 command -v tailscale >/dev/null 2>&1 || die "the tailscale CLI is not on PATH"
 

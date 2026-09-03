@@ -65,6 +65,7 @@ tailgauge-ctl exit-node           # print the current one
 tailgauge-ctl exit-node de-ber-wg-001.mullvad.ts.net
 tailgauge-ctl exit-node off
 tailgauge-ctl exit-nodes          # what this tailnet offers
+tailgauge-ctl version             # which helpers are installed
 ```
 
 Run from a key binding there is no terminal to print on, so `up` opens the login page itself and a failure arrives as a notification instead.
@@ -112,7 +113,7 @@ Tagging `vX.Y.Z` publishes:
 - `tailgauge-vX.Y.Z-omarchy-plugin.tar.gz` - unpacks into `~/.config/omarchy/plugins/`
 - `tailgauge-vX.Y.Z-helpers.tar.gz` - `bin/` and the systemd unit
 
-`test/distribution.test.ts` fails the build if those names stop matching what `tailgauge-update` downloads, or if the four declared versions drift apart.
+`test/distribution.test.ts` fails the build if those names stop matching what `tailgauge-update` downloads, or if the versions drift apart - the three manifests and every helper declare one, and each helper prints its own with `--version`.
 
 ## The parity rule
 
@@ -183,7 +184,7 @@ npm test                            # build, then the model, parity and distribu
 scripts/install.sh                  # build and install for the running desktop
 ```
 
-CI runs those on every pull request, along with `qmllint` for QML syntax on both QML frontends, `node --check` on the emitted extension, `shellcheck` on the helpers, and a check that all three manifests declare the same version. Tagging `vX.Y.Z` builds and publishes the plasmoid package, the GNOME extension zip, the Omarchy plugin tarball and the helpers.
+CI runs those on every pull request, along with `qmllint` for QML syntax on both QML frontends, `node --check` on the emitted extension, `shellcheck` on the helpers, and a check that the three manifests and every helper declare the same version. Tagging `vX.Y.Z` builds and publishes the plasmoid package, the GNOME extension zip, the Omarchy plugin tarball and the helpers.
 
 Plasma logs QML errors under the `plasmashell` identifier rather than a unit, because it usually runs as a transient `app-plasmashell@<hash>.service`:
 

@@ -1,8 +1,15 @@
 #!/bin/bash
-# Usage: tailgauge-receive [--once] [directory]
+# Usage: tailgauge-receive [--once] [--version] [directory]
 # Saves incoming Taildrop files and announces each one.
 
 set -euo pipefail
+
+VERSION="0.3.2"
+
+if [[ ${1:-} == --version ]]; then
+  echo "tailgauge-receive $VERSION"
+  exit 0
+fi
 
 once=false
 if [[ ${1:-} == "--once" ]]; then
