@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased]
+
+### Fixed
+
+- **An update applied from the Omarchy panel stopped halfway.** The plugin was
+  replaced, the helpers were not, and the banner came straight back offering
+  the release that had just been installed. The rescan that reloads the plugin
+  also kills the panel process the updater runs under, so it now runs dead
+  last, after every part is installed. Helpers are renamed into place rather
+  than written over, since one of them is the script doing the writing.
+
+### Added
+
+- **Every helper answers `--version`**, and `tailgauge-ctl version` with it.
+- **The panel names the version it is running** in a dimmed line at the
+  bottom, with the helpers' version beside it when the two disagree - which is
+  what a half-applied update leaves behind, and what nothing on the machine
+  used to say out loud.
+
 ## [0.3.2]
 
 ### Changed
