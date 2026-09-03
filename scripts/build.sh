@@ -74,11 +74,17 @@ cp "$model_esm" "$build/$EXTENSION_UUID/model.js"
 cp -r "$root/omarchy/$PLUGIN_ID" "$build/$PLUGIN_ID"
 cp "$model_plain" "$build/$PLUGIN_ID/Model.js"
 
-if command -v glib-compile-schemas >/dev/null 2>&1; then
-  glib-compile-schemas "$build/$EXTENSION_UUID/schemas"
-else
-  echo "build: glib-compile-schemas not found, skipping schema compilation" >&2
+# GNOME reads the extension's own schema source the moment schemas/ exists, so
+# a directory holding the XML and no compiled blob is worse than no schemas at
+# all: the extension fails at every enable instead of falling back. Refusing
+# here is what stops scripts/install.sh replacing a working extension with one
+# the shell cannot load.
+if ! command -v glib-compile-schemas >/dev/null 2>&1; then
+  echo "build: glib-compile-schemas is required to package the GNOME extension" >&2
+  echo "build: install the glib2 tools (Debian/Ubuntu: libglib2.0-bin)" >&2
+  exit 1
 fi
+glib-compile-schemas --strict "$build/$EXTENSION_UUID/schemas"
 
 if command -v zip >/dev/null 2>&1; then
   (cd "$build/$EXTENSION_UUID" && zip -qr "$build/$EXTENSION_UUID.shell-extension.zip" .)

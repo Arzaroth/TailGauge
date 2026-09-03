@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased]
+
+### Fixed
+
+- **The build refuses to package a GNOME extension whose schemas it cannot
+  compile.** The payload ships the settings schema as XML and the compiled blob
+  is built on the machine that assembles it, but the build only warned and
+  carried on when `glib-compile-schemas` was missing, and `scripts/install.sh`
+  installed the result anyway. GNOME reads the extension's own schema source
+  the moment `schemas/` exists and so never falls back: the extension then
+  failed at every enable with `Failed to open file ".../gschemas.compiled"` and
+  sat in error in the Extensions app. The build now stops before anything is
+  installed and names the package to install (Debian/Ubuntu:
+  `libglib2.0-bin`), and compiles `--strict`, which is what
+  `gnome-extensions install` and CI already do.
+
 ## [0.3.3]
 
 ### Fixed
