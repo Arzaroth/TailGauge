@@ -85,11 +85,16 @@ export const TailscaleService = GObject.registerClass({
     declare helpers: boolean;
     declare update: Model.UpdateInfo;
     declare updating: boolean;
+    declare version: string;
 
-    override _init(settings: Gio.Settings): void {
+    // The extension's own version, out of the metadata it shipped with. The
+    // extension and the helpers install separately, so the panel reports the
+    // one it is actually running rather than the one the last release carried.
+    override _init(settings: Gio.Settings, version: string = ''): void {
         super._init();
 
         this._settings = settings;
+        this.version = version;
         this._cancellables = new Map();
         this._timeouts = new Map();
         this._destroyed = false;
@@ -216,6 +221,7 @@ export const TailscaleService = GObject.registerClass({
             helpers: this.helpers,
             update: this.update,
             updating: this.updating,
+            version: this.version,
         };
     }
 

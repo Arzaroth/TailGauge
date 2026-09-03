@@ -46,6 +46,11 @@ Item {
     property var update: ({ available: false, updatable: false, latest: "", url: "", error: "" })
     property bool updating: false
 
+    // The applet's own version, handed down from the metadata it shipped with.
+    // The widget and the helpers install separately, so the panel reports the
+    // one it is actually running rather than the one the last release carried.
+    property string version: ""
+
     property var _inflight: ({})
     property int _inflightCount: 0
     property var _kinds: ({})
@@ -92,7 +97,8 @@ Item {
             lastError: lastError,
             helpers: helpers,
             update: update,
-            updating: updating
+            updating: updating,
+            version: version
         }
     }
 

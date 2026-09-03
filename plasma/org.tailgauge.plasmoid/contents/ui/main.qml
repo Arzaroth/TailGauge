@@ -23,6 +23,7 @@ PlasmoidItem {
     TailscaleService {
         id: service
         refreshIntervalSec: Plasmoid.configuration.refreshIntervalSec
+        version: Plasmoid.metaData.version
         // An open popup is worth polling for; a closed one rides the watcher.
         attentive: root.expanded
     }

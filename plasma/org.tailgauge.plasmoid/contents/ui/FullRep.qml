@@ -512,6 +512,19 @@ Item {
                     }
                 }
             }
+
+            PlasmaComponents3.Label {
+                visible: full.panel.footer !== ""
+                Layout.fillWidth: true
+                Layout.leftMargin: Kirigami.Units.smallSpacing * 2
+                Layout.rightMargin: Kirigami.Units.smallSpacing * 2
+                Layout.topMargin: Kirigami.Units.smallSpacing
+                horizontalAlignment: Text.AlignRight
+                text: full.panel.footer
+                color: full.dimColor
+                font: Kirigami.Theme.smallFont
+                elide: Text.ElideRight
+            }
         }
     }
 }
