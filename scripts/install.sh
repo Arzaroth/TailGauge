@@ -130,10 +130,22 @@ if $want_gnome; then
   if command -v gnome-extensions >/dev/null 2>&1 && [[ -f $zip ]]; then
     gnome-extensions install --force "$zip"
   else
+    # Copy beside the target and swap, so a copy that runs out of disk halfway
+    # leaves the installed extension alone rather than deleted. Staging goes a
+    # level above extensions/, since the shell reads every child of that one as
+    # an extension and would pick up the half-written copy.
     target="$HOME/.local/share/gnome-shell/extensions/$EXTENSION_UUID"
+    extdir="$(dirname "$target")"
+    mkdir -p "$extdir"
+    staging="$extdir/../.tailgauge-install.$$"
+    rm -rf "$staging"
+    cp -aL "$build/$EXTENSION_UUID" "$staging" || {
+      rm -rf "$staging"
+      echo "install: could not stage the extension" >&2
+      exit 1
+    }
     rm -rf "$target"
-    mkdir -p "$(dirname "$target")"
-    cp -r "$build/$EXTENSION_UUID" "$target"
+    mv "$staging" "$target"
   fi
   echo "Installed $EXTENSION_UUID - enable it with:"
   echo "  gnome-extensions enable $EXTENSION_UUID"
