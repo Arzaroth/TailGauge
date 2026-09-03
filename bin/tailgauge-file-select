@@ -5,7 +5,7 @@
 
 set -uo pipefail
 
-VERSION="0.3.2"
+VERSION="0.3.3"
 
 title="Select file"
 multiple=false
