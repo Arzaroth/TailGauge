@@ -264,6 +264,7 @@ fail() {
 }
 
 updated=()
+rescan=false
 for entry in "${targets[@]}"; do
   IFS=: read -r kind current managed outdated dir <<<"$entry"
   { $outdated && [[ $managed == manual ]]; } || continue
@@ -302,7 +303,7 @@ for entry in "${targets[@]}"; do
     }
     rm -rf "$dir"
     mv "$staging" "$dir" || fail "could not replace the plugin"
-    omarchy-shell -q shell rescanPlugins >/dev/null 2>&1 || true
+    rescan=true
     updated+=("Omarchy widget")
     ;;
   helpers)
@@ -311,9 +312,16 @@ for entry in "${targets[@]}"; do
     mkdir -p "$work/helpers" || fail "could not stage the helpers"
     tar -C "$work/helpers" -xzf "$work/helpers.tar.gz" ||
       fail "the helpers archive did not extract"
-    # Replacing the running script in place is fine: bash has already read it.
+    # Renamed into place rather than written over: bash reads a script in
+    # chunks as it runs, and this loop replaces the very script running it.
+    mkdir -p "$HOME/.local/bin"
     for helper in "$work/helpers"/bin/*; do
-      [[ -f $helper ]] && install -m 755 "$helper" "$HOME/.local/bin/$(basename "$helper")"
+      [[ -f $helper ]] || continue
+      dest="$HOME/.local/bin/$(basename "$helper")"
+      install -m 755 "$helper" "$dest.new.$$" && mv -f "$dest.new.$$" "$dest" || {
+        rm -f "$dest.new.$$"
+        fail "could not install $(basename "$helper")"
+      }
     done
     if [[ -f "$work/helpers/systemd/tailgauge-receive.service" ]]; then
       mkdir -p "$HOME/.config/systemd/user"
@@ -341,4 +349,10 @@ joined=$(
 )
 say "Updated to $latest: $joined"
 [[ -n $notify ]] && "$notify" "TailGauge updated to $latest" "$joined - restart the shell to load it"
+
+# Dead last, and never earlier: the rescan reloads the plugin, which kills the
+# panel process that spawned this run. Anything left to do would not get done -
+# which is how an update applied from the panel replaced the widget and left
+# the helpers behind, still reporting an update as available.
+$rescan && omarchy-shell -q shell rescanPlugins >/dev/null 2>&1
 exit 0
