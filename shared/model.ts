@@ -108,6 +108,16 @@ export interface UpdateInfo {
   latest?: string
   url?: string
   error?: string
+  targets?: UpdateTarget[]
+}
+
+// One installed part, as tailgauge-update reports it. The panel reads only the
+// helpers: the widget already knows its own version.
+export interface UpdateTarget {
+  kind?: string
+  current?: string
+  managed?: string
+  outdated?: boolean
 }
 
 export interface PanelRow {
@@ -173,6 +183,7 @@ export interface Panel {
   header: PanelHeader
   status: PanelStatus
   sections: PanelSection[]
+  footer: string
   navigation: NavEntry[]
 }
 
@@ -202,6 +213,7 @@ export interface PanelState {
   actionStatus?: string
   lastError?: string
   update?: UpdateInfo
+  version?: string
 }
 
 export interface ResolveOptions {
@@ -848,6 +860,34 @@ function panelStatus(state: PanelState, t: Translate): PanelStatus {
   return { text: "", tone: "" }
 }
 
+// The version of the widget you are looking at, in the quietest line the panel
+// has. Each frontend passes its own, read from the manifest it shipped with.
+function panelFooter(state: PanelState, t: Translate): string {
+  var version = String(state.version || "")
+  if (version === "") return ""
+
+  var text = formatText(t("TailGauge v%1"), version)
+
+  // The widget and the helpers install separately, so an update that only
+  // half applied leaves them on different versions with nothing else on
+  // screen saying which half is behind.
+  var helpers = helpersVersion(state)
+  if (helpers !== "" && helpers !== version)
+    text += " · " + formatText(t("helpers v%1"), helpers)
+
+  return text
+}
+
+function helpersVersion(state: PanelState): string {
+  var targets = (state.update || {}).targets
+  if (!targets || typeof targets.length !== "number") return ""
+  for (var i = 0; i < targets.length; i++) {
+    var target = targets[i]
+    if (target && String(target.kind) === "helpers") return String(target.current || "")
+  }
+  return ""
+}
+
 function updateSection(state: PanelState, t: Translate): PanelSection {
   var update = state.update || {}
   var available = update.available === true
@@ -1141,6 +1181,7 @@ function resolvePanel(state: PanelState | null | undefined, options?: ResolveOpt
     header: header,
     status: panelStatus(source, t),
     sections: sections,
+    footer: panelFooter(source, t),
     navigation: panelNavigation(header, sections)
   }
 }
