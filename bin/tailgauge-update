@@ -5,6 +5,7 @@
 # --json    machine-readable output, which is what the panels read
 # --apply   download and install the newer release
 # --force   ignore the cache, and update even a store-managed install
+# --version print the version of the helpers, not of the widgets
 #
 # Exit 0 when up to date or updated, 1 on error, 2 when an update is available
 # and only being reported.
@@ -33,8 +34,12 @@ while (($# > 0)); do
   --json) json=true ;;
   --force) force=true ;;
   --quiet) quiet=true ;;
+  --version)
+    echo "tailgauge-update $VERSION"
+    exit 0
+    ;;
   -h | --help)
-    sed -n '2,10p' "$0"
+    sed -n '2,11p' "$0"
     exit 0
     ;;
   *)

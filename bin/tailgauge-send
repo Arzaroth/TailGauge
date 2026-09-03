@@ -1,9 +1,16 @@
 #!/bin/bash
-# Usage: tailgauge-send <machine> [file...]
+# Usage: tailgauge-send [--version] <machine> [file...]
 # Sends files to a tailnet machine with Taildrop, picking them interactively
 # when none are named.
 
 set -euo pipefail
+
+VERSION="0.3.2"
+
+if [[ ${1-} == --version ]]; then
+  echo "tailgauge-send $VERSION"
+  exit 0
+fi
 
 if (($# < 1)); then
   echo "Usage: tailgauge-send <machine> [file...]" >&2

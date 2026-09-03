@@ -1,8 +1,15 @@
 #!/bin/bash
-# Usage: tailgauge-copy <text>
+# Usage: tailgauge-copy [--version] <text>
 # Copies text to the clipboard on Wayland or X11.
 
 set -euo pipefail
+
+VERSION="0.3.2"
+
+if [[ ${1-} == --version ]]; then
+  echo "tailgauge-copy $VERSION"
+  exit 0
+fi
 
 text="${1-}"
 [[ -z $text ]] && exit 0

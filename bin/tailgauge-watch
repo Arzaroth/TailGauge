@@ -1,5 +1,5 @@
 #!/bin/bash
-# Usage: tailgauge-watch [timeout-seconds]
+# Usage: tailgauge-watch [--version] [timeout-seconds]
 #
 # Blocks until the local tailscaled reports a state change, then exits 0. Exits
 # 2 if the timeout elapsed with nothing to report, 1 if tailscale is unusable.
@@ -9,6 +9,13 @@
 # poll.
 
 set -uo pipefail
+
+VERSION="0.3.2"
+
+if [[ ${1:-} == --version ]]; then
+  echo "tailgauge-watch $VERSION"
+  exit 0
+fi
 
 timeout_sec="${1:-300}"
 

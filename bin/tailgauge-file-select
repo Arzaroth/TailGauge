@@ -1,15 +1,21 @@
 #!/bin/bash
-# Usage: tailgauge-file-select [--title TITLE] [--multiple]
+# Usage: tailgauge-file-select [--title TITLE] [--multiple] [--version]
 # Prints one selected path per line.
 # Exit 0 picked, 1 nothing picked, 2 no chooser available.
 
 set -uo pipefail
+
+VERSION="0.3.2"
 
 title="Select file"
 multiple=false
 
 while (($# > 0)); do
   case "$1" in
+  --version)
+    echo "tailgauge-file-select $VERSION"
+    exit 0
+    ;;
   --title)
     title="${2:-Select file}"
     shift 2
