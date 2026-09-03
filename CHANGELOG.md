@@ -17,6 +17,11 @@ All notable changes to this project are documented here.
   installed and names the package to install (Debian/Ubuntu:
   `libglib2.0-bin`), and compiles `--strict`, which is what
   `gnome-extensions install` and CI already do.
+- **A GNOME install that fails halfway no longer leaves nothing installed.**
+  The copy `scripts/install.sh` falls back to when `gnome-extensions` is not on
+  `PATH` deleted the installed extension before copying the new one, so a copy
+  that ran out of disk left neither. It stages the copy and swaps it in, the way
+  the Omarchy install already did.
 
 ## [0.3.3]
 
