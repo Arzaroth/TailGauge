@@ -15,7 +15,8 @@ All notable changes to this project are documented here.
 
 ### Added
 
-- **Every helper answers `--version`**, and `tailgauge-ctl version` with it.
+- **Every helper answers `--version`** with its own name and version, and
+  `tailgauge-ctl version` does the same.
 - **The panel names the version it is running** in a dimmed line at the
   bottom, with the helpers' version beside it when the two disagree - which is
   what a half-applied update leaves behind, and what nothing on the machine

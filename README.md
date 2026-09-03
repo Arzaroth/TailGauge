@@ -113,7 +113,7 @@ Tagging `vX.Y.Z` publishes:
 - `tailgauge-vX.Y.Z-omarchy-plugin.tar.gz` - unpacks into `~/.config/omarchy/plugins/`
 - `tailgauge-vX.Y.Z-helpers.tar.gz` - `bin/` and the systemd unit
 
-`test/distribution.test.ts` fails the build if those names stop matching what `tailgauge-update` downloads, or if the versions drift apart - the three manifests and every helper declare one, and each helper prints its own with `--version`.
+`test/distribution.test.ts` fails the build if those names stop matching what `tailgauge-update` downloads, or if the versions drift apart - the three manifests and every helper declare one, and the test runs each helper's `--version` to check it prints the version it declares.
 
 ## The parity rule
 

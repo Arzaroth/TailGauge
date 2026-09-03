@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
@@ -66,11 +67,17 @@ test('every declared version agrees', () => {
 });
 
 // A helper reports the version of the file you actually ran, which is the only
-// thing that distinguishes a half-applied update from a finished one.
-test('every helper answers --version', () => {
-    for (const name of helperNames)
-        assert.match(read(`bin/${name}`), /--version\)|== --version/,
-            `bin/${name} declares a version it will not print`);
+// thing that distinguishes a half-applied update from a finished one. Run
+// rather than read: a helper that carries the constant but never reaches the
+// branch that prints it would answer nothing, and read the same in the source.
+test('every helper prints its declared version', () => {
+    const plasmoid = plasmoidManifest.KPlugin.Version;
+    for (const name of helperNames) {
+        const printed = execFileSync('bash', [path.join(root, 'bin', name), '--version'],
+            {encoding: 'utf8', timeout: 10000});
+        assert.equal(printed.trim(), `${name} ${plasmoid}`,
+            `bin/${name} --version does not print its own name and version`);
+    }
 });
 
 // The registry reads the manifest the archive carries, so a tarball that
