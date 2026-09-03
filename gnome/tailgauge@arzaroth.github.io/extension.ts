@@ -170,6 +170,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
     declare _headerItem: PopupMenu.PopupSwitchMenuItem;
     declare _statusItem: PopupMenu.PopupMenuItem;
     declare _refreshItem: PopupMenu.PopupMenuItem;
+    declare _footerItem: PopupMenu.PopupMenuItem;
     declare _scrolled: RowSection;
     declare _scroll: St.ScrollView;
     declare _changedId: number;
@@ -193,7 +194,8 @@ class TailGaugeIndicator extends PanelMenu.Button {
 
         this._extension = extension;
         this._settings = extension.getSettings();
-        this._service = new TailscaleService(this._settings);
+        this._service = new TailscaleService(this._settings,
+            String(extension.metadata['version-name'] ?? ''));
         this._signature = '';
         this._phraseIndex = 0;
         this._phraseTimeoutId = 0;
@@ -305,6 +307,10 @@ class TailGaugeIndicator extends PanelMenu.Button {
         const settingsItem = new PopupMenu.PopupMenuItem(_('Settings'));
         settingsItem.connect('activate', () => this._extension.openPreferences());
         this._menu.addMenuItem(settingsItem);
+
+        this._footerItem = new PopupMenu.PopupMenuItem('', {reactive: false, can_focus: false});
+        this._footerItem.label.add_style_class_name('tailgauge-footer');
+        this._menu.addMenuItem(this._footerItem);
     }
 
     // ---- scrolling -------------------------------------------------------
@@ -386,6 +392,9 @@ class TailGaugeIndicator extends PanelMenu.Button {
             this._statusItem.label.remove_style_class_name('tailgauge-error');
 
         this._refreshItem.setSensitive(panel.header.toggleVisible);
+
+        this._footerItem.label.text = panel.footer;
+        this._footerItem.visible = panel.footer !== '';
     }
 
     // Cheap pass for the things that change without the row set changing.

@@ -577,6 +577,17 @@ Panel {
               }
             }
           }
+
+          Text {
+            textFormat: Text.PlainText
+            visible: root.panel.footer !== ""
+            width: parent.width
+            text: root.panel.footer
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            horizontalAlignment: Text.AlignRight
+          }
         }
       }
     }

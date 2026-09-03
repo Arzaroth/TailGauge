@@ -47,6 +47,11 @@ Item {
   property var update: ({ available: false, updatable: false, latest: "", url: "", error: "" })
   property bool updating: false
 
+  // This widget's own version, read from the manifest sitting next to it. The
+  // widget and the helpers install separately, so the panel reports the one it
+  // is actually running rather than the one the last release carried.
+  property string version: ""
+
   property bool _loginInProgress: false
   property bool _loginUrlOpened: false
   property string _preLoginAuthUrl: ""
@@ -92,7 +97,8 @@ Item {
       lastError: lastError,
       helpers: helpers,
       update: update,
-      updating: updating
+      updating: updating,
+      version: version
     }
   }
 
@@ -606,6 +612,20 @@ Item {
   Runner { id: helpersProc; kind: "helpers" }
   Runner { id: updateProc; kind: "update" }
   Runner { id: applyUpdateProc; kind: "applyUpdate" }
+
+  FileView {
+    path: Qt.resolvedUrl("manifest.json").toString().replace(/^file:\/\//, "")
+    watchChanges: false
+    printErrors: false
+    onLoaded: {
+      try {
+        root.version = String((JSON.parse(text()) || {}).version || "")
+      } catch (e) {
+        root.version = ""
+      }
+    }
+    onLoadFailed: root.version = ""
+  }
 
   // Login is the one command read as it prints: the auth URL has to be opened
   // while `tailscale up` is still running, not once it has given up.

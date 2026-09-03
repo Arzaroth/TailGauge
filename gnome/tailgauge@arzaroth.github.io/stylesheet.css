@@ -13,6 +13,13 @@
     color: #f38ba8;
 }
 
+.tailgauge-footer {
+    font-size: 0.8em;
+    color: rgba(255, 255, 255, 0.4);
+    padding-top: 2px;
+    padding-bottom: 0;
+}
+
 .tailgauge-search {
     margin: 4px 12px 8px 12px;
     min-width: 180px;
