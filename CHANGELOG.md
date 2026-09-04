@@ -20,8 +20,10 @@ All notable changes to this project are documented here.
 - **A GNOME install that fails halfway no longer leaves nothing installed.**
   The copy `scripts/install.sh` falls back to when `gnome-extensions` is not on
   `PATH` deleted the installed extension before copying the new one, so a copy
-  that ran out of disk left neither. It stages the copy and swaps it in, the way
-  the Omarchy install already did.
+  that ran out of disk left neither. It stages the copy and swaps it in now,
+  moving the old one aside rather than deleting it and putting it back if the
+  swap does not happen, so the window in which nothing is installed closes on a
+  rename rather than on a whole copy.
 
 ## [0.3.3]
 
