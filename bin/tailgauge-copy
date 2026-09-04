@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-VERSION="0.3.3"
+VERSION="0.3.4"
 
 if [[ ${1-} == --version ]]; then
   echo "tailgauge-copy $VERSION"

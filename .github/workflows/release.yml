@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing tag to build and release (e.g. v0.3.3)'
+        description: 'Existing tag to build and release (e.g. v0.3.4)'
         required: true
 
 permissions:
