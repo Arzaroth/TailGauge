@@ -130,22 +130,37 @@ if $want_gnome; then
   if command -v gnome-extensions >/dev/null 2>&1 && [[ -f $zip ]]; then
     gnome-extensions install --force "$zip"
   else
-    # Copy beside the target and swap, so a copy that runs out of disk halfway
-    # leaves the installed extension alone rather than deleted. Staging goes a
-    # level above extensions/, since the shell reads every child of that one as
-    # an extension and would pick up the half-written copy.
+    # Stage and swap, so an install that fails halfway leaves the extension that
+    # was already there rather than nothing. The old copy is moved aside instead
+    # of deleted, which closes the window down to a rename that either happens
+    # or does not. Both scratch directories sit a level above extensions/, since
+    # the shell reads every child of that one as an extension and would load a
+    # half-written copy under a name that is not its UUID.
     target="$HOME/.local/share/gnome-shell/extensions/$EXTENSION_UUID"
     extdir="$(dirname "$target")"
     mkdir -p "$extdir"
     staging="$extdir/../.tailgauge-install.$$"
-    rm -rf "$staging"
-    cp -aL "$build/$EXTENSION_UUID" "$staging" || {
+    backup="$extdir/../.tailgauge-backup.$$"
+    rm -rf "$staging" "$backup"
+    if ! cp -aL "$build/$EXTENSION_UUID" "$staging"; then
       rm -rf "$staging"
       echo "install: could not stage the extension" >&2
       exit 1
-    }
-    rm -rf "$target"
-    mv "$staging" "$target"
+    fi
+    if [[ -e $target ]] && ! mv "$target" "$backup"; then
+      rm -rf "$staging"
+      echo "install: could not move the installed extension aside" >&2
+      exit 1
+    fi
+    if ! mv "$staging" "$target"; then
+      rm -rf "$staging"
+      echo "install: could not install the extension" >&2
+      if [[ -e $backup ]] && ! mv "$backup" "$target"; then
+        echo "install: the extension it replaced is left in $backup" >&2
+      fi
+      exit 1
+    fi
+    rm -rf "$backup"
   fi
   echo "Installed $EXTENSION_UUID - enable it with:"
   echo "  gnome-extensions enable $EXTENSION_UUID"
