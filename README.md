@@ -181,10 +181,13 @@ pnpm install                        # once, for the TypeScript toolchain
 pnpm build                          # compile and assemble build/ without installing to the desktop
 pnpm typecheck                      # tsc over every project, emitting nothing
 pnpm test                           # build, then the model, parity and distribution tests
+pnpm coverage                       # the tests again, with a coverage report for the model
 scripts/install.sh                  # build and install for the running desktop
 ```
 
 The toolchain is managed with [pnpm](https://pnpm.io), pinned by the `packageManager` field and `pnpm-lock.yaml`. `scripts/build.sh` falls back to `npm install` when pnpm is absent, so installing from a clone needs nothing beyond Node. That fallback is best-effort: npm cannot read `pnpm-lock.yaml`, so it re-resolves the ranges in `package.json` and may compile with a different TypeScript patch than CI did.
+
+`pnpm coverage` reports on `shared/model.ts` alone - the test files are excluded, and the three frontends never execute under Node, so what the parity and distribution tests assert about them does not appear as a percentage.
 
 CI runs those on every pull request, along with `qmllint` for QML syntax on both QML frontends, `node --check` on the emitted extension, `shellcheck` on the helpers, and a check that the three manifests and every helper declare the same version. Tagging `vX.Y.Z` builds and publishes the plasmoid package, the GNOME extension zip, the Omarchy plugin tarball and the helpers.
 

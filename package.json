@@ -8,7 +8,8 @@
   "scripts": {
     "build": "scripts/build.sh",
     "typecheck": "tsc -p tsconfig.json && tsc -p test/tsconfig.json --noEmit",
-    "test": "scripts/build.sh && node --test 'build/.ts/tests/test/**/*.test.js'"
+    "test": "scripts/build.sh && node --test 'build/.ts/tests/test/**/*.test.js'",
+    "coverage": "scripts/build.sh && node --test --experimental-test-coverage --test-coverage-exclude='build/.ts/tests/**' 'build/.ts/tests/test/**/*.test.js'"
   },
   "devDependencies": {
     "@girs/gnome-shell": "50.0.4",
