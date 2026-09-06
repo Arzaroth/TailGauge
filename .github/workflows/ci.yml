@@ -20,20 +20,24 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          cache: true
+
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
-          cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Build
         run: scripts/build.sh
 
       - name: Typecheck
-        run: npm run typecheck
+        run: pnpm typecheck
 
       - name: Test
         run: node --test 'build/.ts/tests/test/**/*.test.js'
@@ -96,11 +100,15 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          cache: true
+
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
-          cache: npm
 
       - name: Install qmllint and glib tools
         run: |
@@ -109,7 +117,7 @@ jobs:
             qt6-declarative-dev-tools libglib2.0-bin
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Build
         run: scripts/build.sh

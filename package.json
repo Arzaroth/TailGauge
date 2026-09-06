@@ -4,6 +4,7 @@
   "type": "module",
   "license": "GPL-3.0-or-later",
   "description": "Tailscale in the panel, for GNOME Shell, KDE Plasma and Omarchy.",
+  "packageManager": "pnpm@11.21.0",
   "scripts": {
     "build": "scripts/build.sh",
     "typecheck": "tsc -p tsconfig.json && tsc -p test/tsconfig.json --noEmit",

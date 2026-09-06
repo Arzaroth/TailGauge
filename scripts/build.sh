@@ -13,22 +13,26 @@ build="$root/build"
 tsc="$root/node_modules/.bin/tsc"
 
 # scripts/install.sh runs this from a fresh clone, so the toolchain is fetched
-# here rather than left as a step to remember.
+# here rather than left as a step to remember. pnpm owns the lockfile; npm is
+# the fallback because it is the one package manager an end user is guaranteed
+# to have. That path is best-effort: npm cannot read pnpm-lock.yaml, so it
+# re-resolves the ranges in package.json and may pick a different patch than CI
+# built with. --no-package-lock keeps it from leaving a second lockfile behind.
 if [[ ! -x $tsc ]]; then
-  if ! command -v npm >/dev/null 2>&1; then
-    echo "build: npm is required to compile the TypeScript sources" >&2
-    exit 1
-  fi
   echo "build: installing the TypeScript toolchain" >&2
-  if [[ -f "$root/package-lock.json" ]]; then
-    (cd "$root" && npm ci)
+  if command -v pnpm >/dev/null 2>&1; then
+    (cd "$root" && pnpm install --frozen-lockfile)
+  elif command -v npm >/dev/null 2>&1; then
+    echo "build: pnpm not found - resolving with npm, which cannot read pnpm-lock.yaml" >&2
+    (cd "$root" && npm install --no-package-lock)
   else
-    (cd "$root" && npm install)
+    echo "build: pnpm or npm is required to compile the TypeScript sources" >&2
+    exit 1
   fi
 fi
 
 if [[ ! -x $tsc ]]; then
-  echo "build: $tsc is still missing after npm install" >&2
+  echo "build: $tsc is still missing after installing the toolchain" >&2
   exit 1
 fi
 
