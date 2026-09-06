@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased]
+
+### Changed
+
+- **The toolchain is managed with pnpm.** `pnpm-lock.yaml` replaces
+  `package-lock.json` at the same resolved versions, the `packageManager`
+  field pins pnpm itself, and CI installs from the frozen lockfile.
+  `scripts/build.sh` falls back to `npm install` when pnpm is missing, because
+  `scripts/install.sh` runs it from a fresh clone and npm is the one package
+  manager an end user is guaranteed to already have. That fallback is
+  best-effort: npm cannot read the pnpm lockfile, so it re-resolves the ranges
+  in `package.json` rather than reproducing what CI built with.
+
 ## [0.3.4]
 
 ### Fixed
