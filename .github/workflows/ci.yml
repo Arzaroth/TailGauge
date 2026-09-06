@@ -39,8 +39,14 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      # Coverage is a read-out here, not a gate - no threshold fails the build.
+      # The compiled tests are excluded so the percentages describe the model,
+      # which is the only shipped code Node executes.
       - name: Test
-        run: node --test 'build/.ts/tests/test/**/*.test.js'
+        run: |
+          node --test --experimental-test-coverage \
+            --test-coverage-exclude='build/.ts/tests/**' \
+            'build/.ts/tests/test/**/*.test.js'
 
       - name: Check the generated ES module resolves
         run: |

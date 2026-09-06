@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **`pnpm coverage`** runs the suite under Node's coverage reporter. The test
+  files are excluded from the report, so the percentages describe
+  `shared/model.ts` rather than the tests measuring themselves - and the three
+  frontends never execute under Node, so what the parity and distribution
+  tests assert about them is not in the number either. CI prints the same
+  report on every run; no threshold gates the build.
+
 ### Changed
 
 - **The toolchain is managed with pnpm.** `pnpm-lock.yaml` replaces
