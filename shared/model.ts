@@ -229,6 +229,9 @@ export interface ProviderCommands {
   exitNodeList?: string[]
   accounts?: string[]
   networks?: string[]
+  // Blocks until the daemon reports a change, so the panel can ride events
+  // instead of the clock. A provider without one falls back to the timer.
+  watch?: (timeoutSec: number) => string[]
   switchAccount?: (accountId: string) => string[]
   setExitNode?: (target: string) => string[]
   selectNetwork?: (networkId: string, selected: boolean) => string[]
@@ -320,6 +323,9 @@ var PROVIDERS: ProviderDescriptor[] = [
       up: ["tailscale", "up"],
       down: ["tailscale", "down"],
       exitNodeList: ["tailscale", "exit-node", "list"],
+      watch: function (timeoutSec) {
+        return ["tailgauge-watch", String(timeoutSec)]
+      },
       accounts: ["tailscale", "switch", "--list", "--json"],
       switchAccount: function (accountId) {
         return ["tailscale", "switch", String(accountId || "")]

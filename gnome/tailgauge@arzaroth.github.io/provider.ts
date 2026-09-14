@@ -59,6 +59,7 @@ export const ProviderService = GObject.registerClass({
     // Every provider probed on PATH, and the one the panel drives. `installed`
     // stays the gate every command already checks: it now means the active
     // provider is one we can actually drive.
+    declare _pollProvider: Map<string, string>;
     declare networks: Model.Network[];
     declare selectingNetworkId: string;
     declare providers: Model.ProviderState[];
@@ -106,6 +107,7 @@ export const ProviderService = GObject.registerClass({
         this._timeouts = new Map();
         this._destroyed = false;
 
+        this._pollProvider = new Map();
         this.networks = [];
         this.selectingNetworkId = '';
         this.providers = [];
@@ -283,9 +285,17 @@ export const ProviderService = GObject.registerClass({
         }
     }
 
+    // A poll answering for the provider we just left would be parsed with the
+    // wrong parser and land as an empty panel.
+    _stale(kind: string): boolean {
+        const asked = this._pollProvider.get(kind);
+        return asked !== undefined && asked !== this.activeProviderId;
+    }
+
     _run(kind: string, argv: string[], callback: RunCallback): boolean {
         if (this._cancellables.has(kind))
             return false;
+        this._pollProvider.set(kind, this.activeProviderId);
 
         const cancellable = new Gio.Cancellable();
         this._cancellables.set(kind, cancellable);
@@ -317,6 +327,8 @@ export const ProviderService = GObject.registerClass({
             }
             if (this._destroyed)
                 return;
+            if (kind !== 'which' && this._stale(kind))
+                return;
             callback(status, stdout, stderr);
             this._emit();
         });
@@ -346,7 +358,9 @@ export const ProviderService = GObject.registerClass({
     watch(): void {
         if (!this.installed || this._destroyed)
             return;
-        this._run('watch', ['tailgauge-watch', String(WATCH_TIMEOUT_SEC)], status => {
+        const watch = this._commands().watch;
+        if (!watch) return;
+        this._run('watch', watch(WATCH_TIMEOUT_SEC), status => {
             // 0 means something changed, 2 means the wait simply expired.
             // Anything else is a broken watcher, so back off rather than spin.
             if (status === 0)
@@ -605,6 +619,10 @@ export const ProviderService = GObject.registerClass({
         const id = String(provider.id || '');
         if (id === '' || id === this.activeProviderId) return;
         this.activeProviderId = id;
+        // Free the runners so the new provider polls now rather than at the next
+        // tick; their replies are already discarded as stale.
+        for (const kind of ['status', 'mullvad', 'accounts', 'networks', 'watch'])
+            this._cancel(kind);
         // The old provider's machines and accounts are not this one's.
         this._resetUnavailable(_('Switching'));
         this.installed = Model.providerReady({
