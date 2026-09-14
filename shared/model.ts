@@ -1363,7 +1363,7 @@ function summaryFor(state: PanelState, id: string): ProviderSummary | null {
 }
 
 function providerStateWord(t: Translate, summary: ProviderSummary | null): string {
-  if (!summary) return t("not checked")
+  if (!summary) return t("checking\u2026")
   if (summary.needsLogin) return t("needs login")
   if (summary.running) return t("connected")
   return summary.state !== "" ? summary.state : t("disconnected")

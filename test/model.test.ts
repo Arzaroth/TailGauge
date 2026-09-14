@@ -978,7 +978,7 @@ test('the tooltip falls back rather than lying about what it knows', () => {
         ['No supported VPN CLI on PATH. Looked for Tailscale, NetBird.']);
     // Installed but never polled.
     assert.deepEqual(M.resolvePanel({providers: detected('netbird')}, {}).bar.tooltip,
-        ['NetBird  not checked']);
+        ['NetBird  checking\u2026']);
 });
 
 test('with no summaries the bar still follows the one provider we know about', () => {
