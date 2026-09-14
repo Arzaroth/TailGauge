@@ -373,8 +373,10 @@ test('the header reflects every connection state', () => {
     assert.equal(login.warning, true);
     assert.equal(login.crossed, false);
 
+    // With nothing installed the panel has no provider to name, so it falls
+    // back to the product rather than to whichever provider came first.
     const missing = M.resolvePanel(state({installed: false}), {}).header;
-    assert.equal(missing.title, 'Tailscale');
+    assert.equal(missing.title, 'TailGauge');
     assert.equal(missing.toggleVisible, false);
 });
 
@@ -386,7 +388,7 @@ test('the hero phrase rotates and wraps in both directions', () => {
 });
 
 test('status precedence: missing CLI, then progress, then error', () => {
-    assert.match(M.resolvePanel(state({installed: false}), {}).status.text, /not installed/);
+    assert.match(M.resolvePanel(state({installed: false}), {}).status.text, /No supported VPN CLI/);
     const both = M.resolvePanel(state({actionStatus: 'Working', lastError: 'boom'}), {}).status;
     assert.equal(both.text, 'Working');
     assert.equal(both.tone, 'dim');
@@ -586,4 +588,80 @@ test('the switch stays enabled while a background poll runs', () => {
 test('the switch is disabled only when there is no CLI to drive', () => {
     assert.equal(M.resolvePanel(state({installed: false}), {}).header.toggleEnabled, false);
     assert.equal(M.resolvePanel(state({installed: false}), {}).header.toggleVisible, false);
+});
+
+// ---------------------------------------------------------------------------
+// Providers
+// ---------------------------------------------------------------------------
+
+const detected = (...ids: string[]) =>
+    M.providerDescriptors().map(p => ({id: p.id, installed: ids.includes(p.id)}));
+
+test('the registry names every provider and the CLI that proves it', () => {
+    const ids = M.providerDescriptors().map(p => p.id);
+    assert.deepEqual(ids, ['tailscale', 'netbird']);
+    assert.deepEqual(M.providerCliNames(), ['tailscale', 'netbird']);
+    assert.equal(M.providerById('netbird')!.label, 'NetBird');
+    assert.equal(M.providerById('nope'), null);
+});
+
+test('a frontend that has not been taught to probe still reports one provider', () => {
+    assert.equal(M.activeProvider({installed: true})!.id, 'tailscale');
+    assert.equal(M.activeProvider({installed: false}), null);
+    assert.equal(M.activeProvider({}), null);
+});
+
+test('detection scopes the panel to what is actually installed', () => {
+    assert.equal(M.activeProvider({providers: detected('netbird')})!.id, 'netbird');
+    assert.equal(M.activeProvider({providers: detected()}), null);
+    assert.deepEqual(
+        M.installedProviders({providers: detected('tailscale', 'netbird')}).map(p => p.id),
+        ['tailscale', 'netbird']);
+});
+
+test('with several installed the registry order decides, until a choice is made', () => {
+    const both = detected('tailscale', 'netbird');
+    assert.equal(M.activeProvider({providers: both})!.id, 'tailscale');
+    assert.equal(M.activeProvider({providers: both, activeProviderId: 'netbird'})!.id, 'netbird');
+    // Report order must not change the answer.
+    assert.equal(M.activeProvider({providers: both.slice().reverse()})!.id, 'tailscale');
+});
+
+test('a choice naming a provider that is gone falls back instead of blanking', () => {
+    const only = {providers: detected('netbird'), activeProviderId: 'tailscale'};
+    assert.equal(M.activeProvider(only)!.id, 'netbird');
+});
+
+test('capabilities are read from the active provider, not its name', () => {
+    const ts = {providers: detected('tailscale')};
+    const nb = {providers: detected('netbird')};
+    assert.equal(M.providerSupports(ts, 'mullvad'), true);
+    assert.equal(M.providerSupports(nb, 'mullvad'), false);
+    assert.equal(M.providerSupports(nb, 'networks'), true);
+    assert.equal(M.providerSupports({providers: detected()}, 'exitNodes'), false);
+});
+
+test('a provider without a feature never shows the section that needs it', () => {
+    const nb = M.resolvePanel(state({providers: detected('netbird')}), {});
+    assert.equal(section(nb, 'exitNodes').visible, false,
+        'NetBird has no exit nodes, even with tailnet exit nodes in the snapshot');
+    assert.equal(section(nb, 'connections').visible, false, 'NetBird has no account switching');
+    assert.equal(nb.header.title, status.selfName, 'but the panel still works');
+
+    const ts = M.resolvePanel(state({providers: detected('tailscale')}), {});
+    assert.equal(section(ts, 'exitNodes').visible, true);
+});
+
+test('sending files is a provider capability, not just a helper check', () => {
+    const peer = only(status.peers, p => M.canSendFiles(state(), p), 'Taildrop target');
+    assert.equal(M.canSendFiles(state({providers: detected('netbird')}), peer), false);
+    assert.equal(M.canSendFiles(state({providers: detected('tailscale')}), peer), true);
+});
+
+test('the panel names the provider it is driving', () => {
+    assert.equal(M.providerLabel({providers: detected('netbird')}), 'NetBird');
+    assert.equal(M.providerLabel({providers: detected()}), 'TailGauge');
+    const nb = M.resolvePanel(state({providers: detected('netbird'), active: false, running: false}), {});
+    assert.equal(nb.header.meta, 'NetBird is disconnected');
+    assert.equal(nb.header.toggleHint, 'Turn NetBird on');
 });
