@@ -1421,6 +1421,19 @@ function barTooltip(state: PanelState, t: Translate): string[] {
     while (name.length < width) name += " "
     lines.push(name + "  " + parts.join(" \u00b7 "))
   }
+
+  // The bar centres each line of a tooltip on its own, so lines of different
+  // lengths start at different places however their columns are padded. Equal
+  // widths centre identically, which is the only way a plugin gets a left
+  // edge. The pad is a no-break space because a trailing plain one is not
+  // measured.
+  var longest = 0
+  for (var a = 0; a < lines.length; a++) {
+    if (lines[a].length > longest) longest = lines[a].length
+  }
+  for (var b = 0; b < lines.length; b++) {
+    while (lines[b].length < longest) lines[b] += "\u00a0"
+  }
   return lines
 }
 

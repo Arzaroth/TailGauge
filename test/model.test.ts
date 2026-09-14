@@ -963,13 +963,17 @@ test('the tooltip says what each installed provider is doing, active first', () 
     const both = detected('tailscale', 'netbird');
     const summaries = [summary('tailscale', {running: true, selfName: 'workstation', selfIp: '100.64.0.1'}),
                        summary('netbird', {state: 'Idle'})];
-    assert.deepEqual(M.resolvePanel({providers: both, summaries}, {}).bar.tooltip,
+    const trimmed = (p: ModelTypes.Panel) => p.bar.tooltip.map(l => l.replace(/\u00a0+$/, ''));
+    assert.deepEqual(trimmed(M.resolvePanel({providers: both, summaries}, {})),
         ['Tailscale  connected · workstation · 100.64.0.1', 'NetBird    Idle']);
+    // Every line is the same width, so the bar centres them identically.
+    const widths = new Set(M.resolvePanel({providers: both, summaries}, {}).bar.tooltip.map(l => l.length));
+    assert.equal(widths.size, 1, 'lines of different widths centre differently');
     // The one being viewed leads, whichever it is.
-    assert.deepEqual(M.resolvePanel({providers: both, activeProviderId: 'netbird', summaries}, {}).bar.tooltip,
+    assert.deepEqual(trimmed(M.resolvePanel({providers: both, activeProviderId: 'netbird', summaries}, {})),
         ['NetBird    Idle', 'Tailscale  connected · workstation · 100.64.0.1']);
-    assert.deepEqual(M.resolvePanel({providers: both,
-        summaries: [summary('tailscale', {needsLogin: true}), summary('netbird')]}, {}).bar.tooltip,
+    assert.deepEqual(trimmed(M.resolvePanel({providers: both,
+        summaries: [summary('tailscale', {needsLogin: true}), summary('netbird')]}, {})),
         ['Tailscale  needs login', 'NetBird    disconnected']);
 });
 
