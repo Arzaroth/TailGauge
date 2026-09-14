@@ -985,3 +985,96 @@ test('with no summaries the bar still follows the one provider we know about', (
     assert.equal(M.resolvePanel(state(), {}).bar.connected, true, 'legacy snapshot, Tailscale up');
     assert.equal(M.resolvePanel(state({active: false}), {}).bar.connected, false);
 });
+
+// ---------------------------------------------------------------------------
+// Peer detail
+// ---------------------------------------------------------------------------
+
+const NOW = Date.parse('2026-09-14T06:00:00Z');
+
+test('both providers report what the expanded row shows', () => {
+    const nas = only((nbStatus as ModelTypes.StatusOk).peers, p => p.HostName === 'nas', 'nas');
+    assert.equal(nas.ConnectionType, 'P2P');
+    assert.equal(nas.RxBytes, 4096);
+    assert.equal(nas.TxBytes, 2048);
+
+    // Tailscale says "direct" by having an address rather than by a field.
+    const direct = M.peerFromStatus('x', {CurAddr: '1.2.3.4:41641', RxBytes: 10, TxBytes: 20}, {});
+    assert.equal(direct.ConnectionType, 'P2P');
+    assert.equal(direct.Endpoint, '1.2.3.4:41641');
+    const relayed = M.peerFromStatus('x', {CurAddr: '', Relay: 'ams'}, {});
+    assert.equal(relayed.ConnectionType, 'Relayed');
+    assert.equal(relayed.Relay, 'ams');
+    const unknown = M.peerFromStatus('x', {CurAddr: '', Relay: ''}, {});
+    assert.equal(unknown.ConnectionType, '', 'no reading is not a guess');
+});
+
+test('peerDetailRows shows only what was actually reported', () => {
+    const rows = M.peerDetailRows({
+        ConnectionType: 'P2P', LatencyMs: 20, Endpoint: '[2001:db8::1]:51820',
+        RxBytes: 424, TxBytes: 472, LastHandshake: '2026-09-14T05:59:00Z',
+        Routes: ['192.168.42.0/24'],
+    }, (x: string) => x, NOW);
+    const by = Object.fromEntries(rows.map(r => [r.id, r.sublabel]));
+    assert.equal(by['detail:connection'], 'Direct peer-to-peer · 20 ms');
+    assert.equal(by['detail:endpoint'], '[2001:db8::1]:51820');
+    assert.equal(by['detail:handshake'], '1 minute ago');
+    assert.equal(by['detail:transfer'], '↓ 424 B   ↑ 472 B');
+    assert.equal(by['detail:routes'], '192.168.42.0/24');
+    assert.equal(rows.every(r => r.kind === 'detail' && !r.navigable), true);
+
+    // A peer that reported nothing gets no rows, so no arrow.
+    assert.deepEqual(M.peerDetailRows({}, (x: string) => x, NOW), []);
+    assert.deepEqual(M.peerDetailRows(null, (x: string) => x, NOW), []);
+});
+
+test('a relayed peer names its relay', () => {
+    const t = (x: string) => x;
+    assert.equal(M.connectionSummary({ConnectionType: 'Relayed', Relay: 'ams'}, t), 'Relayed via ams');
+    assert.equal(M.connectionSummary({ConnectionType: '', Relay: 'ams'}, t), 'Relayed via ams');
+    assert.equal(M.connectionSummary({ConnectionType: 'P2P'}, t), 'Direct peer-to-peer');
+    assert.equal(M.connectionSummary({}, t), '');
+});
+
+test('bytes and elapsed time read like a human wrote them', () => {
+    assert.equal(M.formatBytes(0), '0 B');
+    assert.equal(M.formatBytes(424), '424 B');
+    assert.equal(M.formatBytes(1536), '1.5 KB');
+    assert.equal(M.formatBytes(15 * 1024 * 1024), '15 MB');
+    assert.equal(M.formatSince('2026-09-14T05:59:30Z', NOW), 'just now');
+    assert.equal(M.formatSince('2026-09-14T05:59:00Z', NOW), '1 minute ago');
+    assert.equal(M.formatSince('2026-09-14T03:00:00Z', NOW), '3 hours ago');
+    assert.equal(M.formatSince('', NOW), '');
+    assert.equal(M.formatSince('not a date', NOW), '');
+});
+
+test('NetBird writes "never" as a zero date, not an absent field', () => {
+    const parsed = M.parseNetbirdStatus(JSON.stringify({
+        daemonStatus: 'Connected',
+        peers: {details: [
+            {fqdn: 'a.example', status: 'Connected', lastWireguardHandshake: '0001-01-01T00:00:00Z'},
+            {fqdn: 'b.example', status: 'Connected', lastWireguardHandshake: '2026-09-14T05:59:00Z'},
+        ]},
+    }));
+    assert.ok(parsed.ok && !parsed.unavailable);
+    assert.equal(only(parsed.peers, p => p.HostName === 'a', 'peer a').LastHandshake, '',
+        'a zero date is no handshake, not 2001 years ago');
+    assert.notEqual(only(parsed.peers, p => p.HostName === 'b', 'peer b').LastHandshake, '');
+});
+
+test('a machine row carries its detail behind a disclosure arrow', () => {
+    const peers = (nbStatus as ModelTypes.StatusOk).peers;
+    const nbState = {providers: detected('netbird'), active: true, running: true, peers};
+    const collapsed = section(M.resolvePanel(nbState, {nowMs: NOW}), 'machines');
+    const nas = only(collapsed.rows, r => r.label === 'nas', 'nas row');
+    assert.ok(nas.children.length > 0, 'the detail is carried, not fetched on expand');
+    assert.equal(nas.expanded, false);
+    assert.equal(only(nas.actions, a => a.id === 'detail', 'detail action').label, 'Show details');
+
+    const open = section(M.resolvePanel(nbState, {nowMs: NOW, expandedPeerId: nas.payload.id}), 'machines');
+    const openNas = only(open.rows, r => r.label === 'nas', 'nas row');
+    assert.equal(openNas.expanded, true);
+    assert.equal(only(openNas.actions, a => a.id === 'detail', 'detail action').label, 'Hide details');
+    // Only the one asked for.
+    assert.equal(only(open.rows, r => r.label === 'laptop', 'laptop row').expanded, false);
+});

@@ -19,6 +19,7 @@ Panel {
   property bool mullvadPickerOpen: false
   property string mullvadQuery: ""
   property string machineQuery: ""
+  property string expandedPeerId: ""
   property bool machineSearchActive: false
   property int phraseIndex: 0
 
@@ -43,6 +44,8 @@ Panel {
     mullvadQuery: root.mullvadQuery,
     mullvadPickerOpen: root.mullvadPickerOpen,
     machineQuery: root.machineQuery,
+    expandedPeerId: root.expandedPeerId,
+    nowMs: Date.now(),
     phraseIndex: root.phraseIndex
   })
 
@@ -141,7 +144,14 @@ Panel {
 
   function rowAction(row, actionId) {
     if (actionId === "send") sendPeerFile(row)
+    else if (actionId === "detail") toggleDetail(row)
     else openCopyMenuFor(row.id)
+  }
+
+  function toggleDetail(row) {
+    if (!row || !row.payload) return
+    var id = String(row.payload.id || "")
+    expandedPeerId = expandedPeerId === id ? "" : id
   }
 
   // The shell owns the widget's settings, so a recent region is persisted by

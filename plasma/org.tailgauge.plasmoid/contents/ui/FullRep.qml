@@ -22,6 +22,7 @@ Item {
     property bool mullvadPickerOpen: false
     property string mullvadQuery: ""
     property string machineQuery: ""
+    property string expandedPeerId: ""
     property int phraseIndex: 0
 
     // Everything the panel shows is decided in the shared model: which sections
@@ -33,6 +34,8 @@ Item {
         mullvadQuery: full.mullvadQuery,
         mullvadPickerOpen: full.mullvadPickerOpen,
         machineQuery: full.machineQuery,
+        expandedPeerId: full.expandedPeerId,
+        nowMs: Date.now(),
         phraseIndex: full.phraseIndex
     })
 
@@ -136,7 +139,14 @@ Item {
 
     function rowAction(row, actionId) {
         if (actionId === "send") sendPeerFile(row)
+        else if (actionId === "detail") toggleDetail(row)
         else openCopyMenuFor(row.id)
+    }
+
+    function toggleDetail(row) {
+        if (!row || !row.payload) return
+        var id = String(row.payload.id || "")
+        full.expandedPeerId = full.expandedPeerId === id ? "" : id
     }
 
     // ---- row registry -------------------------------------------------------
