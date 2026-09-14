@@ -35,6 +35,10 @@ export interface Peer {
   City?: string
   Status?: string
   MullvadRegion?: boolean
+  // NetBird only: how the tunnel is carried, and its round trip. -1 is "not
+  // measured" rather than "instant".
+  ConnectionType?: string
+  LatencyMs?: number
 }
 
 export interface Account {
@@ -910,6 +914,120 @@ function parseAccounts(raw: Raw): AccountsResult {
   }
 }
 
+// ---------------------------------------------------------------------------
+// NetBird
+// ---------------------------------------------------------------------------
+
+function stripCidr(value: Raw): string {
+  var text = String(value || "").trim()
+  var slash = text.indexOf("/")
+  return slash === -1 ? text : text.slice(0, slash)
+}
+
+function netbirdHostName(fqdn: Raw, fallback: Raw): string {
+  var name = String(fqdn || "").trim()
+  var dot = name.indexOf(".")
+  if (dot > 0) return name.slice(0, dot)
+  return name !== "" ? name : String(fallback || "")
+}
+
+// NetBird grades a peer with a word rather than a boolean, and only "Connected"
+// is a peer you can reach right now.
+function netbirdOnline(status: Raw): boolean {
+  return String(status || "").toLowerCase() === "connected"
+}
+
+function netbirdPeer(raw: Raw): Peer {
+  var value = raw || {}
+  var fqdn = cleanDnsName(String(value.fqdn || ""))
+  var ip = stripCidr(value.netbirdIp)
+  var host = netbirdHostName(fqdn, ip)
+  var latencyNs = Number(value.latency || 0)
+  return {
+    id: fqdn || ip || String(value.publicKey || ""),
+    HostName: host,
+    DNSName: fqdn,
+    DisplayName: host,
+    IPv4: ip !== "" ? [ip] : [],
+    IPv6: [],
+    Online: netbirdOnline(value.status),
+    // NetBird's status carries no OS, so every row falls back to the generic
+    // machine glyph rather than guessing one.
+    OS: "",
+    Tags: [],
+    ExitNodeOption: false,
+    ExitNode: false,
+    Mullvad: false,
+    Status: String(value.status || ""),
+    ConnectionType: String(value.connectionType || ""),
+    LatencyMs: latencyNs > 0 ? latencyNs / 1000000 : -1
+  }
+}
+
+function parseNetbirdStatus(raw: Raw): StatusResult {
+  var text = String(raw || "").trim()
+  if (text === "") return { ok: true, unavailable: true, message: "Disconnected" }
+
+  try {
+    var data = JSON.parse(text)
+    if (!data || typeof data !== "object" || typeof data.length === "number") {
+      return { ok: false, unavailable: true, message: "Status error", error: "Failed to parse netbird status" }
+    }
+
+    var state = String(data.daemonStatus || "")
+    var lowered = state.toLowerCase()
+    var running = lowered === "connected"
+    var needsLogin = lowered === "needslogin" || lowered === "sessionexpired" || lowered === "loginfailed"
+
+    var details = (data.peers && data.peers.details) || []
+    var peers: Peer[] = []
+    for (var i = 0; i < details.length; i++) peers.push(netbirdPeer(details[i]))
+    peers.sort(function(a, b) {
+      if (a.Online !== b.Online) return a.Online ? -1 : 1
+      return String(a.HostName).localeCompare(String(b.HostName))
+    })
+
+    var selfFqdn = cleanDnsName(String(data.fqdn || ""))
+    var selfIp = stripCidr(data.netbirdIp)
+    var selfName = netbirdHostName(selfFqdn, selfIp)
+    var selfPeer: Peer = {
+      id: selfFqdn || selfIp || "self",
+      HostName: selfName,
+      DNSName: selfFqdn,
+      DisplayName: selfName,
+      IPv4: selfIp !== "" ? [selfIp] : [],
+      IPv6: [],
+      Online: running,
+      OS: "",
+      Tags: [],
+      ExitNodeOption: false,
+      ExitNode: false,
+      Mullvad: false
+    }
+
+    return {
+      ok: true,
+      unavailable: false,
+      daemonState: state,
+      running: running,
+      needsLogin: needsLogin,
+      // NetBird prints its authorization URL on the `up` stream rather than
+      // into status, so there is never one to read here.
+      authUrl: "",
+      selfName: selfName,
+      selfDnsName: selfFqdn,
+      selfIp: selfIp,
+      selfUserId: "",
+      selfPeer: selfPeer,
+      fileSharing: false,
+      peers: peers,
+      exitNodes: []
+    }
+  } catch (e) {
+    return { ok: false, unavailable: true, message: "Status error", error: "Failed to parse netbird status" }
+  }
+}
+
 function peerAddress(peer: Raw): string {
   if (!peer) return ""
   if (peer.DNSName) return cleanDnsName(peer.DNSName)
@@ -1502,6 +1620,7 @@ export {
   pushRecentMullvad,
   parseStatus,
   parseAccounts,
+  parseNetbirdStatus,
   peerAddress,
   exitNodeTarget,
   firstUrl,

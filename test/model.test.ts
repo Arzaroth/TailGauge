@@ -728,3 +728,73 @@ test('loginPlan turns on whatever provider it was handed', () => {
     // No provider, no command to run.
     assert.deepEqual(M.loginPlan(false, '', undefined), {authUrl: '', command: []});
 });
+
+// ---------------------------------------------------------------------------
+// NetBird
+// ---------------------------------------------------------------------------
+//
+// netbird-status-idle.json is a real `netbird status --json` capture with the
+// event log emptied. netbird-status.json is that same envelope with peers and
+// a connected daemon filled in, since connecting one would have meant logging
+// a real machine into a real network.
+
+const nbStatus = M.parseNetbirdStatus(fixture('netbird-status.json'));
+const nbIdle = M.parseNetbirdStatus(fixture('netbird-status-idle.json'));
+
+test('parseNetbirdStatus reads a connected mesh', () => {
+    assert.ok(nbStatus.ok && !nbStatus.unavailable);
+    assert.equal(nbStatus.running, true);
+    assert.equal(nbStatus.needsLogin, false);
+    assert.equal(nbStatus.daemonState, 'Connected');
+    assert.equal(nbStatus.selfName, 'workstation');
+    assert.equal(nbStatus.selfIp, '100.85.0.1', 'the CIDR suffix is not part of the address');
+    assert.equal(nbStatus.selfDnsName, 'workstation.netbird.selfhosted');
+});
+
+test('parseNetbirdStatus orders peers online first, like the Tailscale one', () => {
+    assert.ok(nbStatus.ok && !nbStatus.unavailable);
+    assert.deepEqual(nbStatus.peers.map(p => p.HostName), ['laptop', 'nas', 'offline-box']);
+    const nas = only(nbStatus.peers, p => p.HostName === 'nas', 'nas peer');
+    assert.deepEqual(nas.IPv4, ['100.85.0.2']);
+    assert.equal(nas.Online, true);
+    assert.equal(nas.ConnectionType, 'P2P');
+    assert.equal(nas.LatencyMs, 1.5, 'nanoseconds are reported as milliseconds');
+    const off = only(nbStatus.peers, p => p.HostName === 'offline-box', 'offline peer');
+    assert.equal(off.Online, false, 'only "Connected" is reachable now');
+    assert.equal(off.LatencyMs, -1, 'unmeasured is -1, not 0');
+});
+
+test('parseNetbirdStatus offers nothing it cannot do', () => {
+    assert.ok(nbStatus.ok && !nbStatus.unavailable);
+    assert.deepEqual(nbStatus.exitNodes, [], 'NetBird has no exit nodes');
+    assert.equal(nbStatus.fileSharing, false, 'nor Taildrop');
+    assert.equal(nbStatus.authUrl, '', 'the login URL arrives on the `up` stream');
+    assert.equal(nbStatus.peers.every(p => !p.Mullvad && !p.ExitNodeOption), true);
+});
+
+test('parseNetbirdStatus reads the real idle capture', () => {
+    assert.ok(nbIdle.ok && !nbIdle.unavailable);
+    assert.equal(nbIdle.running, false);
+    assert.equal(nbIdle.daemonState, 'Idle');
+    assert.deepEqual(nbIdle.peers, [], 'a null details list is no peers, not a crash');
+    assert.equal(nbIdle.selfIp, '');
+});
+
+test('parseNetbirdStatus grades every login-shaped daemon state', () => {
+    const state = (s: string) => {
+        const parsed = M.parseNetbirdStatus(JSON.stringify({daemonStatus: s, peers: {details: null}}));
+        assert.ok(parsed.ok && !parsed.unavailable);
+        return parsed;
+    };
+    for (const s of ['NeedsLogin', 'SessionExpired', 'LoginFailed'])
+        assert.equal(state(s).needsLogin, true, `${s} needs a login`);
+    assert.equal(state('Connecting').needsLogin, false);
+    assert.equal(state('Connecting').running, false);
+    assert.equal(state('Connected').running, true);
+});
+
+test('parseNetbirdStatus survives empty and malformed input', () => {
+    assert.deepEqual(M.parseNetbirdStatus(''), {ok: true, unavailable: true, message: 'Disconnected'});
+    assert.equal(M.parseNetbirdStatus('{not json').ok, false);
+    assert.equal(M.parseNetbirdStatus('[]').ok, false);
+});
