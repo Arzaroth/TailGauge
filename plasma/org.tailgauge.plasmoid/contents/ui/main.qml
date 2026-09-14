@@ -51,6 +51,11 @@ PlasmoidItem {
         return lines.join("\n")
     }
 
+    function cycleProvider() {
+        var next = Model.nextProvider(service.snapshot())
+        if (next) service.switchProvider(next)
+    }
+
     function activeExitNodeName() {
         var nodes = service.exitNodes || []
         for (var i = 0; i < nodes.length; i++)
@@ -61,7 +66,9 @@ PlasmoidItem {
 
     Plasmoid.contextualActions: [
         PlasmaCore.Action {
-            text: service.active ? i18n("Turn Tailscale off") : i18n("Turn Tailscale on")
+            // Named by the model, so this cannot say Tailscale while the panel
+            // is driving something else.
+            text: Model.toggleHint(service.snapshot())
             icon.name: "network-vpn"
             enabled: service.installed
             onTriggered: service.toggleTailscale()

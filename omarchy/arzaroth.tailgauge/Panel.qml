@@ -142,6 +142,11 @@ Panel {
     close()
   }
 
+  function cycleProvider() {
+    var next = Model.nextProvider(tailscale.snapshot())
+    if (next) tailscale.switchProvider(next)
+  }
+
   function headerAction(actionId) {
     if (actionId === "refresh") tailscale.refresh(true)
   }
@@ -292,8 +297,13 @@ Panel {
         }
       }
     }
+    // Right-click used to turn the connection on and off. The icon describes
+    // the machine rather than one provider, so that acted on a provider you
+    // could not see and left the icon lit when the other was still up. It
+    // cycles which provider the panel is about instead, and does nothing when
+    // there is only one.
     onPressed: function (buttonCode) {
-      if (buttonCode === Qt.RightButton) tailscale.toggleTailscale()
+      if (buttonCode === Qt.RightButton) root.cycleProvider()
       else if (buttonCode === Qt.MiddleButton) tailscale.refresh(true)
       else root.toggle()
     }
