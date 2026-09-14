@@ -13,7 +13,7 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Extension, gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 import * as Model from './model.js';
-import {TailscaleService} from './tailscale.js';
+import {ProviderService} from './provider.js';
 
 const RECENT_MULLVAD_LIMIT = 5;
 const PHRASE_INTERVAL_MS = 2800;
@@ -83,8 +83,8 @@ function verticalAdjustment(view: St.ScrollView): St.Adjustment {
 
 // Native rendering of the Tailscale mark from the SVG: a 3x3 dot grid with the
 // inactive dots faded, plus the disconnected slash and the needs-login badge.
-const TailscaleIcon = GObject.registerClass(
-class TailscaleIcon extends St.DrawingArea {
+const TailGaugeIcon = GObject.registerClass(
+class TailGaugeIcon extends St.DrawingArea {
     declare _crossed: boolean;
     declare _warning: boolean;
 
@@ -158,14 +158,14 @@ const Indicator = GObject.registerClass(
 class TailGaugeIndicator extends PanelMenu.Button {
     declare _extension: TailGaugeExtension;
     declare _settings: Gio.Settings;
-    declare _service: InstanceType<typeof TailscaleService>;
+    declare _service: InstanceType<typeof ProviderService>;
     declare _signature: string;
     declare _phraseIndex: number;
     declare _phraseTimeoutId: number;
     declare _mullvadQuery: string;
     declare _machineQuery: string;
     declare _sections: Map<string, {header: PopupMenu.PopupSeparatorMenuItem; section: RowSection}>;
-    declare _panelIcon: InstanceType<typeof TailscaleIcon>;
+    declare _panelIcon: InstanceType<typeof TailGaugeIcon>;
     declare _panelLabel: St.Label;
     declare _headerItem: PopupMenu.PopupSwitchMenuItem;
     declare _statusItem: PopupMenu.PopupMenuItem;
@@ -194,7 +194,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
 
         this._extension = extension;
         this._settings = extension.getSettings();
-        this._service = new TailscaleService(this._settings,
+        this._service = new ProviderService(this._settings,
             String(extension.metadata['version-name'] ?? ''));
         this._signature = '';
         this._phraseIndex = 0;
@@ -204,7 +204,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         this._sections = new Map<string, {header: PopupMenu.PopupSeparatorMenuItem; section: RowSection}>();
 
         const panelBox = box(false, {style_class: 'panel-status-menu-box tailgauge-panel'});
-        this._panelIcon = new TailscaleIcon({width: 16, height: 16, y_align: Clutter.ActorAlign.CENTER});
+        this._panelIcon = new TailGaugeIcon({width: 16, height: 16, y_align: Clutter.ActorAlign.CENTER});
         this._panelLabel = new St.Label({
             style_class: 'tailgauge-panel-label',
             y_align: Clutter.ActorAlign.CENTER,

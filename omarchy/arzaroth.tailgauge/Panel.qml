@@ -242,7 +242,7 @@ Panel {
     tooltipText: root.panel.header.title
     iconComponent: Component {
       Item {
-        TailscaleIcon {
+        TailGaugeIcon {
           anchors.centerIn: parent
           iconSize: Style.space(11)
           color: root.barIconColor
@@ -377,7 +377,7 @@ Panel {
               iconOpacity: root.panel.header.dimmed ? 0.5 : 1.0
               // Status only - the switch owns toggling, mouse and keyboard alike.
               iconComponent: Component {
-                TailscaleIcon {
+                TailGaugeIcon {
                   iconSize: Style.font.display
                   color: root.panel.header.dimmed ? root.dim : root.foreground
                   badgeColor: root.urgent

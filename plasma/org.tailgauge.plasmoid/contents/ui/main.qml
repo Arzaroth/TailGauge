@@ -20,7 +20,7 @@ PlasmoidItem {
         Plasmoid.configuration.writeConfig()
     }
 
-    TailscaleService {
+    ProviderService {
         id: service
         refreshIntervalSec: Plasmoid.configuration.refreshIntervalSec
         version: Plasmoid.metaData.version

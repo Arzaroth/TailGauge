@@ -291,7 +291,7 @@ Item {
                     anchors.rightMargin: Kirigami.Units.smallSpacing * 2
                     spacing: Kirigami.Units.largeSpacing
 
-                    TailscaleIcon {
+                    TailGaugeIcon {
                         iconSize: Kirigami.Units.iconSizes.medium
                         color: full.panel.header.dimmed ? full.dimColor : Kirigami.Theme.textColor
                         badgeColor: Kirigami.Theme.negativeTextColor

@@ -31,7 +31,7 @@ MouseArea {
         anchors.centerIn: parent
         spacing: Kirigami.Units.smallSpacing
 
-        TailscaleIcon {
+        TailGaugeIcon {
             iconSize: Math.min(compact.height, Kirigami.Units.iconSizes.smallMedium)
             color: compact.service.active ? Kirigami.Theme.textColor
                                           : Qt.darker(Kirigami.Theme.textColor, 1.55)

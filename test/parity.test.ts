@@ -83,8 +83,8 @@ test('every frontend reads the panel through resolvePanel', () => {
 
 test('every service hands resolvePanel the same snapshot shape', () => {
     const services = {
-        plasma: 'plasma/org.tailgauge.plasmoid/contents/ui/TailscaleService.qml',
-        gnome: 'gnome/tailgauge@arzaroth.github.io/tailscale.ts',
+        plasma: 'plasma/org.tailgauge.plasmoid/contents/ui/ProviderService.qml',
+        gnome: 'gnome/tailgauge@arzaroth.github.io/provider.ts',
         omarchy: 'omarchy/arzaroth.tailgauge/Service.qml'
     };
     // The object literal is flat, so its first closing brace ends the field
@@ -107,7 +107,7 @@ test('every service hands resolvePanel the same snapshot shape', () => {
 // which is how a search field loses focus mid-word several times a minute.
 test('neither QML service reports unchanged state as a change', () => {
     const services = {
-        plasma: 'plasma/org.tailgauge.plasmoid/contents/ui/TailscaleService.qml',
+        plasma: 'plasma/org.tailgauge.plasmoid/contents/ui/ProviderService.qml',
         omarchy: 'omarchy/arzaroth.tailgauge/Service.qml'
     };
     for (const [name, file] of Object.entries(services)) {
@@ -125,7 +125,7 @@ test('neither QML service reports unchanged state as a change', () => {
 // went anywhere.
 test('both QML services disarm the poll watchdog when the polls land', () => {
     for (const [name, file] of Object.entries({
-        plasma: 'plasma/org.tailgauge.plasmoid/contents/ui/TailscaleService.qml',
+        plasma: 'plasma/org.tailgauge.plasmoid/contents/ui/ProviderService.qml',
         omarchy: 'omarchy/arzaroth.tailgauge/Service.qml'
     })) {
         const src = read(file);
