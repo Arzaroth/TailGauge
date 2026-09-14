@@ -167,6 +167,11 @@ export interface PanelRow {
   children: PanelRow[]
   expanded: boolean
   searchPlaceholder: string
+  // A row with a scope is filtered live by that search field's query: it is
+  // drawn when the query is a substring of `searchKey`. The one row per scope
+  // with an empty key is the message drawn when nothing matched.
+  searchScope: string
+  searchKey: string
   payload: Raw
 }
 
@@ -211,6 +216,8 @@ export interface NavEntry {
   sectionId: string
   rowId: string
   action: string
+  searchScope: string
+  searchKey: string
 }
 
 // What one provider is doing, whether or not it is the one on screen. The bar
@@ -842,39 +849,43 @@ function mullvadRegionSubtitle(peer: Raw): string {
   return String(peer.Country || "").trim()
 }
 
-function filterMullvadRegions(regions: Raw, query: Raw): Peer[] {
-  var needle = String(query || "").trim().toLowerCase()
-  var values: Raw[] = Array.isArray(regions) ? regions : []
-  var result: Peer[] = []
-  for (var i = 0; i < values.length; i++) {
-    var node = values[i]
-    var label = (String(node.City || "") + " " + String(node.Country || "")).toLowerCase()
-    if (needle === "" || label.indexOf(needle) !== -1) result.push(node)
-  }
-  return result
+function mullvadRegionSearchKey(region: Raw): string {
+  if (!region) return ""
+  return (String(region.City || "") + " " + String(region.Country || "")).toLowerCase()
 }
 
 // Everything a machine row shows is searchable, plus the OS, so "linux" or a
 // half-remembered address finds a machine as readily as its name does.
+function machineSearchKey(peer: Raw): string {
+  if (!peer) return ""
+  return [
+    String(peer.DisplayName || ""),
+    String(peer.HostName || ""),
+    String(peer.DNSName || ""),
+    String(peer.OS || ""),
+    String(peer.UserName || ""),
+    (peer.IPv4 || []).join(" "),
+    (peer.IPv6 || []).join(" ")
+  ].join(" ").toLowerCase()
+}
+
+function filterMullvadRegions(regions: Raw, query: Raw): Peer[] {
+  var needle = String(query || "").trim().toLowerCase()
+  var values: Raw[] = Array.isArray(regions) ? regions : []
+  var result: Peer[] = []
+  for (var i = 0; i < values.length; i++)
+    if (needle === "" || mullvadRegionSearchKey(values[i]).indexOf(needle) !== -1) result.push(values[i])
+  return result
+}
+
 function filterMachines(peers: Raw, query: Raw): Peer[] {
   var needle = String(query || "").trim().toLowerCase()
   var values: Raw[] = Array.isArray(peers) ? peers : []
   if (needle === "") return values.slice(0)
 
   var result: Peer[] = []
-  for (var i = 0; i < values.length; i++) {
-    var peer = values[i]
-    var haystack = [
-      String(peer.DisplayName || ""),
-      String(peer.HostName || ""),
-      String(peer.DNSName || ""),
-      String(peer.OS || ""),
-      String(peer.UserName || ""),
-      (peer.IPv4 || []).join(" "),
-      (peer.IPv6 || []).join(" ")
-    ].join(" ").toLowerCase()
-    if (haystack.indexOf(needle) !== -1) result.push(peer)
-  }
+  for (var i = 0; i < values.length; i++)
+    if (machineSearchKey(values[i]).indexOf(needle) !== -1) result.push(values[i])
   return result
 }
 
@@ -1361,6 +1372,8 @@ function panelRow(row: PanelRowInput): PanelRow {
     children: row.children || [],
     expanded: row.expanded === true,
     searchPlaceholder: String(row.searchPlaceholder || ""),
+    searchScope: String(row.searchScope || ""),
+    searchKey: String(row.searchKey || ""),
     payload: row.payload === undefined ? null : row.payload
   }
 }
@@ -1820,7 +1833,8 @@ function exitNodeRows(state: PanelState, t: Translate, recentRegions: string[], 
         id: "mullvad:empty",
         kind: "empty",
         label: t("No Mullvad regions found."),
-        navigable: false
+        navigable: false,
+        searchScope: "mullvad"
       }))
     }
     for (i = 0; i < matches.length; i++) {
@@ -1837,6 +1851,8 @@ function exitNodeRows(state: PanelState, t: Translate, recentRegions: string[], 
         bold: region.ExitNode === true,
         busy: String(state.settingExitNodeId || "") === String(region.id || ""),
         hint: region.ExitNode === true ? t("Disconnect") : t("Connect"),
+        searchScope: "mullvad",
+        searchKey: mullvadRegionSearchKey(region),
         payload: region
       }))
     }
@@ -1945,7 +1961,8 @@ function machinesSection(state: PanelState, t: Translate, machineQuery: string,
       id: "machines:empty",
       kind: "empty",
       label: t("No machines match."),
-      navigable: false
+      navigable: false,
+      searchScope: "machines"
     }))
   }
 
@@ -1979,6 +1996,8 @@ function machinesSection(state: PanelState, t: Translate, machineQuery: string,
       copyOptions: copyOptions,
       children: details,
       expanded: expanded,
+      searchScope: "machines",
+      searchKey: machineSearchKey(peer),
       payload: peer
     }))
   }
@@ -1996,14 +2015,19 @@ function machinesSection(state: PanelState, t: Translate, machineQuery: string,
 // index into this, so neither frontend carries a focus state machine that the
 // other one could disagree with.
 function panelNavigation(header: PanelHeader, sections: PanelSection[]): NavEntry[] {
-  var nav: NavEntry[] = [{ sectionId: "header", rowId: header.id, action: header.action }]
+  var nav: NavEntry[] = [{
+    sectionId: "header", rowId: header.id, action: header.action, searchScope: "", searchKey: ""
+  }]
   for (var s = 0; s < sections.length; s++) {
     var section = sections[s]
     if (!section.visible) continue
     for (var r = 0; r < section.rows.length; r++) {
       var row = section.rows[r]
       if (!row.navigable) continue
-      nav.push({ sectionId: section.id, rowId: row.id, action: row.action })
+      nav.push({
+        sectionId: section.id, rowId: row.id, action: row.action,
+        searchScope: row.searchScope, searchKey: row.searchKey
+      })
       // An expanded row's children are drawn between it and the next row, so
       // they are cursor stops in that position too. Collapsed, they are not on
       // screen and must not be.
@@ -2011,7 +2035,10 @@ function panelNavigation(header: PanelHeader, sections: PanelSection[]): NavEntr
       for (var c = 0; c < row.children.length; c++) {
         var child = row.children[c]
         if (!child.navigable) continue
-        nav.push({ sectionId: section.id, rowId: child.id, action: child.action })
+        nav.push({
+          sectionId: section.id, rowId: child.id, action: child.action,
+          searchScope: child.searchScope, searchKey: child.searchKey
+        })
       }
     }
   }
@@ -2118,6 +2145,7 @@ export {
   mullvadRegionKey,
   mullvadRegionTitle,
   mullvadRegionSubtitle,
+  mullvadRegionSearchKey,
   filterMullvadRegions,
   mullvadRegionNode,
   recentMullvadNodes,
@@ -2144,6 +2172,7 @@ export {
   formatSince,
   connectionSummary,
   peerSubtitle,
+  machineSearchKey,
   filterMachines,
   resolvePanel,
   panelRowAt,
