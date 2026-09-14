@@ -6,6 +6,19 @@ All notable changes to this project are documented here.
 
 ### Added
 
+- **TailGauge detects which VPN CLI you actually have.** A provider registry
+  names every provider it knows how to drive, the binary that proves the
+  provider is installed, and the features that provider has. One `which` per
+  refresh probes them all, and the panel is resolved against whichever one is
+  active: a provider with no exit nodes, no Mullvad regions, no account
+  switching and no Taildrop simply never grows those rows. With nothing
+  installed the panel says what it looked for instead of naming one provider.
+
+  Being installed is not the same as being drivable. NetBird is detected and
+  named, but nothing parses its CLI yet, so its switch stays off behind a line
+  saying so rather than firing Tailscale's commands at its binary. On a machine
+  with both, Tailscale wins the automatic choice and nothing changes.
+
 - **`pnpm coverage`** runs the suite under Node's coverage reporter. The test
   files are excluded from the report, so the percentages describe
   `shared/model.ts` rather than the tests measuring themselves - and the three
