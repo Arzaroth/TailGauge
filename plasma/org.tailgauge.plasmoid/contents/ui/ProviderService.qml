@@ -10,6 +10,8 @@ Item {
     // Every provider probed on PATH, and the one the panel drives. `installed`
     // stays the gate every command already checks: it now means the active
     // provider is one we can actually drive.
+    property var networks: []
+    property string selectingNetworkId: ""
     property var providers: []
     property string activeProviderId: ""
     property bool installed: false
@@ -80,7 +82,9 @@ Item {
     // shape, so the panel they get back cannot disagree.
     function _commands() {
       return Model.providerCommands({
-        providers: providers,
+        networks: networks,
+      selectingNetworkId: selectingNetworkId,
+      providers: providers,
         activeProviderId: activeProviderId
       }) || {}
     }
@@ -197,7 +201,7 @@ Item {
     // in flight fifteen seconds later, which at the three-second cadence of an
     // open popup is nearly always one - a refresh silently skipped.
     function _pollSettled(kind) {
-        var polls = ["status", "mullvad", "accounts"]
+        var polls = ["status", "mullvad", "accounts", "networks"]
         for (var i = 0; i < polls.length; i++) {
             if (polls[i] === kind) continue
             if (root._inflight[polls[i]]) return
@@ -258,7 +262,14 @@ Item {
                     root.lastError = Model.elideStatus(stderr || stdout || "Could not list Tailscale connections")
                 }
             }
-        } else if (kind === "mullvad") {
+        } else if (kind === "networks") {
+        root._pollSettled(kind)
+        root.parseNetworks(exitCode === 0 ? stdout : "")
+      } else if (kind === "selectNetwork") {
+        root.selectingNetworkId = ""
+        if (exitCode !== 0) root.lastError = Model.elideStatus(stderr || stdout || "Network change failed")
+        root.refresh(false)
+      } else if (kind === "mullvad") {
             root._pollSettled(kind)
             root.parseMullvadExitNodes(exitCode === 0 ? stdout : "")
         } else if (kind === "action") {
@@ -430,12 +441,13 @@ Item {
             refreshing = true
             launched = true
         }
-        if (_run("mullvad", _commands().exitNodeList)) launched = true
+        if (_commands().exitNodeList && _run("mullvad", _commands().exitNodeList)) launched = true
+      if (_commands().networks && _run("networks", _commands().networks)) launched = true
 
         var now = Date.now()
         var shouldRefreshAccounts = forceAccounts === true || accounts.length === 0 || now - _lastAccountsRefreshMs > 60000
         if (shouldRefreshAccounts) {
-            if (_run("accounts", _commands().accounts)) {
+            if (_commands().accounts && _run("accounts", _commands().accounts)) {
                 _lastAccountsRefreshMs = now
                 launched = true
             }
@@ -464,6 +476,8 @@ Item {
         exitNodes = []
         ownExitNodes = []
         mullvadExitNodes = []
+        networks = []
+        selectingNetworkId = ""
         mullvadRegions = []
         accounts = []
         selectedAccountId = ""
@@ -474,7 +488,10 @@ Item {
     }
 
     function parseStatus(raw) {
-        var parsed = Model.parseStatus(raw)
+        var parsed = Model.parseProviderStatus({
+        providers: root.providers,
+        activeProviderId: root.activeProviderId
+      }, raw)
         if (!parsed.ok) {
             resetUnavailable(parsed.message || "Status error")
             lastError = parsed.error || "Failed to parse tailscale status"
@@ -524,6 +541,23 @@ Item {
         selectedAccountId = parsed.selectedAccountId
         selectedAccountLabel = parsed.selectedAccountLabel
         accountsAccessDenied = false
+    }
+
+    function parseNetworks(raw) {
+      var parsed = Model.parseNetbirdNetworks(raw)
+      if (!parsed.ok) {
+        lastError = Model.elideStatus(parsed.message)
+        return
+      }
+      networks = _stable(networks, parsed.networks)
+    }
+
+    function selectNetwork(network) {
+      if (!installed || !running || !network) return
+      var id = String(network.id || "")
+      if (id === "") return
+      if (_run("selectNetwork", _commands().selectNetwork(id, network.selected !== true)))
+        selectingNetworkId = id
     }
 
     function parseMullvadExitNodes(raw) {

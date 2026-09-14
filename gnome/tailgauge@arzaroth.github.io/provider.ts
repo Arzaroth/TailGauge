@@ -59,6 +59,8 @@ export const ProviderService = GObject.registerClass({
     // Every provider probed on PATH, and the one the panel drives. `installed`
     // stays the gate every command already checks: it now means the active
     // provider is one we can actually drive.
+    declare networks: Model.Network[];
+    declare selectingNetworkId: string;
     declare providers: Model.ProviderState[];
     declare activeProviderId: string;
     declare installed: boolean;
@@ -104,6 +106,8 @@ export const ProviderService = GObject.registerClass({
         this._timeouts = new Map();
         this._destroyed = false;
 
+        this.networks = [];
+        this.selectingNetworkId = '';
         this.providers = [];
         this.activeProviderId = '';
         this.installed = false;
@@ -205,6 +209,8 @@ export const ProviderService = GObject.registerClass({
     // shape, so the panel they get back cannot disagree.
     _commands(): Partial<Model.ProviderCommands> {
         return Model.providerCommands({
+            networks: this.networks,
+            selectingNetworkId: this.selectingNetworkId,
             providers: this.providers,
             activeProviderId: this.activeProviderId,
         }) ?? {};
@@ -436,15 +442,23 @@ export const ProviderService = GObject.registerClass({
             launched = true;
         }
 
-        if (this._run('mullvad', this._commands().exitNodeList!, (status, stdout) => {
+        const exitNodeList = this._commands().exitNodeList;
+        if (exitNodeList && this._run('mullvad', exitNodeList, (status, stdout) => {
             this._parseMullvadExitNodes(status === 0 ? stdout : '');
+        }))
+            launched = true;
+
+        const networks = this._commands().networks;
+        if (networks && this._run('networks', networks, (status, stdout) => {
+            this._parseNetworks(status === 0 ? stdout : '');
         }))
             launched = true;
 
         const now = GLib.get_monotonic_time() / 1000;
         const stale = now - this._lastAccountsRefreshMs > ACCOUNTS_MAX_AGE_MS;
-        if (forceAccounts || this.accounts.length === 0 || stale) {
-            if (this._run('accounts', this._commands().accounts!, (status, stdout, stderr) => {
+        const accountsCommand = this._commands().accounts;
+        if (accountsCommand && (forceAccounts || this.accounts.length === 0 || stale)) {
+            if (this._run('accounts', accountsCommand, (status, stdout, stderr) => {
                 if (status === 0) {
                     this._parseAccounts(stdout);
                 } else {
@@ -516,6 +530,8 @@ export const ProviderService = GObject.registerClass({
         this.exitNodes = [];
         this.ownExitNodes = [];
         this.mullvadExitNodes = [];
+        this.networks = [];
+        this.selectingNetworkId = '';
         this.mullvadRegions = [];
         this.accounts = [];
         this.selectedAccountId = '';
@@ -526,7 +542,10 @@ export const ProviderService = GObject.registerClass({
     }
 
     _parseStatus(raw: string): void {
-        const parsed = Model.parseStatus(raw);
+        const parsed = Model.parseProviderStatus({
+            providers: this.providers,
+            activeProviderId: this.activeProviderId,
+        }, raw);
         if (!parsed.ok) {
             this._resetUnavailable(parsed.message || _('Status error'));
             this.lastError = parsed.error || 'Failed to parse tailscale status';
@@ -579,6 +598,34 @@ export const ProviderService = GObject.registerClass({
         this.selectedAccountId = parsed.selectedAccountId;
         this.selectedAccountLabel = parsed.selectedAccountLabel;
         this.accountsAccessDenied = false;
+    }
+
+    _parseNetworks(raw: string): void {
+        const parsed = Model.parseNetbirdNetworks(raw);
+        if (!parsed.ok) {
+            this.lastError = Model.elideStatus(parsed.message);
+            return;
+        }
+        this.networks = parsed.networks;
+    }
+
+    selectNetwork(network: Model.Network | null): void {
+        if (!this.installed || !this.running || !network) return;
+        const id = String(network.id || '');
+        const select = this._commands().selectNetwork;
+        if (id === '' || !select) return;
+        const started = this._run('selectNetwork', select(id, network.selected !== true),
+            (status, stdout, stderr) => {
+                this.selectingNetworkId = '';
+                if (status !== 0)
+                    this.lastError = Model.elideStatus(stderr || stdout || _('Network change failed'));
+                this.refresh(false);
+                this.emit('changed');
+            });
+        if (started) {
+            this.selectingNetworkId = id;
+            this.emit('changed');
+        }
     }
 
     _parseMullvadExitNodes(raw: string): void {

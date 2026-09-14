@@ -653,18 +653,29 @@ test('a provider without a feature never shows the section that needs it', () =>
     assert.equal(section(ts, 'connections').visible, true);
 });
 
-test('a provider we cannot drive yet is named, but never driven', () => {
-    const nb = state({providers: detected('netbird')});
-    assert.equal(M.activeProvider(nb)!.id, 'netbird', 'it is still what the panel is about');
-    assert.equal(M.providerReady(nb), false);
-    assert.equal(M.providerReady(state({providers: detected('tailscale')})), true);
+test('every provider the registry calls drivable has what driving needs', () => {
+    for (const provider of M.providerDescriptors()) {
+        if (!provider.supported) continue;
+        assert.ok(provider.commands.status.length > 0, `${provider.id} has no status command`);
+        assert.ok(provider.commands.up.length > 0, `${provider.id} has no up command`);
+        assert.ok(provider.commands.down.length > 0, `${provider.id} has no down command`);
+        assert.equal(provider.commands.status[0], provider.cli,
+            `${provider.id} polls a binary other than the one detection probes`);
+        // A capability with no command behind it is a row that would do nothing.
+        if (provider.capabilities.exitNodes) assert.ok(provider.commands.exitNodeList);
+        if (provider.capabilities.accounts) assert.ok(provider.commands.accounts);
+        if (provider.capabilities.networks)
+            assert.ok(provider.commands.networks && provider.commands.selectNetwork);
+    }
+});
 
-    const panel = M.resolvePanel(nb, {});
-    assert.equal(panel.header.title, 'NetBird', 'named, not mistaken for the Tailscale device');
-    assert.equal(panel.header.toggleEnabled, false, 'a switch that would do nothing stays off');
-    assert.equal(panel.header.toggleVisible, false);
-    assert.match(panel.status.text, /cannot drive it yet/);
-    assert.equal(section(panel, 'machines').visible, false);
+test('nothing installed is never ready, whatever was chosen', () => {
+    assert.equal(M.providerReady({providers: detected()}), false);
+    assert.equal(M.providerReady({providers: detected(), activeProviderId: 'tailscale'}), false);
+    assert.equal(M.providerReady({}), false);
+    const panel = M.resolvePanel(state({providers: detected(), installed: false}), {});
+    assert.equal(panel.header.toggleEnabled, false);
+    assert.match(panel.status.text, /No supported VPN CLI/);
 });
 
 test('with both installed the drivable one wins the auto-choice', () => {
