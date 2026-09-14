@@ -439,6 +439,16 @@ function activeProvider(state: PanelState | null | undefined): ProviderDescripto
   return available[0]
 }
 
+// Installed and parseable: the ones a switcher could actually move between.
+function drivableProviders(state: PanelState | null | undefined): ProviderDescriptor[] {
+  var available = installedProviders(state)
+  var out: ProviderDescriptor[] = []
+  for (var i = 0; i < available.length; i++) {
+    if (available[i].supported) out.push(available[i])
+  }
+  return out
+}
+
 // Installed and parseable. The frontends poll only when this holds, so one
 // provider's commands are never fired at another's binary.
 function providerReady(state: PanelState | null | undefined): boolean {
@@ -1370,6 +1380,35 @@ function updateSection(state: PanelState, t: Translate): PanelSection {
 // The local machine, rendered as a machine row: `tailscale status` already
 // describes it exactly the way it describes a peer, and copying your own
 // address is the one thing the header's name alone cannot do.
+function providersSection(state: PanelState, t: Translate): PanelSection {
+  var drivable = drivableProviders(state)
+  var current = activeProvider(state)
+  var rows: PanelRow[] = []
+  for (var i = 0; i < drivable.length; i++) {
+    var provider = drivable[i]
+    var selected = current !== null && current.id === provider.id
+    rows.push(panelRow({
+      id: "provider:" + provider.id,
+      kind: "provider",
+      label: provider.label,
+      icon: selected ? "checkmark-symbolic" : "network-vpn-symbolic",
+      glyph: selected ? "\uf00c" : "\udb82\udd82",
+      action: "switchProvider",
+      current: selected,
+      bold: selected,
+      payload: provider
+    }))
+  }
+  return {
+    id: "providers",
+    title: t("VPN"),
+    // One provider is not a choice, and nought is not a list.
+    visible: rows.length > 1,
+    empty: "",
+    rows: rows
+  }
+}
+
 function selfSection(state: PanelState, t: Translate): PanelSection {
   var peer = state.selfPeer || null
   var copyOptions = peerCopyOptions(peer)
@@ -1653,6 +1692,7 @@ function resolvePanel(state: PanelState | null | undefined, options?: ResolveOpt
   var header = panelHeader(source, t, opts.phraseIndex)
   var sections = [
     updateSection(source, t),
+    providersSection(source, t),
     selfSection(source, t),
     connectionsSection(source, t),
     exitNodesSection(source, t, opts.recentRegions || [], opts.mullvadQuery || "", opts.mullvadPickerOpen === true),
@@ -1710,6 +1750,7 @@ export {
   providerCliNames,
   parseProviderProbe,
   providerReady,
+  drivableProviders,
   providerCommands,
   providerById,
   installedProviders,

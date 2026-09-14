@@ -626,6 +626,9 @@ class TailGaugeIndicator extends PanelMenu.Button {
         case 'authorize':
             this._service.authorizeTailscaleOperator();
             break;
+        case 'switchProvider':
+            this._service.switchProvider(row.payload);
+            break;
         case 'selectNetwork':
             this._service.selectNetwork(row.payload);
             break;

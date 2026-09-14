@@ -22,6 +22,11 @@ PlasmoidItem {
 
     ProviderService {
         id: service
+        activeProviderId: Plasmoid.configuration.activeProvider
+        onProviderChanged: function (id) {
+            Plasmoid.configuration.activeProvider = id
+            Plasmoid.configuration.writeConfig()
+        }
         refreshIntervalSec: Plasmoid.configuration.refreshIntervalSec
         version: Plasmoid.metaData.version
         // An open popup is worth polling for; a closed one rides the watcher.

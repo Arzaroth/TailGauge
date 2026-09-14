@@ -17,6 +17,11 @@
       <summary>Keyboard shortcut to turn Tailscale on and off</summary>
       <description>Empty by default, so it cannot collide with a binding you already use.</description>
     </key>
+    <key name="active-provider" type="s">
+      <default>''</default>
+      <summary>Which VPN provider the panel drives</summary>
+      <description>Empty picks the first installed provider TailGauge can drive.</description>
+    </key>
     <key name="recent-mullvad-regions" type="as">
       <default>[]</default>
       <summary>Recently used Mullvad exit node regions</summary>

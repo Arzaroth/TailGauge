@@ -18,7 +18,8 @@
     "aliases": ["tailgauge", "tail-gauge"],
     "allowMultiple": false,
     "defaults": {
-      "refreshIntervalSec": 30
+      "refreshIntervalSec": 30,
+      "activeProvider": ""
     },
     "schema": [
       {
