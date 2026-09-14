@@ -700,3 +700,31 @@ test('the panel names the provider it is driving', () => {
     assert.equal(nb.header.meta, 'NetBird is disconnected');
     assert.equal(nb.header.toggleHint, 'Turn NetBird on');
 });
+
+test('the argv comes from the registry, not the caller', () => {
+    const ts = M.providerCommands({providers: detected('tailscale')})!;
+    assert.deepEqual(ts.status, ['tailscale', 'status', '--json']);
+    assert.deepEqual(ts.switchAccount!('work'), ['tailscale', 'switch', 'work']);
+    assert.deepEqual(ts.setExitNode!('100.64.0.3'), ['tailscale', 'set', '--exit-node=100.64.0.3']);
+    assert.deepEqual(ts.setExitNode!(''), ['tailscale', 'set', '--exit-node=']);
+
+    const nb = M.providerCommands({providers: detected('netbird')})!;
+    assert.deepEqual(nb.status, ['netbird', 'status', '--json']);
+    assert.deepEqual(nb.selectNetwork!('net1', true), ['netbird', 'networks', 'select', 'net1']);
+    assert.deepEqual(nb.selectNetwork!('net1', false), ['netbird', 'networks', 'deselect', 'net1']);
+    // NetBird has neither, and the registry says so rather than guessing.
+    assert.equal(nb.exitNodeList, undefined);
+    assert.equal(nb.accounts, undefined);
+
+    assert.equal(M.providerCommands({providers: detected()}), null);
+});
+
+test('loginPlan turns on whatever provider it was handed', () => {
+    const up = ['netbird', 'up'];
+    assert.deepEqual(M.loginPlan(false, '', up), {authUrl: '', command: up});
+    // A pending authorization is a URL to open, whoever the provider is.
+    assert.deepEqual(M.loginPlan(true, 'https://login.example/x', up),
+        {authUrl: 'https://login.example/x', command: []});
+    // No provider, no command to run.
+    assert.deepEqual(M.loginPlan(false, '', undefined), {authUrl: '', command: []});
+});

@@ -201,6 +201,20 @@ export interface ProviderCapabilities {
 
 export type ProviderCapability = keyof ProviderCapabilities
 
+// The argv a provider answers to. Everything past `status`, `up` and `down` is
+// optional, and present only where the matching capability is.
+export interface ProviderCommands {
+  status: string[]
+  up: string[]
+  down: string[]
+  exitNodeList?: string[]
+  accounts?: string[]
+  networks?: string[]
+  switchAccount?: (accountId: string) => string[]
+  setExitNode?: (target: string) => string[]
+  selectNetwork?: (networkId: string, selected: boolean) => string[]
+}
+
 export interface ProviderDescriptor {
   id: string
   label: string
@@ -211,6 +225,7 @@ export interface ProviderDescriptor {
   // and a frontend must not fire one provider's commands at another's binary.
   supported: boolean
   capabilities: ProviderCapabilities
+  commands: ProviderCommands
 }
 
 // One provider as a frontend found it. Frontends report every provider they
@@ -278,6 +293,19 @@ var PROVIDERS: ProviderDescriptor[] = [
       accounts: true,
       networks: false,
       connectionQuality: false
+    },
+    commands: {
+      status: ["tailscale", "status", "--json"],
+      up: ["tailscale", "up"],
+      down: ["tailscale", "down"],
+      exitNodeList: ["tailscale", "exit-node", "list"],
+      accounts: ["tailscale", "switch", "--list", "--json"],
+      switchAccount: function (accountId) {
+        return ["tailscale", "switch", String(accountId || "")]
+      },
+      setExitNode: function (target) {
+        return ["tailscale", "set", "--exit-node=" + String(target || "")]
+      }
     }
   },
   {
@@ -292,6 +320,15 @@ var PROVIDERS: ProviderDescriptor[] = [
       accounts: false,
       networks: true,
       connectionQuality: true
+    },
+    commands: {
+      status: ["netbird", "status", "--json"],
+      up: ["netbird", "up"],
+      down: ["netbird", "down"],
+      networks: ["netbird", "networks", "list"],
+      selectNetwork: function (networkId, selected) {
+        return ["netbird", "networks", selected ? "select" : "deselect", String(networkId || "")]
+      }
     }
   }
 ]
@@ -395,6 +432,11 @@ function providerSupports(state: PanelState | null | undefined, capability: Prov
 
 // The name the panel calls the thing it is driving. Falls back to the product
 // name so an empty panel still says what it is.
+function providerCommands(state: PanelState | null | undefined): ProviderCommands | null {
+  var provider = activeProvider(state)
+  return provider ? provider.commands : null
+}
+
 function providerLabel(state: PanelState | null | undefined): string {
   var provider = activeProvider(state)
   return provider ? provider.label : "TailGauge"
@@ -488,12 +530,14 @@ function accountLabel(account: Account | null | undefined): string {
   return String(account.id || "Unknown account")
 }
 
-function loginPlan(needsLogin: Raw, authUrl: Raw): LoginPlan {
+function loginPlan(needsLogin: Raw, authUrl: Raw, upCommand: Raw): LoginPlan {
   var url = String(authUrl || "").trim()
   if (needsLogin === true && /^https?:\/\//.test(url)) {
     return { authUrl: url, command: [] }
   }
-  return { authUrl: "", command: ["tailscale", "up"] }
+  var command = upCommand && typeof upCommand.length === "number"
+    ? ([] as string[]).concat(upCommand) : []
+  return { authUrl: "", command: command }
 }
 
 // Taildrop is a tailnet feature the admin can turn off, so the button for it
@@ -1425,6 +1469,7 @@ export {
   providerCliNames,
   parseProviderProbe,
   providerReady,
+  providerCommands,
   providerById,
   installedProviders,
   activeProvider,
