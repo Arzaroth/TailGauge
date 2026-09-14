@@ -6,6 +6,18 @@ All notable changes to this project are documented here.
 
 ### Added
 
+- **NetBird is a second provider TailGauge can drive.** It parses
+  `netbird status --json` into the same machine list, self row and copy actions
+  Tailscale gets, and adds a Networks section for the routes
+  `netbird networks list` reports, which you can join and leave from the panel.
+  What NetBird does not have is absent rather than empty: no exit nodes, no
+  Mullvad regions, no account switching, no Taildrop.
+
+- **A VPN section switches between installed providers**, shown only when more
+  than one is installed and drivable. Switching clears the panel before it
+  refreshes, so one provider's machines are never listed under the other's
+  name, and the choice is remembered per desktop.
+
 - **TailGauge detects which VPN CLI you actually have.** A provider registry
   names every provider it knows how to drive, the binary that proves the
   provider is installed, and the features that provider has. One `which` per
@@ -14,10 +26,10 @@ All notable changes to this project are documented here.
   switching and no Taildrop simply never grows those rows. With nothing
   installed the panel says what it looked for instead of naming one provider.
 
-  Being installed is not the same as being drivable. NetBird is detected and
-  named, but nothing parses its CLI yet, so its switch stays off behind a line
-  saying so rather than firing Tailscale's commands at its binary. On a machine
-  with both, Tailscale wins the automatic choice and nothing changes.
+  Being installed is not the same as being drivable: a provider the model
+  cannot parse is named but never driven, and never offered by the switcher.
+  On a machine with both installed, Tailscale still wins the automatic choice,
+  so nothing changes until you pick the other one.
 
 - **`pnpm coverage`** runs the suite under Node's coverage reporter. The test
   files are excluded from the report, so the percentages describe
@@ -27,6 +39,20 @@ All notable changes to this project are documented here.
   report on every run; no threshold gates the build.
 
 ### Changed
+
+- **The model no longer describes itself as Tailscale's.** `Peer.TailscaleIPs`
+  and `TailscaleIPv6` are `IPv4` and `IPv6`, `tailnetExitNodes` is
+  `ownExitNodes`, and `backendState` is `daemonState`. The daemon's own JSON
+  keys are untouched: only what the model produces is renamed. Mullvad and
+  Taildrop keep their names, being Tailscale features rather than Tailscale
+  spellings of a general idea. On disk, `TailscaleService.qml` is
+  `ProviderService.qml`, GNOME's `tailscale.ts` is `provider.ts`, and
+  `TailscaleIcon` is `TailGaugeIcon`.
+
+- **A provider's commands live with the provider.** Each service used to spell
+  `tailscale` into every command it ran, which is how a panel could name one
+  provider and drive another. The argv is now part of the registry, and a
+  parity test fails on any service that names a provider binary itself.
 
 - **The toolchain is managed with pnpm.** `pnpm-lock.yaml` replaces
   `package-lock.json` at the same resolved versions, the `packageManager`
