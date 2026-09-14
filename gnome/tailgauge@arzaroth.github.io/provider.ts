@@ -526,6 +526,8 @@ export const ProviderService = GObject.registerClass({
                 this._cancel('status');
                 this._cancel('mullvad');
                 this._cancel('accounts');
+                this._cancel('networks');
+                this._cancel('bgStatus');
                 this.refreshing = false;
                 this._emit();
                 return GLib.SOURCE_REMOVE;
@@ -705,12 +707,14 @@ export const ProviderService = GObject.registerClass({
         }).filter(p => p.id !== this.activeProviderId);
         if (others.length === 0) return;
         const provider = others[this._bgIndex % others.length];
-        this._bgIndex = (this._bgIndex + 1) % others.length;
-        this._bgProviderId = provider.id;
-        this._run('bgStatus', provider.commands.status, (status, stdout) => {
+        // Advance only once the poll is actually going, so a refused launch
+        // does not skip a provider's turn.
+        if (!this._run('bgStatus', provider.commands.status, (status, stdout) => {
             this._setSummary(provider.id, status === 0 ? Model.parseProviderStatus(
                 {providers: this.providers, activeProviderId: provider.id}, stdout) : null);
-        });
+        })) return;
+        this._bgIndex = (this._bgIndex + 1) % others.length;
+        this._bgProviderId = provider.id;
     }
 
     _parseNetworks(raw: string): void {

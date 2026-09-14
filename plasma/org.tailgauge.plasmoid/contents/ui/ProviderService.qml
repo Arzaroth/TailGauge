@@ -666,9 +666,12 @@ Item {
       }
       if (others.length === 0) return
       var provider = others[_bgIndex % others.length]
+      // The reply is read against _bgProviderId, so moving it for a poll
+      // that never launched would file the running one under the wrong
+      // provider.
+      if (!_run("bgStatus", provider.commands.status)) return
       _bgIndex = (_bgIndex + 1) % others.length
       _bgProviderId = provider.id
-      _run("bgStatus", provider.commands.status)
     }
 
     function parseNetworks(raw) {
@@ -832,6 +835,8 @@ Item {
             root._reap("status")
             root._reap("mullvad")
             root._reap("accounts")
+            root._reap("networks")
+            root._reap("bgStatus")
             root.refreshing = false
         }
     }

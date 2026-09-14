@@ -891,6 +891,8 @@ Item {
       root._reap("status")
       root._reap("mullvad")
       root._reap("accounts")
+      root._reap("networks")
+      root._reap("bgStatus")
       root.refreshing = false
     }
   }
