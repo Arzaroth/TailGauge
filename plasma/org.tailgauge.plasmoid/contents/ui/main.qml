@@ -38,14 +38,14 @@ PlasmoidItem {
 
     // The provider the panel is driving, so the tooltip never names the wrong one.
     readonly property string providerLabel: Model.providerLabel(service.snapshot())
+    readonly property var barState: Model.barState(service.snapshot(), function (text) { return text })
 
     toolTipMainText: service.installed ? (service.selfName || providerLabel) : providerLabel
     toolTipSubText: {
-        if (!service.installed) return i18n("No supported VPN CLI on PATH.")
-        if (service.lastError !== "") return service.lastError
-        if (!service.active) return i18n("%1 is disconnected", providerLabel)
-        var lines = [service.statusText]
-        if (service.selfIp !== "") lines.push(service.selfIp)
+        // Every installed provider's state, not just the one being shown.
+        var lines = root.barState.tooltip.slice()
+        if (service.lastError !== "") lines.push(service.lastError)
+        if (!service.installed || !service.active) return lines.join("\n")
         var exit = activeExitNodeName()
         if (exit !== "") lines.push(i18n("Exit node: %1", exit))
         return lines.join("\n")

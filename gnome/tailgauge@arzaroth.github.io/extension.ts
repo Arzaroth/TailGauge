@@ -366,7 +366,8 @@ class TailGaugeIndicator extends PanelMenu.Button {
     }
 
     _syncPanel(panel: Model.Panel): void {
-        this._panelIcon.setState(panel.header.crossed, panel.header.warning);
+        // The bar describes the machine, not the panel's current view.
+        this._panelIcon.setState(panel.bar.crossed, panel.bar.warning);
         this._panelIcon.opacity = panel.header.dimmed ? 130 : 255;
 
         const showName = this._settings.get_boolean('show-status-in-panel');

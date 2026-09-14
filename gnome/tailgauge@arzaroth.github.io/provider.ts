@@ -60,6 +60,11 @@ export const ProviderService = GObject.registerClass({
     // stays the gate every command already checks: it now means the active
     // provider is one we can actually drive.
     declare _pollProvider: Map<string, string>;
+    // One entry per installed provider, kept whether or not it is the one on
+    // screen, so the bar icon and its tooltip describe the machine.
+    declare summaries: Model.ProviderSummary[];
+    declare _bgIndex: number;
+    declare _bgProviderId: string;
     declare networks: Model.Network[];
     declare selectingNetworkId: string;
     declare providers: Model.ProviderState[];
@@ -108,6 +113,9 @@ export const ProviderService = GObject.registerClass({
         this._destroyed = false;
 
         this._pollProvider = new Map();
+        this.summaries = [];
+        this._bgIndex = 0;
+        this._bgProviderId = '';
         this.networks = [];
         this.selectingNetworkId = '';
         this.providers = [];
@@ -211,6 +219,7 @@ export const ProviderService = GObject.registerClass({
     // shape, so the panel they get back cannot disagree.
     _commands(): Partial<Model.ProviderCommands> {
         return Model.providerCommands({
+            summaries: this.summaries,
             networks: this.networks,
             selectingNetworkId: this.selectingNetworkId,
             providers: this.providers,
@@ -327,7 +336,7 @@ export const ProviderService = GObject.registerClass({
             }
             if (this._destroyed)
                 return;
-            if (kind !== 'which' && this._stale(kind))
+            if (kind !== 'which' && kind !== 'bgStatus' && this._stale(kind))
                 return;
             callback(status, stdout, stderr);
             this._emit();
@@ -468,6 +477,8 @@ export const ProviderService = GObject.registerClass({
         }))
             launched = true;
 
+        this._pollNextIdleProvider();
+
         const now = GLib.get_monotonic_time() / 1000;
         const stale = now - this._lastAccountsRefreshMs > ACCOUNTS_MAX_AGE_MS;
         const accountsCommand = this._commands().accounts;
@@ -560,6 +571,7 @@ export const ProviderService = GObject.registerClass({
             providers: this.providers,
             activeProviderId: this.activeProviderId,
         }, raw);
+        this._setSummary(this.activeProviderId, parsed);
         if (!parsed.ok) {
             this._resetUnavailable(parsed.message || _('Status error'));
             this.lastError = parsed.error || 'Failed to parse tailscale status';
@@ -625,6 +637,15 @@ export const ProviderService = GObject.registerClass({
             this._cancel(kind);
         // The old provider's machines and accounts are not this one's.
         this._resetUnavailable(_('Switching'));
+        // Seed from what the background poll already knows, so the header does
+        // not flash disconnected on the way to a provider that is up.
+        const known = this.summaries.find(s => s.id === id);
+        if (known) {
+            this.running = known.running;
+            this.needsLogin = known.needsLogin;
+            this.selfName = known.selfName;
+            this.selfIp = known.selfIp;
+        }
         this.installed = Model.providerReady({
             providers: this.providers,
             activeProviderId: this.activeProviderId,
@@ -632,6 +653,29 @@ export const ProviderService = GObject.registerClass({
         this._settings.set_string('active-provider', id);
         this.refresh(true);
         this.emit('changed');
+    }
+
+    _setSummary(providerId: string, parsed: unknown): void {
+        const next = this.summaries.filter(s => s.id !== providerId);
+        next.push(Model.summarizeProvider(providerId, parsed));
+        this.summaries = next;
+    }
+
+    // One inactive provider per tick, so the tooltip stays current without
+    // running every provider's whole poll set every time.
+    _pollNextIdleProvider(): void {
+        const others = Model.drivableProviders({
+            providers: this.providers,
+            activeProviderId: this.activeProviderId,
+        }).filter(p => p.id !== this.activeProviderId);
+        if (others.length === 0) return;
+        const provider = others[this._bgIndex % others.length];
+        this._bgIndex = (this._bgIndex + 1) % others.length;
+        this._bgProviderId = provider.id;
+        this._run('bgStatus', provider.commands.status, (status, stdout) => {
+            this._setSummary(provider.id, status === 0 ? Model.parseProviderStatus(
+                {providers: this.providers, activeProviderId: provider.id}, stdout) : null);
+        });
     }
 
     _parseNetworks(raw: string): void {

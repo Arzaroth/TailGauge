@@ -26,7 +26,9 @@ Panel {
   readonly property color urgent: bar ? bar.urgent : Color.urgent
   readonly property color dim: Qt.darker(foreground, 1.55)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
-  readonly property color barIconColor: tailscale.active ? barForeground : Qt.darker(barForeground, 1.55)
+  // The bar describes the machine, not the panel's current view: switching
+  // which provider is shown must not read as a disconnection.
+  readonly property color barIconColor: root.panel.bar.connected ? barForeground : Qt.darker(barForeground, 1.55)
   readonly property color hoverFill: Style.hoverFillFor(foreground, Color.accent)
   readonly property color selectedFill: Style.selectedFillFor(foreground, Color.accent)
 
@@ -250,7 +252,7 @@ Panel {
     id: button
     anchors.fill: parent
     bar: root.bar
-    tooltipText: root.panel.header.title
+    tooltipText: root.panel.bar.tooltip.join("\n")
     iconComponent: Component {
       Item {
         TailGaugeIcon {
@@ -258,8 +260,8 @@ Panel {
           iconSize: Style.space(11)
           color: root.barIconColor
           badgeColor: root.urgent
-          crossed: root.panel.header.crossed
-          warning: root.panel.header.warning
+          crossed: root.panel.bar.crossed
+          warning: root.panel.bar.warning
         }
       }
     }
