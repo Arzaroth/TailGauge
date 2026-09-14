@@ -1167,3 +1167,19 @@ test('the hero says which provider to draw, not just what to print', () => {
     assert.equal(M.resolvePanel(state({providers: detected('netbird')}), {}).header.providerId, 'netbird');
     assert.equal(M.resolvePanel(state({providers: detected(), installed: false}), {}).header.providerId, '');
 });
+
+test('the header carries its controls, so every desktop draws the same ones', () => {
+    const ready = M.resolvePanel(state({providers: detected('tailscale')}), {}).header;
+    const refresh = only(ready.actions, a => a.id === 'refresh', 'refresh action');
+    assert.equal(refresh.label, 'Refresh');
+    assert.ok(refresh.glyph.length > 0 && refresh.icon.length > 0);
+
+    // Nothing to refresh when there is no provider to drive.
+    assert.deepEqual(M.resolvePanel(state({providers: detected(), installed: false}), {}).header.actions, []);
+});
+
+test('header controls are translated like every other panel string', () => {
+    const shout = (text: string) => text.toUpperCase();
+    const header = M.resolvePanel(state({providers: detected('tailscale')}), {t: shout}).header;
+    assert.equal(only(header.actions, a => a.id === 'refresh', 'refresh').label, 'REFRESH');
+});

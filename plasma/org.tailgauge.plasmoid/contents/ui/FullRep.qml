@@ -137,6 +137,10 @@ Item {
         root.expanded = false
     }
 
+    function headerAction(actionId) {
+        if (actionId === "refresh") service.refresh(true)
+    }
+
     function rowAction(row, actionId) {
         if (actionId === "send") sendPeerFile(row)
         else if (actionId === "detail") toggleDetail(row)
@@ -348,6 +352,22 @@ Item {
                                 target: full
                                 function onPhraseIndexChanged() { heroPhraseFade.restart() }
                             }
+                        }
+                    }
+
+                    Repeater {
+                        model: full.panel.header.actions
+
+                        PlasmaComponents3.ToolButton {
+                            required property var modelData
+                            icon.name: modelData.icon
+                            display: PlasmaComponents3.AbstractButton.IconOnly
+                            flat: true
+                            Layout.alignment: Qt.AlignVCenter
+                            onClicked: full.headerAction(modelData.id)
+
+                            PlasmaComponents3.ToolTip.visible: hovered
+                            PlasmaComponents3.ToolTip.text: modelData.label
                         }
                     }
 
