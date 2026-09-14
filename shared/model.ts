@@ -1,4 +1,4 @@
-// Canonical Tailscale data model, shared by the Plasma plasmoid, the GNOME
+// Canonical provider data model, shared by the Plasma plasmoid, the GNOME
 // extension and the Omarchy plugin. scripts/build.sh compiles this file once
 // and ships the result twice: as the ES module the GNOME extension imports,
 // and with the export footer stripped as the plain shared script both QML
@@ -928,7 +928,7 @@ var ACTIVE_PHRASES = [
   "Polishing tunnels",
   "Hiding routes",
   "Sealing ports",
-  "Sorting tailnets",
+  "Sorting peers",
   "Shuffling keys",
   "Watching machines"
 ]

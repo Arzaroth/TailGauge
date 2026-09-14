@@ -40,9 +40,9 @@ function spawn(argv: string[], flags: Gio.SubprocessFlags): Gio.Subprocess {
         ['sh', '-c', `${PATH_PREAMBLE}exec "$@"`, 'sh', ...argv], flags);
 }
 
-export const TailscaleService = GObject.registerClass({
+export const ProviderService = GObject.registerClass({
     Signals: {'changed': {}},
-}, class TailscaleService extends GObject.Object {
+}, class ProviderService extends GObject.Object {
     declare _settings: Gio.Settings;
     declare _cancellables: Map<string, Gio.Cancellable>;
     declare _timeouts: Map<string, number>;
