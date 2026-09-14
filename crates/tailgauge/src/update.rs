@@ -596,3 +596,175 @@ mod tests {
         }
     }
 }
+
+/// Distribution is a contract spread across four files: the release workflow
+/// names the assets, this module downloads them by name, and three manifests
+/// declare a version. Nothing at runtime notices when they disagree - the
+/// updater just 404s - so it is checked here instead.
+#[cfg(test)]
+mod distribution {
+    use super::*;
+
+    fn repo_file(rel: &str) -> String {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join(rel);
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+    }
+
+    fn manifest(rel: &str) -> serde_json::Value {
+        serde_json::from_str(&repo_file(rel)).expect("manifest parses")
+    }
+
+    const ARCHES: [&str; 2] = ["x86_64", "aarch64"];
+
+    /// Every `dist/tailgauge-$safe-<suffix>` the Package step writes, with the
+    /// architecture loop expanded.
+    fn published_suffixes() -> Vec<String> {
+        let release = repo_file(".github/workflows/release.yml");
+        let mut out = Vec::new();
+        for (index, _) in release.match_indices("dist/tailgauge-$safe-") {
+            let rest = &release[index + "dist/tailgauge-$safe-".len()..];
+            let end = rest
+                .find(|c: char| c.is_whitespace() || c == '"' || c == '\'')
+                .unwrap_or(rest.len());
+            let suffix = &rest[..end];
+            if suffix.contains("$arch") {
+                for arch in ARCHES {
+                    out.push(suffix.replace("$arch", arch));
+                }
+            } else {
+                out.push(suffix.to_string());
+            }
+        }
+        out.sort();
+        out.dedup();
+        out
+    }
+
+    #[test]
+    fn the_release_publishes_the_archive_this_binary_downloads() {
+        let published = published_suffixes();
+        let wanted = format!("{}{ARCHIVE_SUFFIX}", arch_target().expect("known arch"));
+        assert!(
+            published.iter().any(|s| s == &wanted),
+            "apply() asks for {wanted}, and the release publishes {published:?}"
+        );
+        for arch in ARCHES {
+            assert!(
+                published
+                    .iter()
+                    .any(|s| s == &format!("linux-{arch}.tar.gz")),
+                "no archive for {arch}: {published:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn every_packaged_asset_is_actually_uploaded() {
+        let release = repo_file(".github/workflows/release.yml");
+        let block = release.split("files: |").nth(1).expect("no files block");
+        let globs: Vec<&str> = block
+            .lines()
+            .map(str::trim)
+            .skip_while(|l| l.is_empty())
+            .take_while(|l| l.starts_with("dist/"))
+            .collect();
+        assert!(!globs.is_empty(), "the release uploads nothing");
+
+        for suffix in published_suffixes() {
+            let name = format!("dist/tailgauge-v0.0.0-{suffix}");
+            let matched = globs.iter().any(|glob| {
+                let (head, tail) = glob.split_once('*').expect("a glob");
+                name.starts_with(head) && name.ends_with(tail)
+            });
+            assert!(
+                matched,
+                "Package builds {name} but no glob matches: {globs:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_binary_archive_carries_the_binary_and_the_payload_layout() {
+        // apply() extracts the archive and looks for exactly these paths; a
+        // Package step that stopped writing one of them would download fine
+        // and then refuse the update.
+        let release = repo_file(".github/workflows/release.yml");
+        assert!(release.contains(&format!("\"$stage/{BINARY}\"")));
+        for f in frontend::FRONTENDS {
+            assert!(
+                release.contains(&format!("$stage/{}/{}", frontend::ARCHIVE_ROOT, f.id)),
+                "the archive has nowhere to put the {} payload",
+                f.id
+            );
+        }
+    }
+
+    #[test]
+    fn the_plasmoid_ships_as_a_plasmoid_zip() {
+        // kpackagetool6 and the KDE Store both take a zip of the package
+        // contents; a tarball installs from neither.
+        let published = published_suffixes();
+        assert!(
+            published.iter().any(|s| s == "plasmoid.plasmoid"),
+            "published assets are {published:?}"
+        );
+        assert!(
+            repo_file(".github/workflows/release.yml")
+                .contains("cd build/org.tailgauge.plasmoid && zip")
+        );
+    }
+
+    #[test]
+    fn the_omarchy_plugin_ships_under_the_id_its_manifest_declares() {
+        // The registry reads the manifest the archive carries, so a tarball
+        // that unpacks under any other name installs a plugin the updater
+        // cannot find again.
+        let plugin = manifest("omarchy/arzaroth.tailgauge/manifest.json");
+        let id = plugin["id"].as_str().expect("an id");
+        assert!(
+            repo_file(".github/workflows/release.yml").contains(&format!(
+                "tar -czf \"dist/tailgauge-$safe-omarchy-plugin.tar.gz\" -C build {id}"
+            ))
+        );
+        assert!(
+            !id.starts_with("omarchy."),
+            "omarchy.* is reserved for first-party plugins"
+        );
+    }
+
+    #[test]
+    fn the_extension_carries_the_integer_version_ego_expects() {
+        let extension = manifest("gnome/tailgauge@arzaroth.github.io/metadata.json");
+        assert!(
+            extension["version"].is_i64(),
+            "EGO wants an integer version"
+        );
+    }
+
+    #[test]
+    fn the_updater_points_at_the_repository_the_manifests_name() {
+        let slug = repo_slug();
+        let plasmoid = manifest("plasma/org.tailgauge.plasmoid/metadata.json");
+        let extension = manifest("gnome/tailgauge@arzaroth.github.io/metadata.json");
+        for url in [
+            plasmoid["KPlugin"]["Website"].as_str().expect("a website"),
+            extension["url"].as_str().expect("a url"),
+        ] {
+            assert!(url.contains(&slug), "{url} does not point at {slug}");
+        }
+    }
+
+    #[test]
+    fn the_release_refuses_a_tag_the_manifests_disagree_with() {
+        let release = repo_file(".github/workflows/release.yml");
+        assert!(release.contains("tag $REF_NAME does not match the manifests"));
+        assert!(
+            release.contains("binary=$(sed"),
+            "the tag check does not read the binary's own version"
+        );
+    }
+}
