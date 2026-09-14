@@ -561,21 +561,20 @@ Item {
     accountsAccessDenied = false
   }
 
-  function switchProvider(provider) {
-    if (!provider) return
-    var id = String(provider.id || "")
-    if (id === "" || id === activeProviderId) return
-    activeProviderId = id
-    // Free the runners so the new provider polls now rather than at the
-    // next tick; their replies are already discarded as stale.
+  // Every change to the active provider lands here, not just a click. The
+  // desktop delivers this widget's settings after the first polls have gone
+  // out, so the persisted choice arrives late and has to re-ask.
+  onActiveProviderIdChanged: root._adoptProvider()
+
+  function _adoptProvider() {
     var polls = ["status", "mullvad", "accounts", "networks", "watch"]
     for (var i = 0; i < polls.length; i++) _reap(polls[i])
-    // The old provider's machines and accounts are not this one's.
+    // The previous provider's machines and accounts are not this one's.
     resetUnavailable("Switching")
     // Seed from what the background poll already knows, so the header does
     // not flash disconnected on the way to a provider that is up.
     for (var j = 0; j < summaries.length; j++) {
-      if (String(summaries[j].id) !== id) continue
+      if (String(summaries[j].id) !== activeProviderId) continue
       running = summaries[j].running
       needsLogin = summaries[j].needsLogin
       selfName = summaries[j].selfName
@@ -585,8 +584,17 @@ Item {
       providers: providers,
       activeProviderId: activeProviderId
     })
-    providerChanged(id)
     refresh(true)
+    // The old provider's watcher was just reaped; this one may not have one.
+    watch()
+  }
+
+  function switchProvider(provider) {
+    if (!provider) return
+    var id = String(provider.id || "")
+    if (id === "" || id === activeProviderId) return
+    activeProviderId = id
+    providerChanged(id)
   }
 
   function _setSummary(providerId, parsed) {
