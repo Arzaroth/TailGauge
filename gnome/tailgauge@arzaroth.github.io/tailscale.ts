@@ -65,7 +65,7 @@ export const TailscaleService = GObject.registerClass({
     declare running: boolean;
     declare needsLogin: boolean;
     declare refreshing: boolean;
-    declare backendState: string;
+    declare daemonState: string;
     declare statusText: string;
     declare selfName: string;
     declare selfDnsName: string;
@@ -76,7 +76,7 @@ export const TailscaleService = GObject.registerClass({
     declare authUrl: string;
     declare peers: Model.Peer[];
     declare exitNodes: Model.Peer[];
-    declare tailnetExitNodes: Model.Peer[];
+    declare ownExitNodes: Model.Peer[];
     declare mullvadExitNodes: Model.Peer[];
     declare mullvadRegions: Model.Peer[];
     declare accounts: Model.Account[];
@@ -114,7 +114,7 @@ export const TailscaleService = GObject.registerClass({
         // 0/1 while a toggle is still catching up.
         this._desired = -1;
         this.refreshing = false;
-        this.backendState = 'Unknown';
+        this.daemonState = 'Unknown';
         this.statusText = _('Checking…');
         this.selfName = '';
         this.selfDnsName = '';
@@ -125,7 +125,7 @@ export const TailscaleService = GObject.registerClass({
         this.authUrl = '';
         this.peers = [];
         this.exitNodes = [];
-        this.tailnetExitNodes = [];
+        this.ownExitNodes = [];
         this.mullvadExitNodes = [];
         this.mullvadRegions = [];
         this.accounts = [];
@@ -218,7 +218,7 @@ export const TailscaleService = GObject.registerClass({
             selfPeer: this.selfPeer,
             fileSharing: this.fileSharing,
             peers: this.peers,
-            tailnetExitNodes: this.tailnetExitNodes,
+            ownExitNodes: this.ownExitNodes,
             mullvadRegions: this.mullvadRegions,
             accounts: this.accounts,
             selectedAccountId: this.selectedAccountId,
@@ -496,7 +496,7 @@ export const TailscaleService = GObject.registerClass({
         this.running = false;
         this.needsLogin = false;
         this._desired = -1;
-        this.backendState = 'Unavailable';
+        this.daemonState = 'Unavailable';
         this.statusText = message;
         this.selfName = '';
         this.selfDnsName = '';
@@ -507,7 +507,7 @@ export const TailscaleService = GObject.registerClass({
         this.authUrl = '';
         this.peers = [];
         this.exitNodes = [];
-        this.tailnetExitNodes = [];
+        this.ownExitNodes = [];
         this.mullvadExitNodes = [];
         this.mullvadRegions = [];
         this.accounts = [];
@@ -530,7 +530,7 @@ export const TailscaleService = GObject.registerClass({
             return;
         }
 
-        this.backendState = parsed.backendState;
+        this.daemonState = parsed.daemonState;
         this.running = parsed.running;
         // Reality caught up to the pending toggle, so stop overriding.
         if (this._desired !== -1 && this.running === (this._desired === 1))
@@ -547,8 +547,8 @@ export const TailscaleService = GObject.registerClass({
         this.selfPeer = parsed.selfPeer;
         this.fileSharing = parsed.fileSharing;
         this.peers = parsed.running ? parsed.peers : [];
-        this.tailnetExitNodes = parsed.running ? parsed.exitNodes : [];
-        this.exitNodes = parsed.running ? this.tailnetExitNodes.concat(this.mullvadRegions) : [];
+        this.ownExitNodes = parsed.running ? parsed.exitNodes : [];
+        this.exitNodes = parsed.running ? this.ownExitNodes.concat(this.mullvadRegions) : [];
 
         if (this.needsLogin) {
             this.statusText = _('Needs login');
@@ -558,10 +558,10 @@ export const TailscaleService = GObject.registerClass({
             this._loginUrlOpened = false;
             this._preLoginAuthUrl = '';
             this._removeTimeout('loginTimeout');
-        } else if (this.backendState === 'Stopped') {
+        } else if (this.daemonState === 'Stopped') {
             this.statusText = _('Disconnected');
         } else {
-            this.statusText = this.backendState;
+            this.statusText = this.daemonState;
         }
         this.lastError = '';
     }
@@ -577,7 +577,7 @@ export const TailscaleService = GObject.registerClass({
     _parseMullvadExitNodes(raw: string): void {
         this.mullvadExitNodes = Model.parseExitNodeList(raw);
         this.mullvadRegions = Model.mullvadRegionOptions(this.mullvadExitNodes);
-        this.exitNodes = this.running ? this.tailnetExitNodes.concat(this.mullvadRegions) : [];
+        this.exitNodes = this.running ? this.ownExitNodes.concat(this.mullvadRegions) : [];
     }
 
     // ---- actions ---------------------------------------------------------
@@ -810,7 +810,7 @@ export const TailscaleService = GObject.registerClass({
     copyPeerIp(peer: Model.Peer | null | undefined): void {
         if (!peer)
             return;
-        const ips = Model.filterIPv4(peer.TailscaleIPs || []);
+        const ips = Model.filterIPv4(peer.IPv4 || []);
         this.copyToClipboard(ips.length > 0 ? ips[0] : '');
     }
 
