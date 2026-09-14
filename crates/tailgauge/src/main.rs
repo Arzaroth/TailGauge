@@ -10,11 +10,13 @@ mod ctl;
 mod file_select;
 mod launch;
 mod notify;
+mod receive;
+mod send;
 mod tailscale;
 mod watch;
 
 use std::ffi::OsString;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
@@ -46,6 +48,17 @@ enum Command {
     Watch {
         #[arg(default_value_t = 300)]
         timeout_seconds: u64,
+    },
+
+    /// Send files to a tailnet machine, picking them when none are named.
+    Send { machine: String, files: Vec<String> },
+
+    /// Save incoming Taildrop files and announce each one.
+    Receive {
+        /// Deliver one batch and stop, rather than running as a service.
+        #[arg(long)]
+        once: bool,
+        directory: Option<PathBuf>,
     },
 
     /// Copy text to the clipboard.
@@ -124,6 +137,26 @@ fn main() -> ExitCode {
 
         Command::Watch { timeout_seconds } => {
             ExitCode::from(watch::run(Duration::from_secs(timeout_seconds)).code())
+        }
+
+        Command::Send { machine, files } => {
+            if !tailscale::installed() {
+                eprintln!("tailgauge: the tailscale CLI is not on PATH");
+                return ExitCode::FAILURE;
+            }
+            match send::run(&machine, &files) {
+                send::Outcome::Sent | send::Outcome::NothingToSend => ExitCode::SUCCESS,
+                send::Outcome::Failed => ExitCode::FAILURE,
+            }
+        }
+
+        Command::Receive { once, directory } => {
+            if !tailscale::installed() {
+                eprintln!("tailgauge: the tailscale CLI is not on PATH");
+                return ExitCode::FAILURE;
+            }
+            let dir = directory.unwrap_or_else(receive::default_dir);
+            report(receive::run(&dir, once))
         }
 
         Command::Copy { text } => report(copy::run(text.as_deref().unwrap_or(""))),
