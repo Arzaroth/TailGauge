@@ -14,7 +14,47 @@ permissions:
   contents: write
 
 jobs:
+  # Built on a runner of the architecture it targets, rather than cross-compiled:
+  # rustls pulls in C, and a native runner is cheaper than a cross toolchain.
+  binary:
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runs-on: ubuntu-latest
+          - arch: aarch64
+            runs-on: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
+          persist-credentials: false
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Check the binary runs and agrees with the tag
+        env:
+          REF_NAME: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          printed=$(target/release/tailgauge --version)
+          echo "$printed"
+          if [[ $printed != "tailgauge ${REF_NAME#v}" ]]; then
+            echo "::error::the binary reports '$printed', not ${REF_NAME#v}"
+            exit 1
+          fi
+
+      - name: Upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: tailgauge-${{ matrix.arch }}
+          path: target/release/tailgauge
+          if-no-files-found: error
+
   release:
+    needs: binary
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -58,11 +98,17 @@ jobs:
           plasmoid=$(node -e 'process.stdout.write(require("./plasma/org.tailgauge.plasmoid/metadata.json").KPlugin.Version)')
           extension=$(node -e 'process.stdout.write(require("./gnome/tailgauge@arzaroth.github.io/metadata.json")["version-name"])')
           plugin=$(node -e 'process.stdout.write(require("./omarchy/arzaroth.tailgauge/manifest.json").version)')
-          echo "tag=$version plasmoid=$plasmoid extension=$extension plugin=$plugin"
-          if [[ $plasmoid != "$version" || $extension != "$version" || $plugin != "$version" ]]; then
+          binary=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)
+          echo "tag=$version plasmoid=$plasmoid extension=$extension plugin=$plugin binary=$binary"
+          if [[ $plasmoid != "$version" || $extension != "$version" || $plugin != "$version" || $binary != "$version" ]]; then
             echo "::error::tag $REF_NAME does not match the manifests"
             exit 1
           fi
+
+      - name: Download the binaries
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: binaries
 
       - name: Package
         env:
@@ -73,8 +119,7 @@ jobs:
           mkdir -p dist
 
           # The plasmoid: a zip of the package contents, which is what both
-          # `kpackagetool6 -i` and the KDE Store accept. The name has to match
-          # what bin/tailgauge-update downloads.
+          # `kpackagetool6 -i` and the KDE Store accept.
           (cd build/org.tailgauge.plasmoid && zip -qr "$GITHUB_WORKSPACE/dist/tailgauge-$safe-plasmoid.plasmoid" .)
 
           # The extension, as gnome-extensions install takes it.
@@ -85,8 +130,21 @@ jobs:
           # verbatim under ~/.config/omarchy/plugins/.
           tar -czf "dist/tailgauge-$safe-omarchy-plugin.tar.gz" -C build arzaroth.tailgauge
 
-          # The helpers and the unit, for a packager who wants only those.
-          tar -czf "dist/tailgauge-$safe-helpers.tar.gz" bin systemd
+          # One archive per architecture: the binary, the frontend payloads it
+          # installs, and the Taildrop unit. This is what `tailgauge update`
+          # downloads, and the layout crates/tailgauge/src/frontend.rs expects.
+          for arch in x86_64 aarch64; do
+            stage="pack/$arch"
+            rm -rf "$stage"
+            mkdir -p "$stage/frontends/plasma" "$stage/frontends/gnome" \
+                     "$stage/frontends/omarchy" "$stage/systemd"
+            install -m 755 "binaries/tailgauge-$arch/tailgauge" "$stage/tailgauge"
+            cp -a build/org.tailgauge.plasmoid "$stage/frontends/plasma/"
+            cp -a "build/tailgauge@arzaroth.github.io" "$stage/frontends/gnome/"
+            cp -a build/arzaroth.tailgauge "$stage/frontends/omarchy/"
+            cp systemd/tailgauge-receive.service "$stage/systemd/"
+            tar -czf "dist/tailgauge-$safe-linux-$arch.tar.gz" -C "$stage" .
+          done
 
           ls -l dist
 

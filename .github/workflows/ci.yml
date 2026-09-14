@@ -10,6 +10,38 @@ permissions:
   contents: read
 
 jobs:
+  # Every frontend shells out to this, so a break here is a break on all three.
+  # Built on both architectures a release publishes, because that is where a
+  # target-specific mistake would otherwise first be seen.
+  binary:
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runs-on: ubuntu-latest
+          - arch: aarch64
+            runs-on: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Install glib tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libglib2.0-bin
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Test
+        run: cargo test --locked
+
   # The shared model is where both desktops get their panel from, so it is the
   # only place a behaviour change can be caught once instead of twice.
   model:
@@ -185,9 +217,8 @@ jobs:
           python3 -c "import xml.dom.minidom, sys; xml.dom.minidom.parse(sys.argv[1])" \
             plasma/org.tailgauge.plasmoid/contents/config/main.xml
 
-      # The three frontends and every helper declare a version; a release that
-      # bumps one and forgets another ships two different products, and each
-      # helper answers --version for itself.
+      # The three frontends and the binary declare a version; a release that
+      # bumps one and forgets another ships two different products.
       - name: Check the versions agree
         run: |
           plasmoid=$(node -e 'process.stdout.write(require("./plasma/org.tailgauge.plasmoid/metadata.json").KPlugin.Version)')
@@ -195,10 +226,8 @@ jobs:
           declare -A declared=(
             [gnome/tailgauge@arzaroth.github.io/metadata.json]=$(node -e 'process.stdout.write(require("./gnome/tailgauge@arzaroth.github.io/metadata.json")["version-name"])')
             [omarchy/arzaroth.tailgauge/manifest.json]=$(node -e 'process.stdout.write(require("./omarchy/arzaroth.tailgauge/manifest.json").version)')
+            [Cargo.toml]=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)
           )
-          for helper in bin/*; do
-            declared[$helper]=$(sed -n 's/^VERSION="\(.*\)"$/\1/p' "$helper" | head -1)
-          done
           status=0
           for file in "${!declared[@]}"; do
             echo "$file=${declared[$file]}"
@@ -217,10 +246,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Syntax-check the shell helpers
+      - name: Syntax-check the shell scripts
         run: |
           shopt -s nullglob
-          files=(bin/* scripts/*.sh)
+          files=(scripts/*.sh)
           if [[ ${#files[@]} -eq 0 ]]; then
             echo "no shell sources found - the glob has gone stale" >&2
             exit 1
@@ -232,12 +261,12 @@ jobs:
       - name: ShellCheck
         run: |
           shopt -s nullglob
-          shellcheck --severity=warning bin/* scripts/*.sh
+          shellcheck --severity=warning scripts/*.sh
 
-      - name: Check the helpers are executable
+      - name: Check the scripts are executable
         run: |
           shopt -s nullglob
-          for file in bin/* scripts/*.sh; do
+          for file in scripts/*.sh; do
             if [[ ! -x $file ]]; then
               echo "::error::$file is not executable - the installer copies the mode bits"
               exit 1
