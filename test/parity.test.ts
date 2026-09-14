@@ -130,8 +130,8 @@ test('both QML services disarm the poll watchdog when the polls land', () => {
     })) {
         const src = read(file);
         assert.match(src, /pollWatchdog\.stop\(\)/, `${name} never disarms the watchdog`);
-        // One per poll: status, mullvad, accounts.
-        assert.equal((src.match(/root\._pollSettled\(kind\)/g) || []).length, 3,
+        // One per poll: status, mullvad, accounts, networks.
+        assert.equal((src.match(/root\._pollSettled\(kind\)/g) || []).length, 4,
             `${name} does not check every poll in`);
     }
 });

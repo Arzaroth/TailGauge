@@ -333,7 +333,7 @@ var PROVIDERS: ProviderDescriptor[] = [
     id: "netbird",
     label: "NetBird",
     cli: "netbird",
-    supported: false,
+    supported: true,
     capabilities: {
       exitNodes: false,
       mullvad: false,
@@ -1039,6 +1039,14 @@ function parseNetbirdNetworks(raw: Raw): NetworksResult {
   return { ok: true, networks: networks, message: "" }
 }
 
+// The one place a provider turns into its parser. A frontend polls and hands
+// the bytes here rather than deciding which parser they came from.
+function parseProviderStatus(state: PanelState | null | undefined, raw: Raw): StatusResult {
+  var provider = activeProvider(state)
+  if (provider && provider.id === "netbird") return parseNetbirdStatus(raw)
+  return parseStatus(raw)
+}
+
 function networkSubtitle(network: Raw): string {
   if (!network) return ""
   if (network.range) return String(network.range)
@@ -1736,6 +1744,7 @@ export {
   parseStatus,
   parseAccounts,
   parseNetbirdStatus,
+  parseProviderStatus,
   parseNetbirdNetworks,
   networkSubtitle,
   peerAddress,

@@ -98,6 +98,9 @@ Panel {
       tailscale.setExitNode(row.payload)
       mullvadPickerOpen = false
       break
+    case "selectNetwork":
+      tailscale.selectNetwork(row.payload)
+      break
     case "togglePicker":
       mullvadPickerOpen = !mullvadPickerOpen
       break
