@@ -93,17 +93,17 @@ Item {
     // The flat state resolvePanel() reads. Both desktops hand it the same
     // shape, so the panel they get back cannot disagree.
     function _commands() {
-      return Model.providerCommands({
-        summaries: summaries,
-      networks: networks,
-      selectingNetworkId: selectingNetworkId,
-      providers: providers,
-        activeProviderId: activeProviderId
-      }) || {}
+        return Model.providerCommands({
+            providers: providers,
+            activeProviderId: activeProviderId
+        }) || {}
     }
 
     function snapshot() {
         return {
+            summaries: summaries,
+            networks: networks,
+            selectingNetworkId: selectingNetworkId,
             providers: providers,
             activeProviderId: activeProviderId,
             installed: installed,

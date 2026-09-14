@@ -219,9 +219,6 @@ export const ProviderService = GObject.registerClass({
     // shape, so the panel they get back cannot disagree.
     _commands(): Partial<Model.ProviderCommands> {
         return Model.providerCommands({
-            summaries: this.summaries,
-            networks: this.networks,
-            selectingNetworkId: this.selectingNetworkId,
             providers: this.providers,
             activeProviderId: this.activeProviderId,
         }) ?? {};
@@ -229,6 +226,9 @@ export const ProviderService = GObject.registerClass({
 
     snapshot(): Model.PanelState {
         return {
+            summaries: this.summaries,
+            networks: this.networks,
+            selectingNetworkId: this.selectingNetworkId,
             providers: this.providers,
             activeProviderId: this.activeProviderId,
             installed: this.installed,
