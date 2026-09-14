@@ -22,7 +22,9 @@ MouseArea {
     // Right-click is left to Plasma's own applet menu, which carries the same
     // toggle and refresh as contextual actions.
     onClicked: (mouse) => {
-        if (mouse.button === Qt.MiddleButton) service.toggleTailscale()
+        // Was a blind toggle of whichever provider happened to be active; the
+        // icon describes the machine, so it cycles the provider instead.
+        if (mouse.button === Qt.MiddleButton) root.cycleProvider()
         else root.expanded = !root.expanded
     }
 

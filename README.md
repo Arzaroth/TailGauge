@@ -168,7 +168,7 @@ Plasma stores these in the widget's own configuration, GNOME in `org.gnome.shell
 
 ## Differences between the frontends
 
-- **Right click** on Plasma and GNOME opens the desktop's own context menu rather than toggling Tailscale. Both carry the toggle and refresh as menu entries, and **middle click** on the panel icon toggles. The Omarchy widget keeps upstream's bar bindings: right click toggles, middle click refreshes.
+- **The bar icon never toggles a connection.** It describes the machine rather than one provider, so a click that turned something off would act on a provider you cannot see and leave the icon lit while the other stayed up. **Right click** on Omarchy and **middle click** on Plasma cycle which provider the panel is about, and do nothing when only one is installed; **middle click** on Omarchy refreshes. **Right click** on Plasma and GNOME opens the desktop's own context menu, which still carries the toggle and refresh as entries.
 - **GNOME** uses native `PopupMenu` rows rather than a custom keyboard-driven panel, so arrows, Enter and type-ahead behave the way every other extension does. Machines and the Mullvad picker are submenus; the copy actions live inside a machine's submenu.
 - **Clipboard** goes through `St.Clipboard` on GNOME and a helper that picks `wl-copy` / `xclip` / `xsel` on Plasma, so the copy actions also work in an X11 session.
 - **No IPC on Plasma and GNOME**. `tailgauge-ctl toggle` stands in there, but it drives tailscaled rather than the panel: nothing talks to a running widget. The Omarchy widget has the shell's IPC and uses it.

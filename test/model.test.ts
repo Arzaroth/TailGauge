@@ -1183,3 +1183,23 @@ test('header controls are translated like every other panel string', () => {
     const header = M.resolvePanel(state({providers: detected('tailscale')}), {t: shout}).header;
     assert.equal(only(header.actions, a => a.id === 'refresh', 'refresh').label, 'REFRESH');
 });
+
+test('cycling lands on the next drivable provider, and wraps', () => {
+    const both = detected('tailscale', 'netbird');
+    assert.equal(M.nextProvider({providers: both})!.id, 'netbird');
+    assert.equal(M.nextProvider({providers: both, activeProviderId: 'netbird'})!.id, 'tailscale');
+    // Nothing to cycle to is nothing to do, rather than a surprise.
+    assert.equal(M.nextProvider({providers: detected('tailscale')}), null);
+    assert.equal(M.nextProvider({providers: detected()}), null);
+    assert.equal(M.nextProvider({}), null);
+});
+
+test('the toggle hint names the provider it will act on', () => {
+    const nb = {providers: detected('netbird'), active: true};
+    assert.equal(M.toggleHint(nb), 'Turn NetBird off');
+    assert.equal(M.toggleHint({providers: detected('tailscale'), active: false}), 'Turn Tailscale on');
+    assert.equal(M.toggleHint({providers: detected('tailscale'), needsLogin: true}), 'Authorize this device');
+    // It is the same string the panel's own switch shows.
+    assert.equal(M.resolvePanel(state({providers: detected('netbird')}), {}).header.toggleHint,
+        M.toggleHint(state({providers: detected('netbird')})));
+});

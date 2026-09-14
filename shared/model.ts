@@ -504,6 +504,20 @@ function drivableProviders(state: PanelState | null | undefined): ProviderDescri
   return out
 }
 
+// The provider after the active one, wrapping. Null when there is nothing to
+// cycle to, so a gesture bound to this does nothing rather than something
+// surprising on a machine with one provider.
+function nextProvider(state: PanelState | null | undefined): ProviderDescriptor | null {
+  var drivable = drivableProviders(state)
+  if (drivable.length < 2) return null
+  var current = activeProvider(state)
+  var at = 0
+  for (var i = 0; i < drivable.length; i++) {
+    if (current && drivable[i].id === current.id) at = i
+  }
+  return drivable[(at + 1) % drivable.length]
+}
+
 // Installed and parseable. The frontends poll only when this holds, so one
 // provider's commands are never fired at another's binary.
 function providerReady(state: PanelState | null | undefined): boolean {
@@ -1555,6 +1569,17 @@ function peerDetailRows(peer: Raw, t: Translate, nowMs?: number): PanelRow[] {
   return rows
 }
 
+// What the switch will do, named after the provider it will do it to. Shared
+// so a desktop's own menu cannot drift from the panel's switch.
+function toggleHint(state: PanelState | null | undefined, t?: Translate): string {
+  var tr = typeof t === "function" ? t : identityText
+  var source = state || {}
+  var label = providerLabel(source)
+  if (source.active) return formatText(tr("Turn %1 off"), label)
+  if (source.needsLogin) return tr("Authorize this device")
+  return formatText(tr("Turn %1 on"), label)
+}
+
 function panelHeader(state: PanelState, t: Translate, phraseIndex?: number): PanelHeader {
   var index = typeof phraseIndex === "number" ? phraseIndex : 0
   var label = providerLabel(state)
@@ -1579,9 +1604,7 @@ function panelHeader(state: PanelState, t: Translate, phraseIndex?: number): Pan
     toggleEnabled: present,
     toggleChecked: state.active === true,
     busy: state.busy === true,
-    toggleHint: state.active
-      ? formatText(t("Turn %1 off"), label)
-      : (state.needsLogin ? t("Authorize this device") : formatText(t("Turn %1 on"), label)),
+    toggleHint: toggleHint(state, t),
     crossed: !state.active && !state.needsLogin,
     warning: state.needsLogin === true,
     dimmed: !state.active,
@@ -2059,6 +2082,7 @@ export {
   parseProviderProbe,
   providerReady,
   drivableProviders,
+  nextProvider,
   providerCommands,
   summarizeProvider,
   barState,
@@ -2067,6 +2091,7 @@ export {
   activeProvider,
   providerSupports,
   providerLabel,
+  toggleHint,
   filterIPv4,
   filterIPv6,
   cleanDnsName,
