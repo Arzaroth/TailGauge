@@ -187,9 +187,41 @@ export interface Panel {
   navigation: NavEntry[]
 }
 
+// What a provider's CLI can be asked to do. The resolver reads these rather
+// than the provider id, so a section is gated by the feature it needs and not
+// by a name it has to know.
+export interface ProviderCapabilities {
+  exitNodes: boolean
+  mullvad: boolean
+  fileSend: boolean
+  accounts: boolean
+  networks: boolean
+  connectionQuality: boolean
+}
+
+export type ProviderCapability = keyof ProviderCapabilities
+
+export interface ProviderDescriptor {
+  id: string
+  label: string
+  // Probed on PATH to decide whether the provider is installed at all.
+  cli: string
+  capabilities: ProviderCapabilities
+}
+
+// One provider as a frontend found it. Frontends report every provider they
+// probed, installed or not, so the resolver can tell "looked and found nothing"
+// apart from "has not looked yet".
+export interface ProviderState {
+  id: string
+  installed: boolean
+}
+
 // The frontend-owned view state the resolver reads. Every field is optional:
 // a frontend that has not polled yet passes what it has.
 export interface PanelState {
+  providers?: ProviderState[]
+  activeProviderId?: string
   installed?: boolean
   running?: boolean
   active?: boolean
@@ -226,6 +258,118 @@ export interface ResolveOptions {
 }
 
 // ---------------------------------------------------------------------------
+
+// Every provider TailGauge knows how to drive. Order is the preference order:
+// with several installed and no explicit choice, the first one wins.
+var PROVIDERS: ProviderDescriptor[] = [
+  {
+    id: "tailscale",
+    label: "Tailscale",
+    cli: "tailscale",
+    capabilities: {
+      exitNodes: true,
+      mullvad: true,
+      fileSend: true,
+      accounts: true,
+      networks: false,
+      connectionQuality: false
+    }
+  },
+  {
+    id: "netbird",
+    label: "NetBird",
+    cli: "netbird",
+    capabilities: {
+      exitNodes: false,
+      mullvad: false,
+      fileSend: false,
+      accounts: false,
+      networks: true,
+      connectionQuality: true
+    }
+  }
+]
+
+var DEFAULT_PROVIDER_ID = "tailscale"
+
+function providerDescriptors(): ProviderDescriptor[] {
+  return PROVIDERS.slice()
+}
+
+// What each frontend probes on PATH. The detection loop reads this rather than
+// a list of its own, so teaching TailGauge a provider stays a one-file change.
+function providerCliNames(): string[] {
+  var out: string[] = []
+  for (var i = 0; i < PROVIDERS.length; i++) out.push(PROVIDERS[i].cli)
+  return out
+}
+
+function providerById(id: Raw): ProviderDescriptor | null {
+  var wanted = String(id || "")
+  for (var i = 0; i < PROVIDERS.length; i++) {
+    if (PROVIDERS[i].id === wanted) return PROVIDERS[i]
+  }
+  return null
+}
+
+function installedProviders(state: PanelState | null | undefined): ProviderDescriptor[] {
+  var source = state || {}
+  var out: ProviderDescriptor[] = []
+  var reported = source.providers
+  if (!reported || typeof reported.length !== "number") {
+    // A frontend that has not been taught to probe every provider still
+    // reports the one it always drove through `installed`.
+    if (source.installed === true) {
+      var only = providerById(DEFAULT_PROVIDER_ID)
+      if (only) out.push(only)
+    }
+    return out
+  }
+  // Registry order, not report order, so the preferred provider stays first
+  // however the frontend happened to enumerate them.
+  for (var i = 0; i < PROVIDERS.length; i++) {
+    for (var j = 0; j < reported.length; j++) {
+      var entry = reported[j]
+      if (!entry || entry.installed !== true) continue
+      if (String(entry.id || "") !== PROVIDERS[i].id) continue
+      out.push(PROVIDERS[i])
+      break
+    }
+  }
+  return out
+}
+
+function activeProvider(state: PanelState | null | undefined): ProviderDescriptor | null {
+  var available = installedProviders(state)
+  if (available.length === 0) return null
+  var wanted = String((state || {}).activeProviderId || "")
+  for (var i = 0; i < available.length; i++) {
+    if (available[i].id === wanted) return available[i]
+  }
+  // A selection naming a provider that is gone falls back rather than blanking
+  // the panel: uninstalling one provider must not strand the other.
+  return available[0]
+}
+
+function providerSupports(state: PanelState | null | undefined, capability: ProviderCapability): boolean {
+  var provider = activeProvider(state)
+  return provider ? provider.capabilities[capability] === true : false
+}
+
+// The name the panel calls the thing it is driving. Falls back to the product
+// name so an empty panel still says what it is.
+function providerLabel(state: PanelState | null | undefined): string {
+  var provider = activeProvider(state)
+  return provider ? provider.label : "TailGauge"
+}
+
+// Every provider we know how to drive, for the line that tells a user with none
+// of them installed what would work.
+function providerLabelList(): string {
+  var labels: string[] = []
+  for (var i = 0; i < PROVIDERS.length; i++) labels.push(PROVIDERS[i].label)
+  return labels.join(", ")
+}
 
 function filterIPv4(ips: Raw): string[] {
   var result: string[] = []
@@ -759,6 +903,7 @@ function formatText(template: Raw, value: Raw): string {
 }
 
 function canSendFiles(state: PanelState | null | undefined, peer: Peer | null | undefined): boolean {
+  if (!providerSupports(state, "fileSend")) return false
   if (!state || !state.fileSharing || !state.running || !peer) return false
   if (peer.Online !== true) return false
   // The KDE Store ships a kpackage and EGO ships an extension zip; neither can
@@ -827,24 +972,26 @@ function panelRow(row: PanelRowInput): PanelRow {
 
 function panelHeader(state: PanelState, t: Translate, phraseIndex?: number): PanelHeader {
   var index = typeof phraseIndex === "number" ? phraseIndex : 0
+  var label = providerLabel(state)
+  var present = activeProvider(state) !== null
   var meta = state.active
     ? t(ACTIVE_PHRASES[((index % ACTIVE_PHRASES.length) + ACTIVE_PHRASES.length) % ACTIVE_PHRASES.length])
-    : t("Tailscale is disconnected")
+    : formatText(t("%1 is disconnected"), label)
   return {
     id: "header",
-    title: state.installed ? (state.selfName || "Tailscale") : "Tailscale",
+    title: present ? (state.selfName || label) : label,
     meta: meta,
     action: "toggle",
-    toggleVisible: state.installed === true,
+    toggleVisible: present,
     // Never gated on `busy`. A background status poll must not make the switch
     // unclickable, and a toggle already reports optimistically through
     // `active`, so there is nothing to protect against a second click.
-    toggleEnabled: state.installed === true,
+    toggleEnabled: present,
     toggleChecked: state.active === true,
     busy: state.busy === true,
     toggleHint: state.active
-      ? t("Turn Tailscale off")
-      : (state.needsLogin ? t("Authorize this device") : t("Turn Tailscale on")),
+      ? formatText(t("Turn %1 off"), label)
+      : (state.needsLogin ? t("Authorize this device") : formatText(t("Turn %1 on"), label)),
     crossed: !state.active && !state.needsLogin,
     warning: state.needsLogin === true,
     dimmed: !state.active
@@ -854,7 +1001,12 @@ function panelHeader(state: PanelState, t: Translate, phraseIndex?: number): Pan
 // Precedence, in one place: a command's own progress beats a stale error, and
 // both beat the idle line.
 function panelStatus(state: PanelState, t: Translate): PanelStatus {
-  if (!state.installed) return { text: t("Tailscale CLI is not installed or not on PATH."), tone: "dim" }
+  if (activeProvider(state) === null) {
+    return {
+      text: formatText(t("No supported VPN CLI on PATH. Looked for %1."), providerLabelList()),
+      tone: "dim"
+    }
+  }
   if (state.actionStatus) return { text: String(state.actionStatus), tone: "dim" }
   if (state.lastError) return { text: String(state.lastError), tone: "error" }
   return { text: "", tone: "" }
@@ -947,7 +1099,7 @@ function selfSection(state: PanelState, t: Translate): PanelSection {
   return {
     id: "self",
     title: t("This device"),
-    visible: state.installed === true && state.active === true && rows.length > 0,
+    visible: activeProvider(state) !== null && state.active === true && rows.length > 0,
     empty: "",
     rows: rows
   }
@@ -988,7 +1140,8 @@ function connectionsSection(state: PanelState, t: Translate): PanelSection {
   return {
     id: "connections",
     title: t("Connections"),
-    visible: accounts.length > 1 || state.accountsAccessDenied === true,
+    visible: providerSupports(state, "accounts")
+      && (accounts.length > 1 || state.accountsAccessDenied === true),
     empty: "",
     rows: rows
   }
@@ -997,7 +1150,7 @@ function connectionsSection(state: PanelState, t: Translate): PanelSection {
 function exitNodeRows(state: PanelState, t: Translate, recentRegions: string[], mullvadQuery: string, pickerOpen: boolean): PanelRow[] {
   var rows: PanelRow[] = []
   var tailnet = state.tailnetExitNodes || []
-  var regions = state.mullvadRegions || []
+  var regions = providerSupports(state, "mullvad") ? (state.mullvadRegions || []) : []
   var i
 
   for (i = 0; i < tailnet.length; i++) rows.push(exitNodeRow(state, tailnet[i], t))
@@ -1067,11 +1220,14 @@ function exitNodeRow(state: PanelState, node: Peer, t: Translate): PanelRow {
 }
 
 function exitNodesSection(state: PanelState, t: Translate, recentRegions: string[], mullvadQuery: string, pickerOpen: boolean): PanelSection {
-  var rows = state.active ? exitNodeRows(state, t, recentRegions, mullvadQuery, pickerOpen) : []
+  var supported = providerSupports(state, "exitNodes")
+  var rows = supported && state.active
+    ? exitNodeRows(state, t, recentRegions, mullvadQuery, pickerOpen)
+    : []
   return {
     id: "exitNodes",
     title: t("Exit nodes"),
-    visible: state.active === true && rows.length > 0,
+    visible: supported && state.active === true && rows.length > 0,
     empty: "",
     rows: rows
   }
@@ -1130,7 +1286,7 @@ function machinesSection(state: PanelState, t: Translate, machineQuery: string):
   return {
     id: "machines",
     title: t("Machines"),
-    visible: state.installed === true && state.active === true,
+    visible: activeProvider(state) !== null && state.active === true,
     empty: t("No machines found on this tailnet."),
     rows: rows
   }
@@ -1223,6 +1379,13 @@ function panelNavIndexOf(panel: Panel | null | undefined, rowId: Raw): number {
 }
 
 export {
+  providerDescriptors,
+  providerCliNames,
+  providerById,
+  installedProviders,
+  activeProvider,
+  providerSupports,
+  providerLabel,
   filterIPv4,
   filterIPv6,
   cleanDnsName,
