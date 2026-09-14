@@ -389,7 +389,7 @@ Item {
   function copyToClipboard(value) {
     var text = String(value || "")
     if (text === "") return
-    _detach(["tailgauge-copy", text])
+    _detach(["tailgauge", "copy", text])
   }
 
   function copyPeerIp(peer) {
@@ -417,7 +417,7 @@ Item {
     if (!canSendFiles(peer)) return
     var target = Model.peerAddress(peer)
     if (target === "") return
-    _detach(["tailgauge-send", target])
+    _detach(["tailgauge", "send", target])
   }
 
   // Re-armed from a timer rather than from inside its own handler, which is
@@ -429,7 +429,7 @@ Item {
   }
 
   function checkUpdate(force) {
-    var argv = ["tailgauge-update", "--check", "--json"]
+    var argv = ["tailgauge", "update", "--check", "--json"]
     if (force === true) argv.push("--force")
     _run("update", argv)
   }
@@ -438,7 +438,7 @@ Item {
     if (updating || !update || update.updatable !== true) return
     updating = true
     actionStatus = "Updating TailGauge…"
-    _run("applyUpdate", ["tailgauge-update", "--apply", "--quiet"])
+    _run("applyUpdate", ["tailgauge", "update", "--apply", "--quiet"])
   }
 
   function openUrl(url) {
@@ -917,5 +917,5 @@ Item {
     }
   }
 
-  Component.onCompleted: root._run("helpers", ["which", "tailgauge-send"])
+  Component.onCompleted: root._run("helpers", ["which", "tailgauge"])
 }

@@ -661,7 +661,7 @@ test('the send action disappears when the helpers are not installed', () => {
 
     const without = peerRows(M.resolvePanel(state({helpers: false}), {}));
     assert.equal(without.some(r => r.actions.some(a => a.id === 'send')), false,
-        'a store-installed widget has no tailgauge-send to call');
+        'a store-installed widget has no tailgauge binary to call');
     assert.equal(without.every(r => r.actions.some(a => a.id === 'copy')), true,
         'copying still works without the helpers');
 });

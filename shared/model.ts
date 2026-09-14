@@ -140,7 +140,7 @@ export interface UpdateInfo {
   targets?: UpdateTarget[]
 }
 
-// One installed part, as tailgauge-update reports it. The panel reads only the
+// One installed part, as `tailgauge update` reports it. The panel reads only the
 // helpers: the widget already knows its own version.
 export interface UpdateTarget {
   kind?: string
@@ -376,7 +376,7 @@ var PROVIDERS: ProviderDescriptor[] = [
       down: ["tailscale", "down"],
       exitNodeList: ["tailscale", "exit-node", "list"],
       watch: function (timeoutSec) {
-        return ["tailgauge-watch", String(timeoutSec)]
+        return ["tailgauge", "watch", String(timeoutSec)]
       },
       accounts: ["tailscale", "switch", "--list", "--json"],
       switchAccount: function (accountId) {
@@ -1289,7 +1289,7 @@ function canSendFiles(state: PanelState | null | undefined, peer: Peer | null | 
   if (!state || !state.fileSharing || !state.running || !peer) return false
   if (peer.Online !== true) return false
   // The KDE Store ships a kpackage and EGO ships an extension zip; neither can
-  // put tailgauge-send on PATH. Without it the button would do nothing at all.
+  // put the tailgauge binary on PATH. Without it the button would do nothing.
   if (state.helpers === false) return false
   return isTaildropTarget(peer, state.selfUserId)
 }

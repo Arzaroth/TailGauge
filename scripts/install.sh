@@ -72,13 +72,23 @@ command -v tailscale >/dev/null 2>&1 ||
 
 "$root/scripts/build.sh" >/dev/null
 
-# ---- helpers --------------------------------------------------------------
+# ---- the binary -----------------------------------------------------------
+# One executable with a subcommand per job, and a symlink per subcommand under
+# the name the shell helper had, so an existing key binding still works and the
+# binary can read the name it was invoked as.
+command -v cargo >/dev/null 2>&1 || {
+  echo "install: cargo is required to build the tailgauge binary - https://rustup.rs" >&2
+  exit 1
+}
+(cd "$root" && cargo build --release --locked)
+
 bindir="$HOME/.local/bin"
 mkdir -p "$bindir"
-for helper in tailgauge-copy tailgauge-notify tailgauge-file-select tailgauge-send tailgauge-receive tailgauge-update tailgauge-watch tailgauge-ctl; do
-  install -m 755 "$root/bin/$helper" "$bindir/$helper"
+install -m 755 "$root/target/release/tailgauge" "$bindir/tailgauge"
+for alias in ctl watch notify send receive file-select copy update; do
+  ln -sfn tailgauge "$bindir/tailgauge-$alias"
 done
-echo "Installed helpers into $bindir"
+echo "Installed tailgauge into $bindir"
 
 case ":$PATH:" in
 *":$bindir:"*) ;;
