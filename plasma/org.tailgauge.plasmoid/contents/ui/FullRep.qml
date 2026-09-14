@@ -95,6 +95,9 @@ Item {
             service.setExitNode(row.payload)
             mullvadPickerOpen = false
             break
+        case "switchProvider":
+            service.switchProvider(row.payload)
+            break
         case "selectNetwork":
             service.selectNetwork(row.payload)
             break

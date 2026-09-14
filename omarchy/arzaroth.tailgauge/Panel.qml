@@ -98,6 +98,9 @@ Panel {
       tailscale.setExitNode(row.payload)
       mullvadPickerOpen = false
       break
+    case "switchProvider":
+      tailscale.switchProvider(row.payload)
+      break
     case "selectNetwork":
       tailscale.selectNetwork(row.payload)
       break
@@ -141,13 +144,16 @@ Panel {
 
   // The shell owns the widget's settings, so a recent region is persisted by
   // writing the entry back rather than by keeping a list here.
-  function persistRecentMullvad(region) {
-    var next = Model.pushRecentMullvad(recentMullvadRegions, region, 5)
+  function persistSetting(name, value) {
     if (!bar || !bar.shell || typeof bar.shell.updateEntryInline !== "function") return
     var entry = { id: root.moduleName }
     for (var key in settings) if (key !== "id") entry[key] = settings[key]
-    entry.recentMullvadRegions = next
+    entry[name] = value
     bar.shell.updateEntryInline(root.moduleName, entry)
+  }
+
+  function persistRecentMullvad(region) {
+    persistSetting("recentMullvadRegions", Model.pushRecentMullvad(recentMullvadRegions, region, 5))
   }
 
   // ---- row registry ---------------------------------------------------------
@@ -220,6 +226,8 @@ Panel {
   Service {
     id: tailscale
     settings: root.settings
+    activeProviderId: root.settings && root.settings.activeProvider ? root.settings.activeProvider : ""
+    onProviderChanged: function (id) { root.persistSetting("activeProvider", id) }
     // An open panel is worth polling for; a closed one rides the watcher.
     attentive: root.opened
   }

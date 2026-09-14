@@ -182,7 +182,7 @@ test('shell quoting survives an apostrophe', () => {
 test('sections come back in a fixed order', () => {
     const panel = M.resolvePanel(state(), {});
     assert.deepEqual(panel.sections.map(s => s.id),
-        ['update', 'self', 'connections', 'exitNodes', 'networks', 'machines']);
+        ['update', 'providers', 'self', 'connections', 'exitNodes', 'networks', 'machines']);
 });
 
 test('this device carries the same copy options a machine row does', () => {
@@ -867,4 +867,35 @@ test('a network being joined reports busy on its own row', () => {
     const rows = section(panel, 'networks').rows;
     assert.equal(only(rows, r => r.label === 'office-lan', 'office row').busy, true);
     assert.equal(only(rows, r => r.label === 'prod-vpc', 'prod row').busy, false);
+});
+
+test('the provider switcher appears only when there is a choice', () => {
+    const one = M.resolvePanel(state({providers: detected('tailscale')}), {});
+    assert.equal(section(one, 'providers').visible, false, 'one provider is not a choice');
+    assert.equal(section(M.resolvePanel(state({providers: detected()}), {}), 'providers').visible, false);
+
+    const both = M.resolvePanel(state({providers: detected('tailscale', 'netbird')}), {});
+    const providers = section(both, 'providers');
+    assert.equal(providers.visible, true);
+    assert.deepEqual(providers.rows.map(r => r.label), ['Tailscale', 'NetBird']);
+    assert.deepEqual(providers.rows.map(r => r.current), [true, false]);
+    assert.equal(providers.rows.every(r => r.action === 'switchProvider'), true);
+});
+
+test('the switcher follows the choice, and the whole panel with it', () => {
+    const both = detected('tailscale', 'netbird');
+    const picked = M.resolvePanel(state({providers: both, activeProviderId: 'netbird'}), {});
+    assert.deepEqual(section(picked, 'providers').rows.map(r => r.current), [false, true]);
+    // The title is the device, which a refresh replaces; the provider shows
+    // in what the switch says it will do.
+    assert.equal(picked.header.toggleHint, 'Turn NetBird off');
+    assert.equal(section(picked, 'exitNodes').visible, false);
+    assert.equal(section(picked, 'connections').visible, false);
+});
+
+test('the switcher never offers a provider it cannot drive', () => {
+    const drivable = M.drivableProviders({providers: detected('tailscale', 'netbird')});
+    assert.deepEqual(drivable.map(p => p.id), M.providerDescriptors()
+        .filter(p => p.supported).map(p => p.id));
+    assert.deepEqual(M.drivableProviders({providers: detected()}), []);
 });

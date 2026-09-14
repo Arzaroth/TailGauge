@@ -109,7 +109,7 @@ export const ProviderService = GObject.registerClass({
         this.networks = [];
         this.selectingNetworkId = '';
         this.providers = [];
-        this.activeProviderId = '';
+        this.activeProviderId = this._settings.get_string('active-provider');
         this.installed = false;
         this.running = false;
         this.needsLogin = false;
@@ -598,6 +598,22 @@ export const ProviderService = GObject.registerClass({
         this.selectedAccountId = parsed.selectedAccountId;
         this.selectedAccountLabel = parsed.selectedAccountLabel;
         this.accountsAccessDenied = false;
+    }
+
+    switchProvider(provider: Model.ProviderDescriptor | null): void {
+        if (!provider) return;
+        const id = String(provider.id || '');
+        if (id === '' || id === this.activeProviderId) return;
+        this.activeProviderId = id;
+        // The old provider's machines and accounts are not this one's.
+        this._resetUnavailable(_('Switching'));
+        this.installed = Model.providerReady({
+            providers: this.providers,
+            activeProviderId: this.activeProviderId,
+        });
+        this._settings.set_string('active-provider', id);
+        this.refresh(true);
+        this.emit('changed');
     }
 
     _parseNetworks(raw: string): void {

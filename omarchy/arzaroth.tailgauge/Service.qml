@@ -11,6 +11,8 @@ Item {
   // Every provider probed on PATH, and the one the panel drives. `installed`
   // stays the gate every command already checks: it now means the active
   // provider is one we can actually drive.
+  signal providerChanged(string id)
+
   property var networks: []
   property string selectingNetworkId: ""
   property var providers: []
@@ -527,6 +529,21 @@ Item {
     selectedAccountId = parsed.selectedAccountId
     selectedAccountLabel = parsed.selectedAccountLabel
     accountsAccessDenied = false
+  }
+
+  function switchProvider(provider) {
+    if (!provider) return
+    var id = String(provider.id || "")
+    if (id === "" || id === activeProviderId) return
+    activeProviderId = id
+    // The old provider's machines and accounts are not this one's.
+    resetUnavailable("Switching")
+    installed = Model.providerReady({
+      providers: providers,
+      activeProviderId: activeProviderId
+    })
+    providerChanged(id)
+    refresh(true)
   }
 
   function parseNetworks(raw) {
