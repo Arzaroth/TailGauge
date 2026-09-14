@@ -256,6 +256,19 @@ Panel {
     function down(): string { tailscale.down(); return "ok" }
     function toggleTailscale(): string { tailscale.toggleTailscale(); return "ok" }
     function status(): string { return tailscale.statusText }
+    // What the panel believes right now. A multi-provider panel has state that
+    // no log line shows and no test can reach, so it can be asked directly.
+    function diagnose(): string {
+      return JSON.stringify({
+        activeProviderId: tailscale.activeProviderId,
+        installed: tailscale.installed,
+        providers: tailscale.providers,
+        summaries: tailscale.summaries,
+        pollProvider: tailscale._pollProvider,
+        networks: tailscale.networks,
+        tooltip: root.panel.bar.tooltip
+      })
+    }
   }
 
   BarIconButton {
@@ -400,16 +413,32 @@ Panel {
               iconOpacity: root.panel.header.dimmed ? 0.5 : 1.0
               // Status only - the switch owns toggling, mouse and keyboard alike.
               // The bar icon carries the machine's state; the hero says which
-              // provider the panel is showing.
+              // provider the panel is showing, drawn as that provider's own
+              // mark rather than as a font glyph standing in for one.
               iconComponent: Component {
-                Text {
-                  textFormat: Text.PlainText
-                  text: root.panel.header.glyph
-                  color: root.panel.header.warning
+                Loader {
+                  readonly property color tint: root.panel.header.warning
                     ? root.urgent
                     : (root.panel.header.dimmed ? root.dim : root.foreground)
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.display
+                  sourceComponent: root.panel.header.providerId === "netbird"
+                    ? netbirdMark : tailscaleMark
+
+                  Component {
+                    id: tailscaleMark
+                    TailGaugeIcon {
+                      iconSize: Style.font.display
+                      color: parent ? parent.tint : root.foreground
+                      badgeColor: root.urgent
+                    }
+                  }
+
+                  Component {
+                    id: netbirdMark
+                    NetBirdIcon {
+                      iconSize: Style.font.display
+                      color: parent ? parent.tint : root.foreground
+                    }
+                  }
                 }
               }
 

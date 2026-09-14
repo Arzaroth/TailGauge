@@ -46,6 +46,8 @@ export interface Peer {
   TxBytes?: number
   LastHandshake?: string
   LastSeen?: string
+  Created?: string
+  PublicKey?: string
   Routes?: string[]
 }
 
@@ -183,6 +185,7 @@ export interface PanelSection {
 export interface PanelHeader {
   id: string
   title: string
+  providerId: string
   icon: string
   glyph: string
   meta: string
@@ -695,6 +698,8 @@ function peerFromStatus(id: string, peer: Raw, users: Raw): Peer {
     TxBytes: typeof peer.TxBytes === "number" ? peer.TxBytes : 0,
     LastHandshake: isZeroTime(peer.LastHandshake) ? "" : String(peer.LastHandshake || ""),
     LastSeen: isZeroTime(peer.LastSeen) ? "" : String(peer.LastSeen || ""),
+    Created: isZeroTime(peer.Created) ? "" : String(peer.Created || ""),
+    PublicKey: String(peer.PublicKey || ""),
     Routes: peer.PrimaryRoutes || []
   }
 }
@@ -1059,6 +1064,7 @@ function netbirdPeer(raw: Raw): Peer {
     TxBytes: Number(value.transferSent || 0),
     LastHandshake: isZeroTime(value.lastWireguardHandshake)
       ? "" : String(value.lastWireguardHandshake || ""),
+    PublicKey: String(value.publicKey || ""),
     Routes: value.networks && typeof value.networks.length === "number" ? value.networks : []
   }
 }
@@ -1294,6 +1300,8 @@ function peerCopyOptions(peer: Raw): CopyOption[] {
   if (dns !== "") options.push({ kind: "dns", label: dns })
   if (ipv6 !== "") options.push({ kind: "ipv6", label: ipv6 })
   if (ip !== "") options.push({ kind: "ip", label: ip })
+  var key = String(peer.PublicKey || "")
+  if (key !== "") options.push({ kind: "key", label: key })
   return options
 }
 
@@ -1515,6 +1523,11 @@ function peerDetailRows(peer: Raw, t: Translate, nowMs?: number): PanelRow[] {
   var routes = peer.Routes || []
   if (routes.length > 0) detail("routes", t("Routes"), routes.join(", "))
 
+  // An idle peer reports nothing about a session it does not have, so the one
+  // thing always known about it keeps the row from opening onto almost
+  // nothing.
+  if (rows.length < 3) detail("added", t("Added"), formatSince(peer.Created, nowMs))
+
   return rows
 }
 
@@ -1530,6 +1543,7 @@ function panelHeader(state: PanelState, t: Translate, phraseIndex?: number): Pan
   return {
     id: "header",
     title: present ? (state.selfName || label) : label,
+    providerId: provider ? provider.id : "",
     icon: provider ? provider.icon : "network-vpn-symbolic",
     glyph: provider ? provider.glyph : "\udb83\udea0",
     meta: meta,
