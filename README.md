@@ -54,55 +54,61 @@ On Xorg, restart the shell with `Alt+F2` `r`. On Wayland, log out and back in.
 
 ## Outside the panel
 
-The Plasma and GNOME panels have no IPC and need none: they block on `tailscale debug watch-ipn`, so anything that changes tailscaled's state shows up in them within a second, whoever changed it. `tailgauge-ctl` drives the daemon from a key binding or a script, and the Omarchy widget additionally answers to `omarchy-shell arzaroth.tailgauge toggle` the way its first-party neighbours do.
+The Plasma and GNOME panels have no IPC and need none: they block on `tailscale debug watch-ipn`, so anything that changes tailscaled's state shows up in them within a second, whoever changed it. `tailgauge ctl` drives the daemon from a key binding or a script, and the Omarchy widget additionally answers to `omarchy-shell arzaroth.tailgauge toggle` the way its first-party neighbours do.
 
 ```bash
-tailgauge-ctl status              # exits 0 connected, 3 not
-tailgauge-ctl toggle              # off if it is on, on if it is off
-tailgauge-ctl up                  # opens the login page when it needs one
-tailgauge-ctl down
-tailgauge-ctl exit-node           # print the current one
-tailgauge-ctl exit-node de-ber-wg-001.mullvad.ts.net
-tailgauge-ctl exit-node off
-tailgauge-ctl exit-nodes          # what this tailnet offers
-tailgauge-ctl version             # which helpers are installed
+tailgauge ctl status              # exits 0 connected, 3 not
+tailgauge ctl toggle              # off if it is on, on if it is off
+tailgauge ctl up                  # opens the login page when it needs one
+tailgauge ctl down
+tailgauge ctl exit-node           # print the current one
+tailgauge ctl exit-node de-ber-wg-001.mullvad.ts.net
+tailgauge ctl exit-node off
+tailgauge ctl exit-nodes          # what this tailnet offers
+tailgauge ctl version             # which version is installed
 ```
+
+Everything TailGauge shells out to is one binary with a subcommand per job -
+`ctl`, `watch`, `notify`, `send`, `receive`, `file-select`, `copy`, `update`.
+The installer also drops a symlink per subcommand beside it, so the older
+spelling `tailgauge-ctl toggle` still resolves: the binary reads the name it
+was invoked as.
 
 Run from a key binding there is no terminal to print on, so `up` opens the login page itself and a failure arrives as a notification instead.
 
-**GNOME**: *Settings* in the panel menu has a **Shortcut** row. It is empty until you set one, and it toggles Tailscale in the running extension, so it works on a store install with no helpers on `PATH`.
+**GNOME**: *Settings* in the panel menu has a **Shortcut** row. It is empty until you set one, and it toggles Tailscale in the running extension, so it works on a store install with nothing on `PATH`.
 
-**Plasma**: bind the helper as a custom command in *System Settings > Keyboard > Shortcuts > Add > Command*, with `tailgauge-ctl toggle` - `~/.local/bin/tailgauge-ctl` if that directory is not on the session's `PATH`. The widget's own popup is bindable without any of this, from *Configure Keyboard Shortcuts* in its context menu.
+**Plasma**: bind it as a custom command in *System Settings > Keyboard > Shortcuts > Add > Command*, with `tailgauge ctl toggle` - `~/.local/bin/tailgauge` if that directory is not on the session's `PATH`. The widget's own popup is bindable without any of this, from *Configure Keyboard Shortcuts* in its context menu.
 
 ## Distribution
 
-TailGauge has no binary, so there is nothing to self-replace the way a compiled tool does. Instead both desktops already ship an update mechanism, and TailGauge uses them.
+The three frontends are QML and JavaScript their desktops install; the binary is one file in `~/.local/bin`. Each store updates the frontend it carries, and `tailgauge update` replaces the binary and refreshes whichever frontends are already installed.
 
 | Channel | Installs | Updates |
 |---|---|---|
 | [store.kde.org](https://store.kde.org) | the Plasma widget | *Add Widgets* shows updates; KNewStuff tracks the version |
 | [extensions.gnome.org](https://extensions.gnome.org) | the GNOME extension | the Extensions app applies them on next session |
-| GitHub releases | the Omarchy widget | `tailgauge-update`; there is no plugin store to go through |
-| GitHub releases | everything, including the helpers | `tailgauge-update` |
+| GitHub releases | the Omarchy widget | `tailgauge update`; there is no plugin store to go through |
+| GitHub releases | everything, the binary included | `tailgauge update` |
 | Distro package | everything, as one unit | the package manager |
 
-**Neither store can install `bin/` or the systemd unit** - the KDE Store ships a kpackage, EGO ships an extension zip. A store-installed TailGauge is the panel only: status, toggle, connections, exit nodes, machines and copy actions all work; **Taildrop send does not appear**, because the panel checks for `tailgauge-send` before offering it. Install the helpers from the release archive to get it back:
+**Neither store can install the binary or the systemd unit** - the KDE Store ships a kpackage, EGO ships an extension zip. A store-installed TailGauge is the panel only: status, toggle, connections, exit nodes, machines and copy actions all work; **Taildrop send does not appear**, because the panel checks for `tailgauge` on `PATH` before offering it. Install it from the release archive to get it back:
 
 ```bash
-curl -fsSL https://github.com/Arzaroth/TailGauge/releases/latest/download/tailgauge-v0.4.0-helpers.tar.gz | tar -xz
-install -m 755 bin/* ~/.local/bin/
+curl -fsSL https://github.com/Arzaroth/TailGauge/releases/latest/download/tailgauge-v0.5.0-linux-x86_64.tar.gz | tar -xz
+install -m 755 tailgauge ~/.local/bin/
 ```
 
 ### Updating
 
 ```bash
-tailgauge-update             # is there a newer release?
-tailgauge-update --apply     # install it
+tailgauge update             # is there a newer release?
+tailgauge update --apply     # install it
 ```
 
 The check is cached for six hours, so the panel polling it costs nothing. Both panels show a banner when an update is out, with an **Install it now** row when TailGauge can do it itself.
 
-It refuses to update anything it did not install. A widget registered with KNewStuff, an extension carrying EGO's `_generated` stamp, or anything under `/usr` is left to whoever owns it, and the banner says so instead of offering the button. `--force` overrides.
+It replaces the binary next to itself and reinstalls whichever frontends are already on the machine, from the payloads the same archive carries - so the binary and the QML it feeds cannot end up a release apart. A frontend that fails to install is reported rather than rolled into the binary's failure, and the old copy is moved aside rather than deleted, so a failed replacement leaves the one that was working.
 
 ### Release assets
 
@@ -111,9 +117,9 @@ Tagging `vX.Y.Z` publishes:
 - `tailgauge-vX.Y.Z-plasmoid.plasmoid` - `kpackagetool6 -t Plasma/Applet -i`, and the KDE Store upload
 - `tailgauge-vX.Y.Z-gnome-shell-extension.zip` - `gnome-extensions install`, and the EGO upload
 - `tailgauge-vX.Y.Z-omarchy-plugin.tar.gz` - unpacks into `~/.config/omarchy/plugins/`
-- `tailgauge-vX.Y.Z-helpers.tar.gz` - `bin/` and the systemd unit
+- `tailgauge-vX.Y.Z-linux-x86_64.tar.gz`, `-linux-aarch64.tar.gz` - the binary, the three frontend payloads under `frontends/`, and the systemd unit. This is what `tailgauge update` downloads.
 
-`test/distribution.test.ts` fails the build if those names stop matching what `tailgauge-update` downloads, or if the versions drift apart - the three manifests and every helper declare one, and the test runs each helper's `--version` to check it prints the version it declares.
+The distribution tests in `crates/tailgauge/src/update.rs` fail the build if those names stop matching what the updater asks for - the asset name is spelled by the updater's own `arch_target()`, so the test compares the workflow against the running code rather than against a second copy of the name. The three manifests and `Cargo.toml` all declare the version, and a tag that disagrees with any of them refuses to publish.
 
 ## The parity rule
 
@@ -137,12 +143,12 @@ shared/model.ts          the only copy of the data model AND the panel layout
 plasma/                  the Plasma 6 plasmoid (QML)
 gnome/                   the GNOME Shell extension (GJS, TypeScript)
 omarchy/                 the Omarchy 4 bar widget (Quickshell QML)
-bin/                     tailgauge-ctl / -send / -receive / -copy / -notify / -file-select / -update / -watch
+crates/tailgauge/        the binary every frontend shells out to (Rust)
 systemd/                 the Taildrop receive user unit
 test/                    model and parity tests, and their own tsconfig
 tsconfig*.json           one checking project, three emitting ones (model, GNOME, tests)
 scripts/build.sh         compiles TypeScript, then assembles build/
-scripts/install.sh       builds, then installs helpers, unit and packages
+scripts/install.sh       builds, then installs the binary, unit and packages
 ```
 
 ### TypeScript
@@ -180,16 +186,17 @@ Plasma stores these in the widget's own configuration, GNOME in `org.gnome.shell
 pnpm install                        # once, for the TypeScript toolchain
 pnpm build                          # compile and assemble build/ without installing to the desktop
 pnpm typecheck                      # tsc over every project, emitting nothing
-pnpm test                           # build, then the model, parity and distribution tests
+pnpm test                           # build, then the model and parity tests
+cargo test                          # the binary, and the distribution contract
 pnpm coverage                       # the tests again, with a coverage report for the model
 scripts/install.sh                  # build and install for the running desktop
 ```
 
 The toolchain is managed with [pnpm](https://pnpm.io), pinned by the `packageManager` field and `pnpm-lock.yaml`. `scripts/build.sh` falls back to `npm install` when pnpm is absent, so installing from a clone needs nothing beyond Node. That fallback is best-effort: npm cannot read `pnpm-lock.yaml`, so it re-resolves the ranges in `package.json` and may compile with a different TypeScript patch than CI did.
 
-`pnpm coverage` reports on `shared/model.ts` alone - the test files are excluded, and the three frontends never execute under Node, so what the parity and distribution tests assert about them does not appear as a percentage.
+`pnpm coverage` reports on `shared/model.ts` alone - the test files are excluded, and the three frontends never execute under Node, so what the parity tests assert about them does not appear as a percentage.
 
-CI runs those on every pull request, along with `qmllint` for QML syntax on both QML frontends, `node --check` on the emitted extension, `shellcheck` on the helpers, and a check that the three manifests and every helper declare the same version. Tagging `vX.Y.Z` builds and publishes the plasmoid package, the GNOME extension zip, the Omarchy plugin tarball and the helpers.
+CI runs those on every pull request, along with `cargo fmt`, `clippy -D warnings` and `cargo test` on x86_64 and aarch64, `qmllint` for QML syntax on both QML frontends, `node --check` on the emitted extension, and a check that the three manifests and `Cargo.toml` declare the same version. Tagging `vX.Y.Z` builds and publishes the plasmoid package, the GNOME extension zip, the Omarchy plugin tarball and a binary archive per architecture.
 
 Plasma logs QML errors under the `plasmashell` identifier rather than a unit, because it usually runs as a transient `app-plasmashell@<hash>.service`:
 
