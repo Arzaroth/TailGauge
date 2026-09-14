@@ -13,6 +13,10 @@ Item {
   // provider is one we can actually drive.
   signal providerChanged(string id)
 
+  // Which provider each poll was launched for. A reply that outlives a
+  // switch belongs to the provider that was asked, not the one now shown.
+  property var _pollProvider: ({})
+
   property var networks: []
   property string selectingNetworkId: ""
   property var providers: []
@@ -174,6 +178,7 @@ Item {
   function _run(kind, argv) {
     var proc = _runner(kind)
     if (!proc || proc.running) return false
+    _pollProvider[kind] = activeProviderId
     proc.command = _shellArgv(Model.shellCommand(argv))
     proc.running = true
     return true
@@ -214,7 +219,15 @@ Item {
     Quickshell.execDetached(_shellArgv(Model.shellCommand(argv)))
   }
 
+  function _stale(kind) {
+    return _pollProvider[kind] !== undefined
+      && _pollProvider[kind] !== activeProviderId
+  }
+
   function _handle(kind, exitCode, stdout, stderr) {
+    // A poll answering for the provider we just left would be parsed with
+    // the wrong parser and land as an empty panel.
+    if (kind !== "which" && _stale(kind)) return
     if (kind === "which") {
       root.providers = Model.parseProviderProbe(stdout)
       root.installed = Model.providerReady({
@@ -391,7 +404,8 @@ Item {
   // still mid-teardown when this runs.
   function watch() {
     if (!installed) return
-    _run("watch", ["tailgauge-watch", "300"])
+    var watch = _commands().watch
+    if (watch) _run("watch", watch(300))
   }
 
   function checkUpdate(force) {
@@ -536,6 +550,10 @@ Item {
     var id = String(provider.id || "")
     if (id === "" || id === activeProviderId) return
     activeProviderId = id
+    // Free the runners so the new provider polls now rather than at the
+    // next tick; their replies are already discarded as stale.
+    var polls = ["status", "mullvad", "accounts", "networks", "watch"]
+    for (var i = 0; i < polls.length; i++) _reap(polls[i])
     // The old provider's machines and accounts are not this one's.
     resetUnavailable("Switching")
     installed = Model.providerReady({
