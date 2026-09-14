@@ -178,7 +178,7 @@ export const ProviderService = GObject.registerClass({
         this._preLoginAuthUrl = '';
         this._startupTicks = 0;
 
-        this._run('helpers', ['which', 'tailgauge-send'], status => {
+        this._run('helpers', ['which', 'tailgauge'], status => {
             this.helpers = status === 0;
         });
         this.checkUpdate();
@@ -407,7 +407,7 @@ export const ProviderService = GObject.registerClass({
     }
 
     checkUpdate(force = false): void {
-        const argv = ['tailgauge-update', '--check', '--json'];
+        const argv = ['tailgauge', 'update', '--check', '--json'];
         if (force)
             argv.push('--force');
         // --check exits 2 when an update is available, which is a result, not a
@@ -428,7 +428,7 @@ export const ProviderService = GObject.registerClass({
             return;
         this.updating = true;
         this.actionStatus = _('Updating TailGauge…');
-        this._run('applyUpdate', ['tailgauge-update', '--apply', '--quiet'], (status, stdout, stderr) => {
+        this._run('applyUpdate', ['tailgauge', 'update', '--apply', '--quiet'], (status, stdout, stderr) => {
             this.updating = false;
             if (status !== 0) {
                 this.lastError = Model.elideStatus(stderr || stdout || _('Update failed'));
@@ -1023,7 +1023,7 @@ export const ProviderService = GObject.registerClass({
         const target = Model.peerAddress(peer);
         if (target === '')
             return;
-        this._detach(['tailgauge-send', target]);
+        this._detach(['tailgauge', 'send', target]);
     }
 
     destroy(): void {

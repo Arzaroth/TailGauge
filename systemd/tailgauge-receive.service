@@ -4,7 +4,7 @@ PartOf=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/tailgauge-receive
+ExecStart=%h/.local/bin/tailgauge receive
 Restart=always
 RestartSec=5
 
