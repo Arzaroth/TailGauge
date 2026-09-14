@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- **Typing in a search field no longer rebuilds the panel.** The model now
+  hands each searchable row a `searchKey` and says which field filters it, and
+  the three frontends do nothing but test the substring. `resolvePanel` no
+  longer takes the machine and region queries, so the panel it returns is the
+  same object from one keystroke to the next.
+
 ## [0.4.0]
 
 ### Added
