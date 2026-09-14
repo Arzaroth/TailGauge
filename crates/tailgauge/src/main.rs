@@ -6,13 +6,17 @@
 //! parsing rather than eight.
 
 mod copy;
+mod ctl;
 mod file_select;
 mod launch;
 mod notify;
+mod tailscale;
+mod watch;
 
 use std::ffi::OsString;
 use std::path::Path;
 use std::process::ExitCode;
+use std::time::Duration;
 
 use clap::{Parser, Subcommand};
 
@@ -29,6 +33,21 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Drive tailscaled: the connection, and the exit node.
+    Ctl {
+        #[command(subcommand)]
+        action: CtlAction,
+    },
+
+    /// Block until tailscaled reports a state change.
+    ///
+    /// Exits 0 when something moved, 2 when the wait expired, 1 when tailscale
+    /// is unusable.
+    Watch {
+        #[arg(default_value_t = 300)]
+        timeout_seconds: u64,
+    },
+
     /// Copy text to the clipboard.
     Copy { text: Option<String> },
 
@@ -59,8 +78,54 @@ enum Command {
     },
 }
 
+#[derive(Subcommand)]
+enum CtlAction {
+    /// Print the connection state, and the exit node if there is one.
+    ///
+    /// Exits 0 when connected and 3 when it is not, so it can gate a script.
+    Status,
+    /// Turn Tailscale off if it is on, on if it is off.
+    Toggle,
+    /// Turn Tailscale on, opening the login page if it needs one.
+    Up,
+    /// Turn Tailscale off.
+    Down,
+    /// Print the current exit node, or route through NAME; "off" clears it.
+    ExitNode { name: Option<String> },
+    /// List the exit nodes this tailnet offers.
+    ExitNodes,
+    /// Print the version of the binary, not of the widgets.
+    Version,
+}
+
 fn main() -> ExitCode {
     match Cli::parse_from(argv()).command {
+        Command::Ctl { action } => {
+            // Answered before the tailscale check: which parts are installed
+            // is a fair question on a machine where the CLI is not.
+            if matches!(action, CtlAction::Version) {
+                println!("tailgauge-ctl {}", env!("CARGO_PKG_VERSION"));
+                return ExitCode::SUCCESS;
+            }
+            if !tailscale::installed() {
+                eprintln!("tailgauge: the tailscale CLI is not on PATH");
+                return ExitCode::FAILURE;
+            }
+            match action {
+                CtlAction::Status => settle(ctl::status()),
+                CtlAction::Toggle => settle(ctl::toggle()),
+                CtlAction::Up => settle(ctl::up()),
+                CtlAction::Down => settle(ctl::down()),
+                CtlAction::ExitNode { name } => settle(ctl::exit_node(name.as_deref())),
+                CtlAction::ExitNodes => settle(ctl::exit_nodes()),
+                CtlAction::Version => unreachable!("answered before the CLI check"),
+            }
+        }
+
+        Command::Watch { timeout_seconds } => {
+            ExitCode::from(watch::run(Duration::from_secs(timeout_seconds)).code())
+        }
+
         Command::Copy { text } => report(copy::run(text.as_deref().unwrap_or(""))),
 
         Command::Notify {
@@ -97,6 +162,17 @@ fn main() -> ExitCode {
                 ExitCode::from(EXIT_NO_CHOOSER)
             }
         },
+    }
+}
+
+fn settle(outcome: ctl::Outcome) -> ExitCode {
+    match outcome {
+        ctl::Outcome::Ok => ExitCode::SUCCESS,
+        ctl::Outcome::Disconnected => ExitCode::from(ctl::EXIT_DISCONNECTED),
+        ctl::Outcome::Failed(why) => {
+            eprintln!("tailgauge: {why}");
+            ExitCode::FAILURE
+        }
     }
 }
 
