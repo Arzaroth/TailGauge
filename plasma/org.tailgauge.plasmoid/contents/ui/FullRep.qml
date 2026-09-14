@@ -31,9 +31,7 @@ Item {
     readonly property var panel: Model.resolvePanel(service.snapshot(), {
         t: (text) => i18n(text),
         recentRegions: root.recentMullvadRegions,
-        mullvadQuery: full.mullvadQuery,
         mullvadPickerOpen: full.mullvadPickerOpen,
-        machineQuery: full.machineQuery,
         expandedPeerId: full.expandedPeerId,
         nowMs: Date.now(),
         phraseIndex: full.phraseIndex
@@ -99,6 +97,11 @@ Item {
     onMachineQueryChanged: keepCursorVisible()
     onMullvadQueryChanged: keepCursorVisible()
 
+    function dropOrphanedQueries() {
+        if (!Model.panelHasRow(panel, "machines:search")) machineQuery = ""
+        if (!Model.panelHasRow(panel, "mullvad:add")) mullvadQuery = ""
+    }
+
     function keepCursorVisible() {
         var nav = panel.navigation
         if (cursorIndex < 0 || cursorIndex >= nav.length || searchMatches(nav[cursorIndex])) return
@@ -124,6 +127,7 @@ Item {
     property string _pinnedRowId: ""
     onCursorIndexChanged: _pinnedRowId = cursorRowId()
     onPanelChanged: {
+        dropOrphanedQueries()
         if (_pinnedRowId === "") return
         var next = Model.panelNavIndexOf(panel, _pinnedRowId)
         if (next !== cursorIndex) cursorIndex = next
@@ -509,11 +513,14 @@ Item {
                             readonly property bool isEmpty: !!modelData && modelData.kind === "empty"
                             readonly property bool isSearch: !!modelData && modelData.kind === "machineSearch"
 
+                            // The row a query excludes goes with its wrapper,
+                            // or the list keeps the gap where it stood.
+                            visible: full.rowVisible(rowGroup.modelData)
                             Layout.fillWidth: true
                             spacing: Kirigami.Units.smallSpacing
 
                             PlasmaComponents3.Label {
-                                visible: rowGroup.isEmpty && full.rowVisible(rowGroup.modelData)
+                                visible: rowGroup.isEmpty
                                 Layout.fillWidth: true
                                 horizontalAlignment: Text.AlignHCenter
                                 text: rowGroup.modelData ? rowGroup.modelData.label : ""
@@ -544,7 +551,6 @@ Item {
 
                             PanelRowView {
                                 visible: !rowGroup.isEmpty && !rowGroup.isSearch
-                                    && full.rowVisible(rowGroup.modelData)
                                 Layout.fillWidth: true
                                 row: rowGroup.modelData
                                 register: full.registerRow

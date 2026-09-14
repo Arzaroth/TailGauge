@@ -41,9 +41,7 @@ Panel {
   // order. This file only decides what a row looks like.
   readonly property var panel: Model.resolvePanel(tailscale.snapshot(), {
     recentRegions: root.recentMullvadRegions,
-    mullvadQuery: root.mullvadQuery,
     mullvadPickerOpen: root.mullvadPickerOpen,
-    machineQuery: root.machineQuery,
     expandedPeerId: root.expandedPeerId,
     nowMs: Date.now(),
     phraseIndex: root.phraseIndex
@@ -110,6 +108,11 @@ Panel {
   onMachineQueryChanged: keepCursorVisible()
   onMullvadQueryChanged: keepCursorVisible()
 
+  function dropOrphanedQueries() {
+    if (!Model.panelHasRow(panel, "machines:search")) machineQuery = ""
+    if (!Model.panelHasRow(panel, "mullvad:add")) mullvadQuery = ""
+  }
+
   function keepCursorVisible() {
     var nav = panel.navigation
     if (cursorIndex < 0 || cursorIndex >= nav.length || searchMatches(nav[cursorIndex])) return
@@ -130,6 +133,7 @@ Panel {
   property string _pinnedRowId: ""
   onCursorRowIdChanged: _pinnedRowId = cursorRowId
   onPanelChanged: {
+    dropOrphanedQueries()
     if (_pinnedRowId === "") return
     var next = Model.panelNavIndexOf(panel, _pinnedRowId)
     if (next !== cursorIndex) cursorIndex = next
@@ -667,12 +671,15 @@ Panel {
                   readonly property bool isEmpty: !!modelData && modelData.kind === "empty"
                   readonly property bool isSearch: !!modelData && modelData.kind === "machineSearch"
 
+                  // The row a query excludes goes with its wrapper, or the list
+                  // keeps the gap where it stood.
+                  visible: root.rowVisible(rowGroup.modelData)
                   width: sectionView.width
                   spacing: Style.space(6)
 
                   Text {
                     textFormat: Text.PlainText
-                    visible: rowGroup.isEmpty && root.rowVisible(rowGroup.modelData)
+                    visible: rowGroup.isEmpty
                     width: parent.width
                     text: rowGroup.modelData ? rowGroup.modelData.label : ""
                     color: root.dim
@@ -715,7 +722,6 @@ Panel {
 
                   RowView {
                     visible: !rowGroup.isEmpty && !rowGroup.isSearch
-                      && root.rowVisible(rowGroup.modelData)
                     width: parent.width
                     row: rowGroup.modelData
                   }
