@@ -1401,6 +1401,13 @@ function barTooltip(state: PanelState, t: Translate): string[] {
     if (!current || installed[i].id !== current.id) ordered.push(installed[i])
   }
 
+  // The names differ in length, so the state column would start in a
+  // different place on every line. Padded, it reads as a column.
+  var width = 0
+  for (var w = 0; w < ordered.length; w++) {
+    if (ordered[w].label.length > width) width = ordered[w].label.length
+  }
+
   var lines: string[] = []
   for (var j = 0; j < ordered.length; j++) {
     var provider = ordered[j]
@@ -1410,7 +1417,9 @@ function barTooltip(state: PanelState, t: Translate): string[] {
       if (summary.selfName !== "") parts.push(summary.selfName)
       if (summary.selfIp !== "") parts.push(summary.selfIp)
     }
-    lines.push(provider.label + "  " + parts.join(" \u00b7 "))
+    var name = provider.label
+    while (name.length < width) name += " "
+    lines.push(name + "  " + parts.join(" \u00b7 "))
   }
   return lines
 }

@@ -443,8 +443,31 @@ Panel {
               }
 
               trailingControl: Component {
+                Row {
+                spacing: Style.space(6)
+
+                // GNOME and Plasma reach a manual refresh through their own
+                // menus; on Omarchy it was middle-click on the bar and nothing
+                // said so.
+                PanelActionButton {
+                  id: refreshButton
+                  anchors.verticalCenter: parent.verticalCenter
+                  visible: root.panel.header.toggleVisible
+                  iconText: "\udb81\udd50"
+                  foreground: hero.foreground
+                  hoverColor: hero.foreground
+                  onClicked: tailscale.refresh(true)
+
+                  PanelToolTip {
+                    visible: refreshButton.containsMouse
+                    text: "Refresh"
+                    fontFamily: hero.fontFamily
+                  }
+                }
+
                 ToggleSwitch {
                   id: powerSwitch
+                  anchors.verticalCenter: parent.verticalCenter
                   visible: root.panel.header.toggleVisible
                   checked: root.panel.header.toggleChecked
                   // Busy is shown, never enforced: a command in flight dims the
@@ -460,6 +483,7 @@ Panel {
                     text: root.panel.header.toggleHint
                     fontFamily: hero.fontFamily
                   }
+                }
                 }
               }
             }

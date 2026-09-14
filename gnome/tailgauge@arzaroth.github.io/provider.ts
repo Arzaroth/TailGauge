@@ -40,6 +40,13 @@ function spawn(argv: string[], flags: Gio.SubprocessFlags): Gio.Subprocess {
         ['sh', '-c', `${PATH_PREAMBLE}exec "$@"`, 'sh', ...argv], flags);
 }
 
+const CACHED_FIELDS: string[] = [
+    'running', 'needsLogin', 'daemonState', 'statusText', 'authUrl',
+    'selfName', 'selfDnsName', 'selfIp', 'selfUserId', 'selfPeer', 'fileSharing',
+    'peers', 'exitNodes', 'ownExitNodes', 'mullvadExitNodes', 'mullvadRegions',
+    'networks', 'accounts', 'selectedAccountId', 'selectedAccountLabel',
+];
+
 export const ProviderService = GObject.registerClass({
     Signals: {'changed': {}},
 }, class ProviderService extends GObject.Object {
@@ -62,6 +69,10 @@ export const ProviderService = GObject.registerClass({
     declare _pollProvider: Map<string, string>;
     // One entry per installed provider, kept whether or not it is the one on
     // screen, so the bar icon and its tooltip describe the machine.
+    // The last good panel for each provider, so switching shows what that
+    // provider looked like a moment ago rather than an empty panel.
+    declare _cache: Map<string, Record<string, unknown>>;
+    declare _cachedProviderId: string;
     declare summaries: Model.ProviderSummary[];
     declare _bgIndex: number;
     declare _bgProviderId: string;
@@ -113,6 +124,8 @@ export const ProviderService = GObject.registerClass({
         this._destroyed = false;
 
         this._pollProvider = new Map();
+        this._cache = new Map();
+        this._cachedProviderId = '';
         this.summaries = [];
         this._bgIndex = 0;
         this._bgProviderId = '';
@@ -572,6 +585,7 @@ export const ProviderService = GObject.registerClass({
             activeProviderId: this.activeProviderId,
         }, raw);
         this._setSummary(this.activeProviderId, parsed);
+        this._cachedProviderId = this.activeProviderId;
         if (!parsed.ok) {
             this._resetUnavailable(parsed.message || _('Status error'));
             this.lastError = parsed.error || 'Failed to parse tailscale status';
@@ -636,7 +650,12 @@ export const ProviderService = GObject.registerClass({
         for (const kind of ['status', 'mullvad', 'accounts', 'networks', 'watch'])
             this._cancel(kind);
         // The old provider's machines and accounts are not this one's.
-        this._resetUnavailable(_('Switching'));
+        this._saveCache(this._cachedProviderId);
+        this._cachedProviderId = this.activeProviderId;
+        if (!this._restoreCache(this.activeProviderId))
+            this._resetUnavailable(_('Switching'));
+        // A toggle pending on the provider we just left is not pending here.
+        this._desired = -1;
         // Seed from what the background poll already knows, so the header does
         // not flash disconnected on the way to a provider that is up.
         const known = this.summaries.find(s => s.id === id);
@@ -653,6 +672,22 @@ export const ProviderService = GObject.registerClass({
         this._settings.set_string('active-provider', id);
         this.refresh(true);
         this.emit('changed');
+    }
+
+    _saveCache(id: string): void {
+        if (!id) return;
+        const self = this as unknown as Record<string, unknown>;
+        const snap: Record<string, unknown> = {};
+        for (const field of CACHED_FIELDS) snap[field] = self[field];
+        this._cache.set(id, snap);
+    }
+
+    _restoreCache(id: string): boolean {
+        const snap = id ? this._cache.get(id) : undefined;
+        if (!snap) return false;
+        const self = this as unknown as Record<string, unknown>;
+        for (const field of CACHED_FIELDS) self[field] = snap[field];
+        return true;
     }
 
     _setSummary(providerId: string, parsed: unknown): void {

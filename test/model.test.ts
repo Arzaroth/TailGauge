@@ -964,13 +964,13 @@ test('the tooltip says what each installed provider is doing, active first', () 
     const summaries = [summary('tailscale', {running: true, selfName: 'workstation', selfIp: '100.64.0.1'}),
                        summary('netbird', {state: 'Idle'})];
     assert.deepEqual(M.resolvePanel({providers: both, summaries}, {}).bar.tooltip,
-        ['Tailscale  connected · workstation · 100.64.0.1', 'NetBird  Idle']);
+        ['Tailscale  connected · workstation · 100.64.0.1', 'NetBird    Idle']);
     // The one being viewed leads, whichever it is.
     assert.deepEqual(M.resolvePanel({providers: both, activeProviderId: 'netbird', summaries}, {}).bar.tooltip,
-        ['NetBird  Idle', 'Tailscale  connected · workstation · 100.64.0.1']);
+        ['NetBird    Idle', 'Tailscale  connected · workstation · 100.64.0.1']);
     assert.deepEqual(M.resolvePanel({providers: both,
         summaries: [summary('tailscale', {needsLogin: true}), summary('netbird')]}, {}).bar.tooltip,
-        ['Tailscale  needs login', 'NetBird  disconnected']);
+        ['Tailscale  needs login', 'NetBird    disconnected']);
 });
 
 test('the tooltip falls back rather than lying about what it knows', () => {
