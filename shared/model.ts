@@ -1492,7 +1492,8 @@ function formatBytes(value: Raw): string {
   return shown + " " + units[i]
 }
 
-function formatSince(value: Raw, nowMs: Raw): string {
+function formatSince(value: Raw, nowMs: Raw, t?: Translate): string {
+  var tr = typeof t === "function" ? t : identityText
   var text = String(value || "").trim()
   if (text === "") return ""
   var then = Date.parse(text)
@@ -1500,13 +1501,17 @@ function formatSince(value: Raw, nowMs: Raw): string {
   var now = typeof nowMs === "number" ? nowMs : Date.now()
   var seconds = Math.floor((now - then) / 1000)
   if (seconds < 0) return ""
-  if (seconds < 60) return "just now"
+  if (seconds < 60) return tr("just now")
   var minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return minutes + (minutes === 1 ? " minute ago" : " minutes ago")
+  if (minutes < 60) {
+    return formatText(minutes === 1 ? tr("%1 minute ago") : tr("%1 minutes ago"), minutes)
+  }
   var hours = Math.floor(minutes / 60)
-  if (hours < 24) return hours + (hours === 1 ? " hour ago" : " hours ago")
+  if (hours < 24) {
+    return formatText(hours === 1 ? tr("%1 hour ago") : tr("%1 hours ago"), hours)
+  }
   var days = Math.floor(hours / 24)
-  return days + (days === 1 ? " day ago" : " days ago")
+  return formatText(days === 1 ? tr("%1 day ago") : tr("%1 days ago"), days)
 }
 
 // How the tunnel is carried, in words rather than a provider's shorthand.
@@ -1540,17 +1545,17 @@ function peerDetailRows(peer: Raw, t: Translate, nowMs?: number): PanelRow[] {
 
   var connection = connectionSummary(peer, t)
   var latency = typeof peer.LatencyMs === "number" && peer.LatencyMs >= 0
-    ? Math.round(peer.LatencyMs) + " ms" : ""
+    ? formatText(t("%1 ms"), Math.round(peer.LatencyMs)) : ""
   if (connection !== "" && latency !== "") connection = connection + " \u00b7 " + latency
   else if (connection === "") connection = latency
 
   detail("connection", t("Connection"), connection)
   detail("endpoint", t("Endpoint"), String(peer.Endpoint || ""))
-  var handshake = formatSince(peer.LastHandshake, nowMs)
+  var handshake = formatSince(peer.LastHandshake, nowMs, t)
   detail("handshake", t("Last handshake"), handshake)
   // Tailscale fills the handshake and byte counters only once a session is up.
   // For an idle peer, when the control plane last saw it is all there is.
-  if (handshake === "") detail("seen", t("Last seen"), formatSince(peer.LastSeen, nowMs))
+  if (handshake === "") detail("seen", t("Last seen"), formatSince(peer.LastSeen, nowMs, t))
 
   var rx = Number(peer.RxBytes || 0)
   var tx = Number(peer.TxBytes || 0)
@@ -1564,7 +1569,7 @@ function peerDetailRows(peer: Raw, t: Translate, nowMs?: number): PanelRow[] {
   // An idle peer reports nothing about a session it does not have, so the one
   // thing always known about it keeps the row from opening onto almost
   // nothing.
-  if (rows.length < 3) detail("added", t("Added"), formatSince(peer.Created, nowMs))
+  if (rows.length < 3) detail("added", t("Added"), formatSince(peer.Created, nowMs, t))
 
   return rows
 }
