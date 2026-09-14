@@ -668,7 +668,7 @@ export const ProviderService = GObject.registerClass({
         this._run('action', this._commands().down!, (status, stdout, stderr) => {
             if (status !== 0) {
                 this._desired = -1;
-                this.lastError = Model.elideStatus(stderr || stdout || _('Tailscale command failed'));
+                this.lastError = Model.elideStatus(stderr || stdout || _('Command failed'));
                 this._flashStatus(this.lastError);
             } else {
                 this.lastError = '';
@@ -702,7 +702,7 @@ export const ProviderService = GObject.registerClass({
                 if (this._loginInProgress && !this._loginUrlOpened &&
                     !this._openAuthUrlFrom(this.authUrl, true)) {
                     this._loginInProgress = false;
-                    this.actionStatus = _('Tailscale login link not available yet');
+                    this.actionStatus = _('Login link not available yet');
                     this._emit();
                 }
                 return GLib.SOURCE_REMOVE;
