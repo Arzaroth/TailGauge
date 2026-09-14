@@ -181,7 +181,8 @@ test('shell quoting survives an apostrophe', () => {
 
 test('sections come back in a fixed order', () => {
     const panel = M.resolvePanel(state(), {});
-    assert.deepEqual(panel.sections.map(s => s.id), ['update', 'self', 'connections', 'exitNodes', 'machines']);
+    assert.deepEqual(panel.sections.map(s => s.id),
+        ['update', 'self', 'connections', 'exitNodes', 'networks', 'machines']);
 });
 
 test('this device carries the same copy options a machine row does', () => {
@@ -797,4 +798,62 @@ test('parseNetbirdStatus survives empty and malformed input', () => {
     assert.deepEqual(M.parseNetbirdStatus(''), {ok: true, unavailable: true, message: 'Disconnected'});
     assert.equal(M.parseNetbirdStatus('{not json').ok, false);
     assert.equal(M.parseNetbirdStatus('[]').ok, false);
+});
+
+// netbird-networks.txt follows the block format `netbird networks list` prints.
+// It is written to that format rather than captured: listing needs a connected
+// daemon, which this machine is not.
+const nbNetworks = M.parseNetbirdNetworks(fixture('netbird-networks.txt'));
+
+test('parseNetbirdNetworks reads the block format', () => {
+    assert.equal(nbNetworks.ok, true);
+    assert.deepEqual(nbNetworks.networks.map(n => n.id), ['prod-vpc', 'office-lan', 'dns-only']);
+    const prod = only(nbNetworks.networks, n => n.id === 'prod-vpc', 'prod network');
+    assert.equal(prod.range, '10.10.0.0/16');
+    assert.equal(prod.selected, true);
+    const office = only(nbNetworks.networks, n => n.id === 'office-lan', 'office network');
+    assert.equal(office.selected, false);
+    assert.deepEqual(office.domains, ['office.internal', 'printers.internal']);
+    // A "-" is an absent value, not a one-item list.
+    assert.deepEqual(prod.domains, []);
+    assert.equal(only(nbNetworks.networks, n => n.id === 'dns-only', 'dns network').range, '',
+        'a "-" range is absent, not a dash to show');
+});
+
+test('parseNetbirdNetworks tells empty apart from broken', () => {
+    assert.deepEqual(M.parseNetbirdNetworks(''), {ok: true, networks: [], message: ''});
+    assert.deepEqual(M.parseNetbirdNetworks('No networks available.'), {ok: true, networks: [], message: ''});
+    const failed = M.parseNetbirdNetworks('Error: failed to list network: not connected');
+    assert.equal(failed.ok, false);
+    assert.match(failed.message, /not connected/);
+});
+
+test('the networks section belongs to the provider that has networks', () => {
+    const nbState = {
+        providers: detected('netbird'), active: true, running: true,
+        networks: nbNetworks.networks,
+    };
+    const nb = M.resolvePanel(nbState, {});
+    const networks = section(nb, 'networks');
+    assert.equal(networks.visible, true);
+    assert.deepEqual(networks.rows.map(r => r.label), ['prod-vpc', 'office-lan', 'dns-only']);
+    assert.equal(networks.rows[0].current, true, 'the selected one is marked');
+    assert.equal(networks.rows[0].sublabel, '10.10.0.0/16');
+    assert.equal(networks.rows.every(r => r.action === 'selectNetwork'), true);
+    // Domains stand in when there is no range.
+    assert.equal(only(networks.rows, r => r.label === 'dns-only', 'dns row').sublabel, 'apps.internal');
+
+    // Tailscale has no networks, so the same snapshot shows none.
+    const ts = M.resolvePanel({...nbState, providers: detected('tailscale')}, {});
+    assert.equal(section(ts, 'networks').visible, false);
+});
+
+test('a network being joined reports busy on its own row', () => {
+    const panel = M.resolvePanel({
+        providers: detected('netbird'), active: true, running: true,
+        networks: nbNetworks.networks, selectingNetworkId: 'office-lan',
+    }, {});
+    const rows = section(panel, 'networks').rows;
+    assert.equal(only(rows, r => r.label === 'office-lan', 'office row').busy, true);
+    assert.equal(only(rows, r => r.label === 'prod-vpc', 'prod row').busy, false);
 });
