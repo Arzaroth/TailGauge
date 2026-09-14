@@ -646,10 +646,45 @@ test('a provider without a feature never shows the section that needs it', () =>
     assert.equal(section(nb, 'exitNodes').visible, false,
         'NetBird has no exit nodes, even with tailnet exit nodes in the snapshot');
     assert.equal(section(nb, 'connections').visible, false, 'NetBird has no account switching');
-    assert.equal(nb.header.title, status.selfName, 'but the panel still works');
 
     const ts = M.resolvePanel(state({providers: detected('tailscale')}), {});
     assert.equal(section(ts, 'exitNodes').visible, true);
+    assert.equal(section(ts, 'connections').visible, true);
+});
+
+test('a provider we cannot drive yet is named, but never driven', () => {
+    const nb = state({providers: detected('netbird')});
+    assert.equal(M.activeProvider(nb)!.id, 'netbird', 'it is still what the panel is about');
+    assert.equal(M.providerReady(nb), false);
+    assert.equal(M.providerReady(state({providers: detected('tailscale')})), true);
+
+    const panel = M.resolvePanel(nb, {});
+    assert.equal(panel.header.title, 'NetBird', 'named, not mistaken for the Tailscale device');
+    assert.equal(panel.header.toggleEnabled, false, 'a switch that would do nothing stays off');
+    assert.equal(panel.header.toggleVisible, false);
+    assert.match(panel.status.text, /cannot drive it yet/);
+    assert.equal(section(panel, 'machines').visible, false);
+});
+
+test('with both installed the drivable one wins the auto-choice', () => {
+    const both = state({providers: detected('tailscale', 'netbird')});
+    assert.equal(M.activeProvider(both)!.id, 'tailscale');
+    assert.equal(M.providerReady(both), true);
+    assert.equal(M.resolvePanel(both, {}).header.title, status.selfName);
+});
+
+test('the probe reads which stdout, not its exit code', () => {
+    const probe = (out: string) =>
+        Object.fromEntries(M.parseProviderProbe(out).map(p => [p.id, p.installed]));
+    assert.deepEqual(probe('/usr/bin/tailscale\n/usr/bin/netbird\n'),
+        {tailscale: true, netbird: true});
+    assert.deepEqual(probe('/usr/bin/netbird\n'), {tailscale: false, netbird: true});
+    assert.deepEqual(probe(''), {tailscale: false, netbird: false});
+    // A miss reported on stderr must not read as a hit if the streams ever merge.
+    assert.deepEqual(probe('which: no netbird in (/usr/bin)\n/usr/bin/tailscale\n'),
+        {tailscale: true, netbird: false});
+    // Only the basename decides, so a user-local install still counts.
+    assert.deepEqual(probe('/home/me/.local/bin/tailscale\n'), {tailscale: true, netbird: false});
 });
 
 test('sending files is a provider capability, not just a helper check', () => {
