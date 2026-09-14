@@ -78,6 +78,13 @@ Item {
 
     // The flat state resolvePanel() reads. Both desktops hand it the same
     // shape, so the panel they get back cannot disagree.
+    function _commands() {
+      return Model.providerCommands({
+        providers: providers,
+        activeProviderId: activeProviderId
+      }) || {}
+    }
+
     function snapshot() {
         return {
             providers: providers,
@@ -419,16 +426,16 @@ Item {
     function refreshStatusAndAccounts(forceAccounts) {
         if (!installed) return
         var launched = false
-        if (_run("status", ["tailscale", "status", "--json"])) {
+        if (_run("status", _commands().status)) {
             refreshing = true
             launched = true
         }
-        if (_run("mullvad", ["tailscale", "exit-node", "list"])) launched = true
+        if (_run("mullvad", _commands().exitNodeList)) launched = true
 
         var now = Date.now()
         var shouldRefreshAccounts = forceAccounts === true || accounts.length === 0 || now - _lastAccountsRefreshMs > 60000
         if (shouldRefreshAccounts) {
-            if (_run("accounts", ["tailscale", "switch", "--list", "--json"])) {
+            if (_run("accounts", _commands().accounts)) {
                 _lastAccountsRefreshMs = now
                 launched = true
             }
@@ -535,13 +542,13 @@ Item {
     // No progress status here: the greyed icon and hero line already convey
     // the optimistic off, so only a failure is worth a message.
         _desired = 0
-        _run("action", ["tailscale", "down"])
+        _run("action", _commands().down)
     }
 
     function loginOrUp() {
         if (!installed || _inflight["login"]) return
         _desired = -1
-        var plan = Model.loginPlan(needsLogin, authUrl)
+        var plan = Model.loginPlan(needsLogin, authUrl, root._commands().up)
         if (plan.authUrl !== "") {
             _loginUrlOpened = false
             openAuthUrlFrom(plan.authUrl, true)
@@ -559,7 +566,7 @@ Item {
     function switchAccount(id) {
         var accountId = String(id || "")
         if (!installed || accountId === "" || accountId === selectedAccountId) return
-        if (_run("switch", ["tailscale", "switch", accountId])) switchingAccountId = accountId
+        if (_run("switch", _commands().switchAccount(accountId))) switchingAccountId = accountId
     }
 
     function setExitNode(peer) {
@@ -567,7 +574,7 @@ Item {
         var isActive = peer.ExitNode === true
         var target = isActive ? "" : Model.exitNodeTarget(peer)
         if (!isActive && target === "") return
-        if (_run("exitNode", ["tailscale", "set", "--exit-node=" + target]))
+        if (_run("exitNode", _commands().setExitNode(target)))
             settingExitNodeId = String(peer.id || "")
     }
 

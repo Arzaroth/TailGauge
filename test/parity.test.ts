@@ -198,3 +198,24 @@ test('the shared model owns the layout vocabulary', () => {
     for (const word of ['sections', 'navigation', 'visible', 'rows', 'empty'])
         assert.match(model, new RegExp(`\\b${word}\\b`));
 });
+
+// A provider binary named in a service is a command that will one day be fired
+// at the wrong daemon. The argv belongs to the registry, which is the only
+// place that knows which CLI is active.
+test('no service hardcodes a provider binary in its argv', () => {
+    const services = {
+        plasma: 'plasma/org.tailgauge.plasmoid/contents/ui/ProviderService.qml',
+        gnome: 'gnome/tailgauge@arzaroth.github.io/provider.ts',
+        omarchy: 'omarchy/arzaroth.tailgauge/Service.qml'
+    };
+    for (const [name, file] of Object.entries(services)) {
+        for (const line of read(file).split('\n')) {
+            // `tailscale set --operator` stays spelled out: it is a Tailscale
+            // concept with no counterpart to generalise toward, and the two QML
+            // frontends need it as a shell string for $(id -un).
+            if (line.includes('--operator')) continue;
+            assert.doesNotMatch(line, /['"](tailscale|netbird)['"]\s*,/,
+                `${name} names a provider binary directly: ${line.trim()}`);
+        }
+    }
+});

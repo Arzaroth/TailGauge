@@ -203,6 +203,13 @@ export const ProviderService = GObject.registerClass({
 
     // The flat state resolvePanel() reads. Both desktops hand it the same
     // shape, so the panel they get back cannot disagree.
+    _commands(): Partial<Model.ProviderCommands> {
+        return Model.providerCommands({
+            providers: this.providers,
+            activeProviderId: this.activeProviderId,
+        }) ?? {};
+    }
+
     snapshot(): Model.PanelState {
         return {
             providers: this.providers,
@@ -416,7 +423,7 @@ export const ProviderService = GObject.registerClass({
             return;
         let launched = false;
 
-        if (this._run('status', ['tailscale', 'status', '--json'], (status, stdout, stderr) => {
+        if (this._run('status', this._commands().status!, (status, stdout, stderr) => {
             this.refreshing = false;
             if (status === 0) {
                 this._parseStatus(stdout);
@@ -429,7 +436,7 @@ export const ProviderService = GObject.registerClass({
             launched = true;
         }
 
-        if (this._run('mullvad', ['tailscale', 'exit-node', 'list'], (status, stdout) => {
+        if (this._run('mullvad', this._commands().exitNodeList!, (status, stdout) => {
             this._parseMullvadExitNodes(status === 0 ? stdout : '');
         }))
             launched = true;
@@ -437,7 +444,7 @@ export const ProviderService = GObject.registerClass({
         const now = GLib.get_monotonic_time() / 1000;
         const stale = now - this._lastAccountsRefreshMs > ACCOUNTS_MAX_AGE_MS;
         if (forceAccounts || this.accounts.length === 0 || stale) {
-            if (this._run('accounts', ['tailscale', 'switch', '--list', '--json'], (status, stdout, stderr) => {
+            if (this._run('accounts', this._commands().accounts!, (status, stdout, stderr) => {
                 if (status === 0) {
                     this._parseAccounts(stdout);
                 } else {
@@ -595,7 +602,7 @@ export const ProviderService = GObject.registerClass({
         // No progress status here: the greyed icon and header line already
         // convey the optimistic off, so only a failure is worth a message.
         this._desired = 0;
-        this._run('action', ['tailscale', 'down'], (status, stdout, stderr) => {
+        this._run('action', this._commands().down!, (status, stdout, stderr) => {
             if (status !== 0) {
                 this._desired = -1;
                 this.lastError = Model.elideStatus(stderr || stdout || _('Tailscale command failed'));
@@ -613,7 +620,7 @@ export const ProviderService = GObject.registerClass({
         if (!this.installed || this._cancellables.has('login'))
             return;
         this._desired = -1;
-        const plan = Model.loginPlan(this.needsLogin, this.authUrl);
+        const plan = Model.loginPlan(this.needsLogin, this.authUrl, this._commands().up);
         if (plan.authUrl !== '') {
             this._loginUrlOpened = false;
             this._openAuthUrlFrom(plan.authUrl, true);
@@ -734,7 +741,7 @@ export const ProviderService = GObject.registerClass({
         const accountId = String(id || '');
         if (!this.installed || accountId === '' || accountId === this.selectedAccountId)
             return;
-        const started = this._run('switch', ['tailscale', 'switch', accountId], (status, stdout, stderr) => {
+        const started = this._run('switch', this._commands().switchAccount!(accountId), (status, stdout, stderr) => {
             if (status !== 0) {
                 this.lastError = Model.elideStatus(stderr || stdout || _('Account switch failed'));
                 this._flashStatus(this.lastError);
@@ -759,7 +766,7 @@ export const ProviderService = GObject.registerClass({
         const target = isActive ? '' : Model.exitNodeTarget(peer);
         if (!isActive && target === '')
             return;
-        const started = this._run('exitNode', ['tailscale', 'set', `--exit-node=${target}`], (status, stdout, stderr) => {
+        const started = this._run('exitNode', this._commands().setExitNode!(target), (status, stdout, stderr) => {
             if (status !== 0) {
                 this.lastError = Model.elideStatus(stderr || stdout || _('Exit node selection failed'));
                 this._flashStatus(this.lastError);
