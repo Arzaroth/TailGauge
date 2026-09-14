@@ -399,13 +399,17 @@ Panel {
               fontFamily: root.fontFamily
               iconOpacity: root.panel.header.dimmed ? 0.5 : 1.0
               // Status only - the switch owns toggling, mouse and keyboard alike.
+              // The bar icon carries the machine's state; the hero says which
+              // provider the panel is showing.
               iconComponent: Component {
-                TailGaugeIcon {
-                  iconSize: Style.font.display
-                  color: root.panel.header.dimmed ? root.dim : root.foreground
-                  badgeColor: root.urgent
-                  crossed: root.panel.header.crossed
-                  warning: root.panel.header.warning
+                Text {
+                  textFormat: Text.PlainText
+                  text: root.panel.header.glyph
+                  color: root.panel.header.warning
+                    ? root.urgent
+                    : (root.panel.header.dimmed ? root.dim : root.foreground)
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.display
                 }
               }
 
@@ -455,6 +459,7 @@ Panel {
               id: sectionView
               required property int index
               readonly property var modelData: root.panel.sections[sectionView.index]
+              readonly property bool isChips: !!modelData && modelData.id === "providers"
 
               width: column.width
               visible: !!modelData && modelData.visible
@@ -484,8 +489,50 @@ Panel {
                 horizontalAlignment: Text.AlignHCenter
               }
 
+              // Picking a provider is a choice between a handful of names, not a
+              // list to walk: it reads as chips, the way TokenGauge picks its
+              // AI provider.
+              ButtonGroup {
+                visible: sectionView.isChips
+                width: parent.width
+                foreground: root.foreground
+                accent: Color.accent
+                fontFamily: root.fontFamily
+                // The panel cursor still walks these rows, so the chip under it
+                // has to light up like any other row would.
+                cursorIndex: {
+                  if (!sectionView.isChips || !root.cursorActive) return -1
+                  var rows = sectionView.modelData.rows
+                  for (var i = 0; i < rows.length; i++)
+                    if (String(rows[i].id) === root.cursorRowId) return i
+                  return -1
+                }
+                focusable: false
+                options: {
+                  var out = []
+                  if (!sectionView.isChips) return out
+                  var rows = sectionView.modelData.rows
+                  for (var i = 0; i < rows.length; i++)
+                    out.push({ value: String(rows[i].id), label: String(rows[i].label) })
+                  return out
+                }
+                value: {
+                  if (!sectionView.isChips) return ""
+                  var rows = sectionView.modelData.rows
+                  for (var i = 0; i < rows.length; i++)
+                    if (rows[i].current) return String(rows[i].id)
+                  return ""
+                }
+                onChanged: function (value) {
+                  var rows = sectionView.modelData.rows
+                  for (var i = 0; i < rows.length; i++)
+                    if (String(rows[i].id) === String(value)) root.dispatch(rows[i])
+                }
+              }
+
               Repeater {
-                model: sectionView.modelData ? sectionView.modelData.rows.length : 0
+                model: sectionView.modelData && !sectionView.isChips
+                  ? sectionView.modelData.rows.length : 0
 
                 Column {
                   id: rowGroup
@@ -625,6 +672,10 @@ Panel {
 
     property var row: null
 
+    // A detail line is subordinate to the machine above it, so it is set a
+    // step smaller and packed tighter.
+    readonly property bool isDetail: !!row && row.kind === "detail"
+
     // A delegate outlives the row it happens to be showing now, so the registry
     // has to follow the id rather than the component. It is what scrolls the
     // cursor into view and opens a machine's copy menu from the keyboard.
@@ -670,7 +721,9 @@ Panel {
     foreground: root.foreground
     fill: root.hoverFill
     currentFill: root.selectedFill
-    implicitHeight: Math.max(rowContent.implicitHeight, Style.spacing.controlHeight) + Style.spacing.rowPaddingX
+    implicitHeight: surface.isDetail
+      ? rowContent.implicitHeight + Style.space(4)
+      : Math.max(rowContent.implicitHeight, Style.spacing.controlHeight) + Style.spacing.rowPaddingX
 
     MouseArea {
       id: rowMouse
@@ -724,7 +777,7 @@ Panel {
           text: surface.row ? surface.row.label : ""
           color: root.foreground
           font.family: root.fontFamily
-          font.pixelSize: Style.font.body
+          font.pixelSize: surface.isDetail ? Style.font.bodySmall : Style.font.body
           font.bold: surface.row ? surface.row.bold : false
           elide: Text.ElideRight
         }
