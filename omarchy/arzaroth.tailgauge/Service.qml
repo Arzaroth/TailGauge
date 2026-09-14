@@ -23,7 +23,7 @@ Item {
   property int _desired: -1
   readonly property bool active: _desired === -1 ? running : (_desired === 1)
   property bool refreshing: false
-  property string backendState: "Unknown"
+  property string daemonState: "Unknown"
   property string statusText: "Checking…"
   property string selfName: ""
   property string selfDnsName: ""
@@ -34,7 +34,7 @@ Item {
   property string authUrl: ""
   property var peers: []
   property var exitNodes: []
-  property var tailnetExitNodes: []
+  property var ownExitNodes: []
   property var mullvadExitNodes: []
   property var mullvadRegions: []
   property var accounts: []
@@ -93,7 +93,7 @@ Item {
       selfPeer: selfPeer,
       fileSharing: fileSharing,
       peers: peers,
-      tailnetExitNodes: tailnetExitNodes,
+      ownExitNodes: ownExitNodes,
       mullvadRegions: mullvadRegions,
       accounts: accounts,
       selectedAccountId: selectedAccountId,
@@ -339,7 +339,7 @@ Item {
 
   function copyPeerIp(peer) {
     if (!peer) return
-    var ips = Model.filterIPv4(peer.TailscaleIPs || [])
+    var ips = Model.filterIPv4(peer.IPv4 || [])
     copyToClipboard(ips.length > 0 ? ips[0] : "")
   }
 
@@ -427,7 +427,7 @@ Item {
     running = false
     needsLogin = false
     _desired = -1
-    backendState = "Unavailable"
+    daemonState = "Unavailable"
     statusText = message
     selfName = ""
     selfDnsName = ""
@@ -438,7 +438,7 @@ Item {
     authUrl = ""
     peers = []
     exitNodes = []
-    tailnetExitNodes = []
+    ownExitNodes = []
     mullvadExitNodes = []
     mullvadRegions = []
     accounts = []
@@ -462,7 +462,7 @@ Item {
       return
     }
 
-    backendState = parsed.backendState
+    daemonState = parsed.daemonState
     running = parsed.running
   // Reality caught up to the pending toggle, so stop overriding.
     if (_desired !== -1 && running === (_desired === 1)) _desired = -1
@@ -477,8 +477,8 @@ Item {
     selfPeer = _stable(selfPeer, parsed.selfPeer)
     fileSharing = parsed.fileSharing
     peers = _stable(peers, parsed.running ? parsed.peers : [])
-    tailnetExitNodes = _stable(tailnetExitNodes, parsed.running ? parsed.exitNodes : [])
-    exitNodes = parsed.running ? tailnetExitNodes.concat(mullvadRegions) : []
+    ownExitNodes = _stable(ownExitNodes, parsed.running ? parsed.exitNodes : [])
+    exitNodes = parsed.running ? ownExitNodes.concat(mullvadRegions) : []
 
     if (needsLogin) statusText = "Needs login"
     else if (running) {
@@ -487,10 +487,10 @@ Item {
       _loginUrlOpened = false
       _preLoginAuthUrl = ""
       loginTimeoutTimer.stop()
-    } else if (backendState === "Stopped") {
+    } else if (daemonState === "Stopped") {
       statusText = "Disconnected"
     } else {
-      statusText = backendState
+      statusText = daemonState
     }
     lastError = ""
   }
@@ -506,7 +506,7 @@ Item {
   function parseMullvadExitNodes(raw) {
     mullvadExitNodes = Model.parseExitNodeList(raw)
     mullvadRegions = _stable(mullvadRegions, Model.mullvadRegionOptions(mullvadExitNodes))
-    exitNodes = running ? tailnetExitNodes.concat(mullvadRegions) : []
+    exitNodes = running ? ownExitNodes.concat(mullvadRegions) : []
   }
 
   function toggleTailscale() {

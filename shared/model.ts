@@ -23,8 +23,8 @@ export interface Peer {
   TaildropTarget?: number
   DNSName: string
   DisplayName: string
-  TailscaleIPs: string[]
-  TailscaleIPv6: string[]
+  IPv4: string[]
+  IPv6: string[]
   Online: boolean
   OS: string
   Tags: string[]
@@ -63,7 +63,7 @@ export interface StatusUnavailable {
 export interface StatusOk {
   ok: true
   unavailable: false
-  backendState: string
+  daemonState: string
   running: boolean
   needsLogin: boolean
   authUrl: string
@@ -239,7 +239,7 @@ export interface PanelState {
   selfPeer?: Peer | null
   fileSharing?: boolean
   peers?: Peer[]
-  tailnetExitNodes?: Peer[]
+  ownExitNodes?: Peer[]
   mullvadRegions?: Peer[]
   accounts?: Account[]
   selectedAccountId?: string
@@ -553,8 +553,8 @@ function peerFromStatus(id: string, peer: Raw, users: Raw): Peer {
     TaildropTarget: typeof peer.TaildropTarget === "number" ? peer.TaildropTarget : 0,
     DNSName: cleanDnsName(peer.DNSName),
     DisplayName: displayHostName(peer.HostName, peer.DNSName),
-    TailscaleIPs: filterIPv4(peer.TailscaleIPs || []),
-    TailscaleIPv6: filterIPv6(peer.TailscaleIPs || []),
+    IPv4: filterIPv4(peer.TailscaleIPs || []),
+    IPv6: filterIPv6(peer.TailscaleIPs || []),
     Online: peer.Online === true,
     OS: String(peer.OS || ""),
     Tags: peer.Tags || [],
@@ -607,8 +607,8 @@ function parseExitNodeList(raw: Raw): Peer[] {
       HostName: host,
       DNSName: host,
       DisplayName: (city && city !== "Any" ? city + ", " : "") + country,
-      TailscaleIPs: ip ? [ip] : [],
-      TailscaleIPv6: [],
+      IPv4: ip ? [ip] : [],
+      IPv6: [],
       Online: true,
       OS: "mullvad",
       Tags: [],
@@ -714,8 +714,8 @@ function filterMachines(peers: Raw, query: Raw): Peer[] {
       String(peer.DNSName || ""),
       String(peer.OS || ""),
       String(peer.UserName || ""),
-      (peer.TailscaleIPs || []).join(" "),
-      (peer.TailscaleIPv6 || []).join(" ")
+      (peer.IPv4 || []).join(" "),
+      (peer.IPv6 || []).join(" ")
     ].join(" ").toLowerCase()
     if (haystack.indexOf(needle) !== -1) result.push(peer)
   }
@@ -780,15 +780,15 @@ function parseStatus(raw: Raw): StatusResult {
 
   try {
     var data = JSON.parse(text)
-    var backendState = String(data.BackendState || "Unknown")
+    var daemonState = String(data.BackendState || "Unknown")
     var self = data.Self || {}
     // Normalized the same way as every peer, so the local machine can carry the
     // same copy options without a second shape to keep in step.
     var users = usersById(data.User)
     var selfPeer = peerFromStatus("self", self, users)
-    if (selfPeer.TailscaleIPs.length === 0 && selfPeer.TailscaleIPv6.length === 0) {
-      selfPeer.TailscaleIPs = filterIPv4(data.TailscaleIPs || [])
-      selfPeer.TailscaleIPv6 = filterIPv6(data.TailscaleIPs || [])
+    if (selfPeer.IPv4.length === 0 && selfPeer.IPv6.length === 0) {
+      selfPeer.IPv4 = filterIPv4(data.TailscaleIPs || [])
+      selfPeer.IPv6 = filterIPv6(data.TailscaleIPs || [])
     }
     var peers: Peer[] = []
     var exitNodes: Peer[] = []
@@ -816,13 +816,13 @@ function parseStatus(raw: Raw): StatusResult {
     return {
       ok: true,
       unavailable: false,
-      backendState: backendState,
-      running: backendState === "Running",
-      needsLogin: backendState === "NeedsLogin",
+      daemonState: daemonState,
+      running: daemonState === "Running",
+      needsLogin: daemonState === "NeedsLogin",
       authUrl: String(data.AuthURL || ""),
       selfName: selfPeer.DisplayName,
       selfDnsName: selfPeer.DNSName,
-      selfIp: selfPeer.TailscaleIPs.length > 0 ? selfPeer.TailscaleIPs[0] : "",
+      selfIp: selfPeer.IPv4.length > 0 ? selfPeer.IPv4[0] : "",
       selfUserId: String(self.UserID || ""),
       selfPeer: selfPeer,
       fileSharing: hasFileSharing(self),
@@ -870,14 +870,14 @@ function peerAddress(peer: Raw): string {
   if (!peer) return ""
   if (peer.DNSName) return cleanDnsName(peer.DNSName)
   if (peer.HostName) return String(peer.HostName)
-  var ips = filterIPv4(peer.TailscaleIPs || [])
+  var ips = filterIPv4(peer.IPv4 || [])
   return ips.length > 0 ? ips[0] : ""
 }
 
 function exitNodeTarget(peer: Raw): string {
   if (!peer) return ""
   if (peer.Mullvad === true) {
-    var mullvadIps = filterIPv4(peer.TailscaleIPs || [])
+    var mullvadIps = filterIPv4(peer.IPv4 || [])
     if (mullvadIps.length > 0) return mullvadIps[0]
   }
   return peerAddress(peer)
@@ -953,8 +953,8 @@ function peerCopyOptions(peer: Raw): CopyOption[] {
   if (!peer) return []
   var name = String(peer.DisplayName || peer.HostName || "")
   var dns = String(peer.DNSName || "")
-  var ipv6 = peer.TailscaleIPv6 && peer.TailscaleIPv6.length > 0 ? String(peer.TailscaleIPv6[0]) : ""
-  var ip = peer.TailscaleIPs && peer.TailscaleIPs.length > 0 ? String(peer.TailscaleIPs[0]) : ""
+  var ipv6 = peer.IPv6 && peer.IPv6.length > 0 ? String(peer.IPv6[0]) : ""
+  var ip = peer.IPv4 && peer.IPv4.length > 0 ? String(peer.IPv4[0]) : ""
   var options: CopyOption[] = []
   if (name !== "") options.push({ kind: "name", label: name })
   if (dns !== "") options.push({ kind: "dns", label: dns })
@@ -969,7 +969,7 @@ function peerCopyOptions(peer: Raw): CopyOption[] {
 function peerSubtitle(peer: Raw): string {
   if (!peer) return ""
   var parts: string[] = []
-  if (peer.TailscaleIPs && peer.TailscaleIPs.length > 0) parts.push(String(peer.TailscaleIPs[0]))
+  if (peer.IPv4 && peer.IPv4.length > 0) parts.push(String(peer.IPv4[0]))
   if (peer.UserName) parts.push(String(peer.UserName))
   else if (peer.DNSName) parts.push(String(peer.DNSName))
   return parts.join(" · ")
@@ -1191,7 +1191,7 @@ function connectionsSection(state: PanelState, t: Translate): PanelSection {
 
 function exitNodeRows(state: PanelState, t: Translate, recentRegions: string[], mullvadQuery: string, pickerOpen: boolean): PanelRow[] {
   var rows: PanelRow[] = []
-  var tailnet = state.tailnetExitNodes || []
+  var tailnet = state.ownExitNodes || []
   var regions = providerSupports(state, "mullvad") ? (state.mullvadRegions || []) : []
   var i
 

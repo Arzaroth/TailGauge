@@ -47,7 +47,7 @@ function state(overrides: Partial<ModelTypes.PanelState> = {}): ModelTypes.Panel
         selfPeer: status.selfPeer,
         fileSharing: status.fileSharing,
         peers: status.peers,
-        tailnetExitNodes: status.exitNodes,
+        ownExitNodes: status.exitNodes,
         mullvadRegions,
         accounts: accounts.accounts,
         selectedAccountId: accounts.selectedAccountId,
@@ -72,8 +72,8 @@ const manyPeers: ModelTypes.Peer[] = Array.from({length: 12}, (_, i) => ({
     DNSName: `box-${i}.example.ts.net`,
     UserID: status.selfUserId,
     TaildropTarget: 1,
-    TailscaleIPs: [`100.64.1.${i}`],
-    TailscaleIPv6: [],
+    IPv4: [`100.64.1.${i}`],
+    IPv6: [],
     Online: true,
     OS: i % 2 === 0 ? 'linux' : 'windows',
     Tags: [],
@@ -94,7 +94,7 @@ test('parseStatus reads the running tailnet', () => {
     assert.equal(status.fileSharing, true);
     assert.equal(status.selfPeer.DNSName, 'workstation.example.ts.net');
     assert.equal(status.selfPeer.UserName, 'Alice');
-    assert.deepEqual(status.selfPeer.TailscaleIPv6, ['fd7a:115c:a1e0::1']);
+    assert.deepEqual(status.selfPeer.IPv6, ['fd7a:115c:a1e0::1']);
 });
 
 test('parseStatus keeps every non-Mullvad peer, online ones first', () => {
@@ -104,8 +104,8 @@ test('parseStatus keeps every non-Mullvad peer, online ones first', () => {
 
 test('parseStatus separates Tailscale IPv4 from IPv6', () => {
     const laptop = only(status.peers, p => p.HostName === 'laptop', 'laptop peer');
-    assert.deepEqual(laptop.TailscaleIPs, ['100.64.0.2']);
-    assert.deepEqual(laptop.TailscaleIPv6, ['fd7a:115c:a1e0::2']);
+    assert.deepEqual(laptop.IPv4, ['100.64.0.2']);
+    assert.deepEqual(laptop.IPv6, ['fd7a:115c:a1e0::2']);
 });
 
 test('parseStatus collects exit node options', () => {
@@ -152,10 +152,10 @@ test('taildrop targets follow the daemon grading', () => {
 });
 
 test('the machine subtitle spends the second slot on the owner', () => {
-    assert.equal(M.peerSubtitle({TailscaleIPs: ['100.64.0.9'], DNSName: 'box.example.ts.net', UserName: 'bob@example.com'}),
+    assert.equal(M.peerSubtitle({IPv4: ['100.64.0.9'], DNSName: 'box.example.ts.net', UserName: 'bob@example.com'}),
         '100.64.0.9 · bob@example.com');
     // No User map, an older daemon: the DNS name still holds the second slot.
-    assert.equal(M.peerSubtitle({TailscaleIPs: ['100.64.0.9'], DNSName: 'box.example.ts.net'}),
+    assert.equal(M.peerSubtitle({IPv4: ['100.64.0.9'], DNSName: 'box.example.ts.net'}),
         '100.64.0.9 · box.example.ts.net');
 });
 
@@ -239,7 +239,7 @@ test('the active exit node is current and carries the disconnect hint', () => {
     const rows = section(M.resolvePanel(state(), {}), 'exitNodes').rows;
     assert.equal(rows[0].current, true);
     assert.equal(rows[0].hint, 'Disconnect');
-    const idle = section(M.resolvePanel(state({tailnetExitNodes: [{...status.exitNodes[0], ExitNode: false}]}), {}), 'exitNodes').rows;
+    const idle = section(M.resolvePanel(state({ownExitNodes: [{...status.exitNodes[0], ExitNode: false}]}), {}), 'exitNodes').rows;
     assert.equal(idle[0].hint, 'Connect');
 });
 
@@ -423,7 +423,7 @@ test('an expanded picker puts its regions in the traversal, a closed one does no
 });
 
 test('hidden sections contribute no cursor stops', () => {
-    const panel = M.resolvePanel(state({installed: false, peers: [], accounts: [], tailnetExitNodes: [], mullvadRegions: []}), {});
+    const panel = M.resolvePanel(state({installed: false, peers: [], accounts: [], ownExitNodes: [], mullvadRegions: []}), {});
     assert.deepEqual(panel.navigation.map(n => n.rowId), ['header']);
 });
 

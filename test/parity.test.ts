@@ -113,7 +113,7 @@ test('neither QML service reports unchanged state as a change', () => {
     for (const [name, file] of Object.entries(services)) {
         const src = read(file);
         assert.match(src, /function _stable\(/, `${name} never compares before it assigns`);
-        for (const field of ['selfPeer', 'peers', 'tailnetExitNodes', 'mullvadRegions', 'accounts'])
+        for (const field of ['selfPeer', 'peers', 'ownExitNodes', 'mullvadRegions', 'accounts'])
             assert.match(src, new RegExp(`\\b${field} = _stable\\(`),
                 `${name} reassigns ${field} unconditionally, rebuilding the panel on every poll`);
     }
