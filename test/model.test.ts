@@ -1126,3 +1126,40 @@ test('every provider brings its own mark', () => {
         assert.ok(p.icon.length > 0, `${p.id} has no icon name`);
     }
 });
+
+test('a public key is a copy option, from either provider', () => {
+    const ts = M.peerFromStatus('x', {PublicKey: 'nodekey:abc', TailscaleIPs: ['100.64.0.9']}, {});
+    assert.equal(ts.PublicKey, 'nodekey:abc');
+    assert.equal(only(M.peerCopyOptions(ts), o => o.kind === 'key', 'key option').label, 'nodekey:abc');
+    // A peer that reports no key offers no such option.
+    assert.equal(M.peerCopyOptions(M.peerFromStatus('x', {}, {})).some(o => o.kind === 'key'), false);
+});
+
+test('an idle peer still opens onto something', () => {
+    // Tailscale reports no session details for a peer with no session, which
+    // left araki's row showing one line.
+    const idle = M.peerFromStatus('x', {
+        Relay: 'lhr', Created: '2026-09-13T06:00:00Z',
+        LastHandshake: '0001-01-01T00:00:00Z', LastSeen: '0001-01-01T00:00:00Z',
+    }, {});
+    const by = Object.fromEntries(
+        M.peerDetailRows(idle, (x: string) => x, NOW).map(r => [r.id, r.sublabel]));
+    assert.equal(by['detail:connection'], 'Relayed via lhr');
+    assert.equal(by['detail:added'], '1 day ago');
+
+    // A peer with real detail does not need the filler.
+    const busy = M.peerFromStatus('x', {
+        CurAddr: '1.2.3.4:41641', RxBytes: 10, TxBytes: 20,
+        LastHandshake: '2026-09-14T05:59:00Z', Created: '2026-09-13T06:00:00Z',
+        PrimaryRoutes: ['10.0.0.0/8'],
+    }, {});
+    assert.equal(Object.keys(Object.fromEntries(
+        M.peerDetailRows(busy, (x: string) => x, NOW).map(r => [r.id, r.sublabel])))
+        .includes('detail:added'), false);
+});
+
+test('the hero says which provider to draw, not just what to print', () => {
+    assert.equal(M.resolvePanel(state({providers: detected('tailscale')}), {}).header.providerId, 'tailscale');
+    assert.equal(M.resolvePanel(state({providers: detected('netbird')}), {}).header.providerId, 'netbird');
+    assert.equal(M.resolvePanel(state({providers: detected(), installed: false}), {}).header.providerId, '');
+});
