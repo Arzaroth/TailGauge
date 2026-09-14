@@ -8,11 +8,14 @@
 mod copy;
 mod ctl;
 mod file_select;
+mod frontend;
 mod launch;
 mod notify;
 mod receive;
 mod send;
+mod state;
 mod tailscale;
+mod update;
 mod watch;
 
 use std::ffi::OsString;
@@ -59,6 +62,27 @@ enum Command {
         #[arg(long)]
         once: bool,
         directory: Option<PathBuf>,
+    },
+
+    /// Report or install a newer TailGauge.
+    ///
+    /// Exits 0 when up to date or updated, 1 on error, 2 when an update is
+    /// available and only being reported.
+    Update {
+        /// Report whether a newer release exists. The default.
+        #[arg(long)]
+        check: bool,
+        /// Machine-readable output, which is what the panels read.
+        #[arg(long)]
+        json: bool,
+        /// Download and install the newer release.
+        #[arg(long)]
+        apply: bool,
+        /// Ignore the cached answer.
+        #[arg(long)]
+        force: bool,
+        #[arg(long)]
+        quiet: bool,
     },
 
     /// Copy text to the clipboard.
@@ -159,6 +183,19 @@ fn main() -> ExitCode {
             report(receive::run(&dir, once))
         }
 
+        Command::Update {
+            check: _,
+            json,
+            apply,
+            force,
+            quiet,
+        } => {
+            if apply {
+                return apply_update(quiet);
+            }
+            report_update(json, force, quiet)
+        }
+
         Command::Copy { text } => report(copy::run(text.as_deref().unwrap_or(""))),
 
         Command::Notify {
@@ -195,6 +232,69 @@ fn main() -> ExitCode {
                 ExitCode::from(EXIT_NO_CHOOSER)
             }
         },
+    }
+}
+
+/// Exit 2 says an update is there and was only reported, which is what makes
+/// `tailgauge update` usable from a script.
+const EXIT_UPDATE_AVAILABLE: u8 = 2;
+
+fn report_update(json: bool, force: bool, quiet: bool) -> ExitCode {
+    let report = update::report(force);
+
+    if json {
+        println!("{}", serde_json::to_string(&report).unwrap_or_default());
+    } else if !report.error.is_empty() {
+        eprintln!("{}", report.error);
+    } else if report.available {
+        if !quiet {
+            println!("TailGauge {} is available.", report.latest);
+            for target in report.targets.iter().filter(|t| t.outdated) {
+                println!("  {} {}", target.kind, target.current);
+            }
+        }
+    } else if !quiet {
+        println!("TailGauge is up to date ({}).", report.latest);
+    }
+
+    if report.available {
+        return ExitCode::from(EXIT_UPDATE_AVAILABLE);
+    }
+    if report.error.is_empty() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+fn apply_update(quiet: bool) -> ExitCode {
+    match update::apply() {
+        Ok(applied) if applied.version == update::current_version() => {
+            if !quiet {
+                println!("TailGauge is already up to date ({}).", applied.version);
+            }
+            ExitCode::SUCCESS
+        }
+        Ok(applied) => {
+            update::announce(&applied);
+            if !quiet {
+                println!("Updated to {}.", applied.version);
+                for f in &applied.frontends {
+                    match &f.error {
+                        Some(why) => println!("  {}: {why}", f.label),
+                        None => println!("  {} - {}", f.label, f.restart_hint),
+                    }
+                }
+                if applied.frontends.iter().any(|f| f.needs_session_restart) {
+                    println!("One of these needs the session restarted, not the shell.");
+                }
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("tailgauge: {e:#}");
+            ExitCode::FAILURE
+        }
     }
 }
 
