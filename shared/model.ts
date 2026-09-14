@@ -343,9 +343,7 @@ export interface ResolveOptions {
   t?: Translate
   phraseIndex?: number
   recentRegions?: string[]
-  mullvadQuery?: string
   mullvadPickerOpen?: boolean
-  machineQuery?: string
   expandedPeerId?: string
   nowMs?: number
 }
@@ -867,26 +865,6 @@ function machineSearchKey(peer: Raw): string {
     (peer.IPv4 || []).join(" "),
     (peer.IPv6 || []).join(" ")
   ].join(" ").toLowerCase()
-}
-
-function filterMullvadRegions(regions: Raw, query: Raw): Peer[] {
-  var needle = String(query || "").trim().toLowerCase()
-  var values: Raw[] = Array.isArray(regions) ? regions : []
-  var result: Peer[] = []
-  for (var i = 0; i < values.length; i++)
-    if (needle === "" || mullvadRegionSearchKey(values[i]).indexOf(needle) !== -1) result.push(values[i])
-  return result
-}
-
-function filterMachines(peers: Raw, query: Raw): Peer[] {
-  var needle = String(query || "").trim().toLowerCase()
-  var values: Raw[] = Array.isArray(peers) ? peers : []
-  if (needle === "") return values.slice(0)
-
-  var result: Peer[] = []
-  for (var i = 0; i < values.length; i++)
-    if (machineSearchKey(values[i]).indexOf(needle) !== -1) result.push(values[i])
-  return result
 }
 
 function mullvadRegionNode(regions: Raw, region: Raw): Peer | null {
@@ -1814,7 +1792,7 @@ function connectionsSection(state: PanelState, t: Translate): PanelSection {
   }
 }
 
-function exitNodeRows(state: PanelState, t: Translate, recentRegions: string[], mullvadQuery: string, pickerOpen: boolean): PanelRow[] {
+function exitNodeRows(state: PanelState, t: Translate, recentRegions: string[], pickerOpen: boolean): PanelRow[] {
   var rows: PanelRow[] = []
   var tailnet = state.ownExitNodes || []
   var regions = providerSupports(state, "mullvad") ? (state.mullvadRegions || []) : []
@@ -1826,19 +1804,15 @@ function exitNodeRows(state: PanelState, t: Translate, recentRegions: string[], 
   for (i = 0; i < recent.length; i++) rows.push(exitNodeRow(state, recent[i], t))
 
   if (regions.length > 0) {
-    var matches = filterMullvadRegions(regions, mullvadQuery)
-    var children: PanelRow[] = []
-    if (matches.length === 0) {
-      children.push(panelRow({
-        id: "mullvad:empty",
-        kind: "empty",
-        label: t("No Mullvad regions found."),
-        navigable: false,
-        searchScope: "mullvad"
-      }))
-    }
-    for (i = 0; i < matches.length; i++) {
-      var region = matches[i]
+    var children: PanelRow[] = [panelRow({
+      id: "mullvad:empty",
+      kind: "empty",
+      label: t("No Mullvad regions found."),
+      navigable: false,
+      searchScope: "mullvad"
+    })]
+    for (i = 0; i < regions.length; i++) {
+      var region = regions[i]
       children.push(panelRow({
         id: "region:" + String(region.id || ""),
         kind: "mullvadRegion",
@@ -1889,10 +1863,10 @@ function exitNodeRow(state: PanelState, node: Peer, t: Translate): PanelRow {
   })
 }
 
-function exitNodesSection(state: PanelState, t: Translate, recentRegions: string[], mullvadQuery: string, pickerOpen: boolean): PanelSection {
+function exitNodesSection(state: PanelState, t: Translate, recentRegions: string[], pickerOpen: boolean): PanelSection {
   var supported = providerSupports(state, "exitNodes")
   var rows = supported && state.active
-    ? exitNodeRows(state, t, recentRegions, mullvadQuery, pickerOpen)
+    ? exitNodeRows(state, t, recentRegions, pickerOpen)
     : []
   return {
     id: "exitNodes",
@@ -1937,16 +1911,14 @@ function networksSection(state: PanelState, t: Translate): PanelSection {
   }
 }
 
-function machinesSection(state: PanelState, t: Translate, machineQuery: string,
+function machinesSection(state: PanelState, t: Translate,
                          expandedPeerId: string, nowMs?: number): PanelSection {
-  var query = String(machineQuery || "")
-  var all = state.active ? (state.peers || []) : []
+  var peers = state.active ? (state.peers || []) : []
   var rows: PanelRow[] = []
 
   // A field over three machines is clutter; over eighty it is the only way to
-  // find one. Once it is on screen it stays, so it cannot disappear from under
-  // whatever is being typed into it.
-  if (all.length > MACHINE_SEARCH_MIN || query !== "") {
+  // find one.
+  if (peers.length > MACHINE_SEARCH_MIN) {
     rows.push(panelRow({
       id: "machines:search",
       kind: "machineSearch",
@@ -1955,8 +1927,7 @@ function machinesSection(state: PanelState, t: Translate, machineQuery: string,
     }))
   }
 
-  var peers = filterMachines(all, query)
-  if (all.length > 0 && peers.length === 0) {
+  if (peers.length > 0) {
     rows.push(panelRow({
       id: "machines:empty",
       kind: "empty",
@@ -2056,10 +2027,9 @@ function resolvePanel(state: PanelState | null | undefined, options?: ResolveOpt
     providersSection(source, t),
     selfSection(source, t),
     connectionsSection(source, t),
-    exitNodesSection(source, t, opts.recentRegions || [], opts.mullvadQuery || "", opts.mullvadPickerOpen === true),
+    exitNodesSection(source, t, opts.recentRegions || [], opts.mullvadPickerOpen === true),
     networksSection(source, t),
-    machinesSection(source, t, opts.machineQuery || "",
-      String(opts.expandedPeerId || ""), opts.nowMs)
+    machinesSection(source, t, String(opts.expandedPeerId || ""), opts.nowMs)
   ]
 
   return {
@@ -2089,6 +2059,23 @@ function panelRowAt(panel: Panel | null | undefined, navIndex: number): PanelRow
     }
   }
   return null
+}
+
+// Whether a row is drawn at all. A search field is the model's decision, so a
+// frontend holding its query needs to hear when it has gone: a query left
+// behind would filter a list with nothing on screen left to clear it.
+function panelHasRow(panel: Panel | null | undefined, rowId: Raw): boolean {
+  var sections = (panel && panel.sections) || []
+  for (var s = 0; s < sections.length; s++) {
+    var rows = sections[s].rows
+    for (var r = 0; r < rows.length; r++) {
+      if (rows[r].id === String(rowId)) return true
+      var children = rows[r].children
+      for (var c = 0; c < children.length; c++)
+        if (children[c].id === String(rowId)) return true
+    }
+  }
+  return false
 }
 
 // What a row's single-letter keys are allowed to do follows the actions the
@@ -2146,7 +2133,6 @@ export {
   mullvadRegionTitle,
   mullvadRegionSubtitle,
   mullvadRegionSearchKey,
-  filterMullvadRegions,
   mullvadRegionNode,
   recentMullvadNodes,
   pushRecentMullvad,
@@ -2173,9 +2159,9 @@ export {
   connectionSummary,
   peerSubtitle,
   machineSearchKey,
-  filterMachines,
   resolvePanel,
   panelRowAt,
+  panelHasRow,
   panelRowHasAction,
   panelNavIndexOf
 }

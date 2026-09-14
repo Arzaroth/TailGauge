@@ -17,7 +17,6 @@ import {ProviderService} from './provider.js';
 
 const RECENT_MULLVAD_LIMIT = 5;
 const PHRASE_INTERVAL_MS = 2800;
-const MULLVAD_REGION_CAP = 200;
 const SCROLL_WORK_AREA_SHARE = 0.6;
 const SCROLL_MIN_HEIGHT = 200;
 
@@ -164,6 +163,8 @@ class TailGaugeIndicator extends PanelMenu.Button {
     declare _phraseTimeoutId: number;
     declare _mullvadQuery: string;
     declare _machineQuery: string;
+    declare _machineEntry: St.Entry | null;
+    declare _mullvadEntry: St.Entry | null;
     declare _sections: Map<string, {header: PopupMenu.PopupSeparatorMenuItem; section: RowSection}>;
     declare _panelIcon: InstanceType<typeof TailGaugeIcon>;
     declare _panelLabel: St.Label;
@@ -201,6 +202,8 @@ class TailGaugeIndicator extends PanelMenu.Button {
         this._phraseTimeoutId = 0;
         this._mullvadQuery = '';
         this._machineQuery = '';
+        this._machineEntry = null;
+        this._mullvadEntry = null;
         this._sections = new Map<string, {header: PopupMenu.PopupSeparatorMenuItem; section: RowSection}>();
 
         const panelBox = box(false, {style_class: 'panel-status-menu-box tailgauge-panel'});
@@ -228,11 +231,8 @@ class TailGaugeIndicator extends PanelMenu.Button {
                 this._startPhrases();
             } else {
                 this._stopPhrases();
-                if (this._mullvadQuery !== '' || this._machineQuery !== '') {
-                    this._mullvadQuery = '';
-                    this._machineQuery = '';
-                    this._signature = '';
-                }
+                this._machineEntry?.set_text('');
+                this._mullvadEntry?.set_text('');
             }
         });
 
@@ -259,9 +259,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         return Model.resolvePanel(this._service.snapshot(), {
             t: _,
             recentRegions: this._settings.get_strv('recent-mullvad-regions'),
-            mullvadQuery: this._mullvadQuery,
             mullvadPickerOpen: true,
-            machineQuery: this._machineQuery,
             phraseIndex: this._phraseIndex,
         });
     }
@@ -434,7 +432,55 @@ class TailGaugeIndicator extends PanelMenu.Button {
         }
     }
 
+    // The model decides what a row is findable by and hands it over as a
+    // pre-lowercased key; the only thing left here is the substring test. The
+    // rows are built once and hidden, never destroyed, so the entry being typed
+    // into survives the query that changes what is on screen.
+    _searchQuery(scope: string): string {
+        if (scope === 'machines')
+            return this._machineQuery.trim().toLowerCase();
+        if (scope === 'mullvad')
+            return this._mullvadQuery.trim().toLowerCase();
+        return '';
+    }
+
+    _searchMatches(row: Model.PanelRow): boolean {
+        const query = this._searchQuery(row.searchScope);
+        return query === '' || row.searchKey.includes(query);
+    }
+
+    // A scope whose query matches nothing draws its keyless row instead, which
+    // is the message the model wrote for exactly that case.
+    _applySearch(): void {
+        const filtered: {item: RowItem; row: Model.PanelRow}[] = [];
+        const matched = new Set<string>();
+
+        const collect = (items: RowItem[]): void => {
+            for (const item of items) {
+                const row = item._row;
+                if (row && row.searchScope !== '') {
+                    filtered.push({item, row});
+                    if (row.searchKey !== '' && this._searchMatches(row))
+                        matched.add(row.searchScope);
+                }
+                if (item.menu)
+                    collect(menuItems(item.menu));
+            }
+        };
+        for (const {section} of this._sections.values())
+            collect(menuItems(section));
+
+        for (const {item, row} of filtered) {
+            item.visible = row.searchKey !== ''
+                ? this._searchMatches(row)
+                : this._searchQuery(row.searchScope) !== '' && !matched.has(row.searchScope);
+        }
+    }
+
     _rebuildSections(panel: Model.Panel): void {
+        // Both fields are about to be destroyed with the sections holding them.
+        this._machineEntry = null;
+        this._mullvadEntry = null;
         for (const section of panel.sections) {
             const slot = this._sections.get(section.id);
             if (!slot)
@@ -452,11 +498,23 @@ class TailGaugeIndicator extends PanelMenu.Button {
             for (const row of section.rows)
                 slot.section.addMenuItem(this._renderRow(row));
         }
+        // A query left behind by the field that set it would filter a list with
+        // nothing on screen left to clear it.
+        if (!this._machineEntry)
+            this._machineQuery = '';
+        if (!this._mullvadEntry)
+            this._mullvadQuery = '';
+        this._applySearch();
     }
 
     _renderRow(row: Model.PanelRow): RowItem {
-        if (row.kind === 'empty')
-            return new PopupMenu.PopupMenuItem(row.label, {reactive: false, can_focus: false});
+        if (row.kind === 'empty') {
+            const empty: RowItem = new PopupMenu.PopupMenuItem(
+                row.label, {reactive: false, can_focus: false});
+            empty._rowId = row.id;
+            empty._row = row;
+            return empty;
+        }
 
         if (row.kind === 'machineSearch')
             return this._renderMachineSearch(row);
@@ -471,12 +529,10 @@ class TailGaugeIndicator extends PanelMenu.Button {
         return item;
     }
 
-    // Typing changes which machine rows exist, so letting _sync rebuild the
-    // section would destroy this entry on every keystroke. It refills its own
-    // section instead, the way the picker does, and adopts the signature that
-    // goes with it so the next sync agrees with what is on screen.
     _renderMachineSearch(row: Model.PanelRow): RowItem {
-        const item = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
+        const item: RowItem = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
+        item._rowId = row.id;
+        item._row = row;
         const entry = new St.Entry({
             style_class: 'tailgauge-search',
             hint_text: row.searchPlaceholder,
@@ -486,31 +542,11 @@ class TailGaugeIndicator extends PanelMenu.Button {
         entry.set_text(this._machineQuery);
         entry.clutter_text.connect('text-changed', () => {
             this._machineQuery = entry.get_text();
-            this._refillMachines(entry);
+            this._applySearch();
         });
         item.add_child(entry);
+        this._machineEntry = entry;
         return item;
-    }
-
-    _refillMachines(entry: St.Entry): void {
-        const slot = this._sections.get('machines');
-        if (!slot)
-            return;
-        const panel = this._panel();
-        const machines = panel.sections.find(section => section.id === 'machines');
-        if (!machines)
-            return;
-
-        // Everything after the entry is a resolved machine row.
-        for (const item of menuItems(slot.section).slice(1))
-            item.destroy();
-        for (const row of machines.rows) {
-            if (row.kind !== 'machineSearch')
-                slot.section.addMenuItem(this._renderRow(row));
-        }
-
-        this._signature = this._signatureOf(panel);
-        entry.grab_key_focus();
     }
 
     _renderSubmenuRow(row: Model.PanelRow): RowItem {
@@ -531,9 +567,10 @@ class TailGaugeIndicator extends PanelMenu.Button {
             entry.set_text(this._mullvadQuery);
             entry.clutter_text.connect('text-changed', () => {
                 this._mullvadQuery = entry.get_text();
-                this._refillPicker(item, entry);
+                this._applySearch();
             });
             searchItem.add_child(entry);
+            this._mullvadEntry = entry;
             item.menu.addMenuItem(searchItem);
             item.menu.connect('open-state-changed', (_menu, open) => {
                 if (!open)
@@ -593,26 +630,6 @@ class TailGaugeIndicator extends PanelMenu.Button {
             y_align: Clutter.ActorAlign.CENTER,
         });
         item.add_child(item._sublabel);
-    }
-
-    _refillPicker(item: PopupMenu.PopupSubMenuMenuItem, entry: St.Entry): void {
-        const panel = this._panel();
-        let picker: Model.PanelRow | null = null;
-        for (const section of panel.sections) {
-            for (const candidate of section.rows) {
-                if (candidate.kind === 'mullvadPicker')
-                    picker = candidate;
-            }
-        }
-        if (!picker)
-            return;
-        // Everything after the search entry is a resolved region row.
-        const items = menuItems(item.menu);
-        for (const child of items.slice(1))
-            child.destroy();
-        for (const child of picker.children.slice(0, MULLVAD_REGION_CAP))
-            item.menu.addMenuItem(this._renderRow(child));
-        entry.grab_key_focus();
     }
 
     // ---- actions ---------------------------------------------------------

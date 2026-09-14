@@ -63,6 +63,19 @@ function state(overrides: Partial<ModelTypes.PanelState> = {}): ModelTypes.Panel
 const section = (panel: ModelTypes.Panel, id: string): ModelTypes.PanelSection =>
     only(panel.sections, s => s.id === id, `section ${id}`);
 
+const peerRows = (panel: ModelTypes.Panel): ModelTypes.PanelRow[] =>
+    section(panel, 'machines').rows.filter(r => r.kind === 'peer');
+
+// What each frontend now does with a query. The searches are still tested
+// through their behaviour rather than through their keys, but the substring
+// test itself lives on the other side of the seam.
+const matching = (rows: ModelTypes.PanelRow[], scope: string, query: string): ModelTypes.PanelRow[] =>
+    rows.filter(r => r.searchScope === scope && r.searchKey !== ''
+        && r.searchKey.includes(query.trim().toLowerCase()));
+
+const pickerOf = (rows: ModelTypes.PanelRow[]): ModelTypes.PanelRow =>
+    only(rows, r => r.kind === 'mullvadPicker', 'Mullvad picker row');
+
 // Past the threshold the machines section grows a search field, which the
 // fixture's four peers are deliberately too few to trigger.
 const manyPeers: ModelTypes.Peer[] = Array.from({length: 12}, (_, i) => ({
@@ -244,16 +257,16 @@ test('the active exit node is current and carries the disconnect hint', () => {
     assert.equal(idle[0].hint, 'Connect');
 });
 
-test('the picker filters its regions and reports an empty result', () => {
-    const open = (q: string) => only(
-        section(M.resolvePanel(state(), {mullvadQuery: q, mullvadPickerOpen: true}), 'exitNodes').rows,
-        r => r.kind === 'mullvadPicker', 'Mullvad picker row');
-    assert.deepEqual(open('par').children.map(c => c.label), ['Paris']);
-    assert.deepEqual(open('france').children.map(c => c.label), ['Marseille', 'Paris']);
-    const none = open('zzz').children;
-    assert.equal(none.length, 1);
-    assert.equal(none[0].kind, 'empty');
-    assert.equal(none[0].navigable, false);
+test('the picker keys every region, and carries the message for an empty result', () => {
+    const picker = pickerOf(section(M.resolvePanel(state(), {mullvadPickerOpen: true}), 'exitNodes').rows);
+    const cities = (query: string) => matching(picker.children, 'mullvad', query).map(c => c.label);
+    assert.deepEqual(cities('par'), ['Paris']);
+    assert.deepEqual(cities('france'), ['Marseille', 'Paris']);
+    assert.deepEqual(cities('zzz'), []);
+
+    const none = only(picker.children, c => c.kind === 'empty', 'empty row');
+    assert.equal(none.label, 'No Mullvad regions found.');
+    assert.equal(none.navigable, false);
 });
 
 test('machine rows carry their subtitle, icon, copy options and actions', () => {
@@ -274,7 +287,7 @@ test('the send action appears only for a Taildrop target', () => {
 });
 
 test('offline machines are listed last, marked, and cannot be sent to', () => {
-    const rows = section(M.resolvePanel(state(), {}), 'machines').rows;
+    const rows = peerRows(M.resolvePanel(state(), {}));
     assert.deepEqual(rows.map(r => r.label), ['laptop', 'phone', 'router', 'offline-box']);
 
     const offline = rows[rows.length - 1];
@@ -290,27 +303,31 @@ test('the machines section states its own empty case', () => {
     assert.equal(empty.empty, 'No machines found on this tailnet.');
 });
 
-test('filterMachines matches every field a row shows, and the OS', () => {
-    const names = (query: string) => M.filterMachines(status.peers, query).map(p => p.HostName);
-    assert.equal(M.filterMachines(status.peers, '').length, status.peers.length);
+test('a machine key matches every field its row shows, and the OS', () => {
+    const rows = section(M.resolvePanel(state(), {}), 'machines').rows;
+    const names = (query: string) =>
+        matching(rows, 'machines', query).map(r => String((r.payload as ModelTypes.Peer).HostName));
+    assert.equal(names('').length, status.peers.length);
     assert.deepEqual(names('ANDROID'), ['phone']);
     assert.deepEqual(names('100.64.0.5'), ['offline-box']);
-    assert.deepEqual(names('example.ts.net'), status.peers.map(p => p.HostName));
-    assert.deepEqual(M.filterMachines(null, 'anything'), []);
+    assert.deepEqual(names('example.ts.net').sort(), status.peers.map(p => p.HostName).sort());
 });
 
 // Reported as "the search is case sensitive", which it never was: the panel's
 // key catcher was swallowing lowercase h, j, k, l and x before they reached the
 // field, so the same query typed in capitals arrived intact and the one typed
-// normally did not. The filter is pinned here so a future change cannot make
+// normally did not. The keys are lowercased here so a future change cannot make
 // the complaint true.
 test('both searches ignore case, in the query and in what they match', () => {
-    const names = (query: string) => M.filterMachines(status.peers, query).map(p => p.HostName);
+    const panel = M.resolvePanel(state(), {mullvadPickerOpen: true});
+    const names = (query: string) => matching(section(panel, 'machines').rows, 'machines', query)
+        .map(r => r.label);
     assert.deepEqual(names('android'), names('ANDROID'));
     assert.deepEqual(names('android'), names('AnDrOiD'));
     assert.ok(names('android').length > 0, 'the fixture no longer carries an Android peer');
 
-    const cities = (query: string) => M.filterMullvadRegions(mullvadRegions, query).map(r => r.City);
+    const children = pickerOf(section(panel, 'exitNodes').rows).children;
+    const cities = (query: string) => matching(children, 'mullvad', query).map(c => c.label);
     const anyCity = mullvadRegions[0].City!;
     assert.deepEqual(cities(anyCity.toUpperCase()), cities(anyCity.toLowerCase()));
     assert.ok(cities(anyCity.toUpperCase()).length > 0);
@@ -327,9 +344,7 @@ test('every filtered row carries a lowercased key and the scope that filters it'
         assert.ok(laptop.searchKey.includes(needle), `the key does not carry ${needle}`);
     assert.equal(laptop.searchKey, laptop.searchKey.toLowerCase());
 
-    const picker = only(
-        section(M.resolvePanel(state(), {mullvadPickerOpen: true}), 'exitNodes').rows,
-        r => r.kind === 'mullvadPicker', 'Mullvad picker row');
+    const picker = pickerOf(section(M.resolvePanel(state(), {mullvadPickerOpen: true}), 'exitNodes').rows);
     const paris = only(picker.children, c => c.label === 'Paris', 'Paris row');
     assert.equal(paris.searchScope, 'mullvad');
     assert.equal(paris.searchKey, 'paris france');
@@ -341,9 +356,7 @@ test('the search field and the unfiltered rows carry no scope', () => {
     const long = section(M.resolvePanel(state({peers: manyPeers}), {}), 'machines');
     assert.equal(only(long.rows, r => r.kind === 'machineSearch', 'search row').searchScope, '');
 
-    const picker = only(
-        section(M.resolvePanel(state(), {mullvadPickerOpen: true}), 'exitNodes').rows,
-        r => r.kind === 'mullvadPicker', 'Mullvad picker row');
+    const picker = pickerOf(section(M.resolvePanel(state(), {mullvadPickerOpen: true}), 'exitNodes').rows);
     assert.equal(picker.searchScope, '');
     assert.equal(picker.searchKey, '');
 });
@@ -352,16 +365,15 @@ test('the search field and the unfiltered rows carry no scope', () => {
 // matches nothing, which is how a frontend knows to draw it without deciding
 // for itself what an empty result reads like.
 test('each empty-result row is the keyless row of its scope', () => {
-    const machines = section(M.resolvePanel(state({peers: manyPeers}), {machineQuery: 'nowhere'}), 'machines');
+    const machines = section(M.resolvePanel(state({peers: manyPeers}), {}), 'machines');
     const none = only(machines.rows, r => r.kind === 'empty', 'machines empty row');
     assert.equal(none.searchScope, 'machines');
     assert.equal(none.searchKey, '');
 
-    const picker = only(
-        section(M.resolvePanel(state(), {mullvadQuery: 'zzz', mullvadPickerOpen: true}), 'exitNodes').rows,
-        r => r.kind === 'mullvadPicker', 'Mullvad picker row');
-    assert.equal(picker.children[0].searchScope, 'mullvad');
-    assert.equal(picker.children[0].searchKey, '');
+    const picker = pickerOf(section(M.resolvePanel(state(), {mullvadPickerOpen: true}), 'exitNodes').rows);
+    const message = only(picker.children, c => c.kind === 'empty', 'picker empty row');
+    assert.equal(message.searchScope, 'mullvad');
+    assert.equal(message.searchKey, '');
 });
 
 // The cursor walks the navigation list, not the rows, so a frontend filtering
@@ -395,36 +407,53 @@ test('the machines search appears only for a list long enough to need it', () =>
     assert.equal(long.rows[0].kind, 'machineSearch');
     assert.equal(long.rows[0].navigable, false);
     assert.equal(long.rows[0].searchPlaceholder, 'Search machines');
-
-    // Once it is on screen it stays, however few machines the query leaves.
-    const few = section(M.resolvePanel(state(), {machineQuery: 'laptop'}), 'machines');
-    assert.deepEqual(few.rows.map(r => r.kind), ['machineSearch', 'peer']);
 });
 
-test('the machines search filters the rows it leaves behind', () => {
-    const labels = (query: string) => section(M.resolvePanel(state({peers: manyPeers}), {machineQuery: query}), 'machines')
-        .rows.filter(r => r.kind === 'peer').map(r => r.label);
+test('the machines search leaves behind whatever its query matches', () => {
+    const rows = section(M.resolvePanel(state({peers: manyPeers}), {}), 'machines').rows;
+    const labels = (query: string) => matching(rows, 'machines', query).map(r => r.label);
     assert.deepEqual(labels('100.64.1.7'), ['box-7']);
     assert.deepEqual(labels('BOX-11'), ['box-11']);
     assert.deepEqual(labels('windows'), manyPeers.filter(p => p.OS === 'windows').map(p => p.DisplayName));
+    assert.deepEqual(labels('nowhere'), []);
 });
 
 test('the machines search matches the owner it shows', () => {
-    const labels = (query: string) => section(M.resolvePanel(state(), {machineQuery: query}), 'machines')
-        .rows.filter(r => r.kind === 'peer').map(r => r.label);
+    const rows = section(M.resolvePanel(state(), {}), 'machines').rows;
+    const labels = (query: string) => matching(rows, 'machines', query).map(r => r.label);
     assert.deepEqual(labels('bob'), ['phone']);
     assert.deepEqual(labels('alice'), ['laptop', 'router', 'offline-box']);
 });
 
-test('a search that matches nothing says so instead of looking broken', () => {
-    const rows = section(M.resolvePanel(state({peers: manyPeers}), {machineQuery: 'nowhere'}), 'machines').rows;
-    assert.deepEqual(rows.map(r => r.kind), ['machineSearch', 'empty']);
+// The message is resolved with the rest of the section rather than when the
+// query empties it, because by then no frontend can ask the model for it.
+test('the machines section carries the message for a search that matches nothing', () => {
+    const rows = section(M.resolvePanel(state({peers: manyPeers}), {}), 'machines').rows;
+    assert.deepEqual(rows.slice(0, 2).map(r => r.kind), ['machineSearch', 'empty']);
     assert.equal(rows[1].label, 'No machines match.');
     assert.equal(rows[1].navigable, false);
+
+    const none = section(M.resolvePanel(state({peers: []}), {}), 'machines').rows;
+    assert.equal(none.some(r => r.kind === 'empty'), false);
+});
+
+// A frontend holds the query, so it has to be told when the field that set it
+// is no longer drawn - otherwise the list stays filtered by a query nothing on
+// screen can clear.
+test('panelHasRow reports whether a row is drawn, children included', () => {
+    const long = M.resolvePanel(state({peers: manyPeers}), {mullvadPickerOpen: true});
+    assert.equal(M.panelHasRow(long, 'machines:search'), true);
+    assert.equal(M.panelHasRow(long, 'mullvad:add'), true);
+    assert.equal(M.panelHasRow(long, 'mullvad:empty'), true);
+    assert.equal(M.panelHasRow(long, 'nothing:here'), false);
+
+    const short = M.resolvePanel(state(), {});
+    assert.equal(M.panelHasRow(short, 'machines:search'), false);
+    assert.equal(M.panelHasRow(null, 'machines:search'), false);
 });
 
 test('neither the search field nor its empty case is a cursor stop', () => {
-    const nav = M.resolvePanel(state({peers: manyPeers}), {machineQuery: 'nowhere'}).navigation.map(n => n.rowId);
+    const nav = M.resolvePanel(state({peers: manyPeers}), {}).navigation.map(n => n.rowId);
     assert.equal(nav.includes('machines:search'), false);
     assert.equal(nav.includes('machines:empty'), false);
 });
@@ -627,10 +656,10 @@ test('helpers on the widget version are not worth a second number', () => {
 // ---- Taildrop needs the helpers, not just the capability -------------------
 
 test('the send action disappears when the helpers are not installed', () => {
-    const withHelpers = section(M.resolvePanel(state(), {}), 'machines').rows;
+    const withHelpers = peerRows(M.resolvePanel(state(), {}));
     assert.equal(withHelpers.some(r => r.actions.some(a => a.id === 'send')), true);
 
-    const without = section(M.resolvePanel(state({helpers: false}), {}), 'machines').rows;
+    const without = peerRows(M.resolvePanel(state({helpers: false}), {}));
     assert.equal(without.some(r => r.actions.some(a => a.id === 'send')), false,
         'a store-installed widget has no tailgauge-send to call');
     assert.equal(without.every(r => r.actions.some(a => a.id === 'copy')), true,

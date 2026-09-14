@@ -166,11 +166,36 @@ test('every frontend keeps its search field across a redraw', () => {
         assert.match(read(file), /function syncRegistration\(\)/,
             `${file} registers rows by component lifetime, which no longer tracks the row`);
 
-    // GNOME rebuilds its menu outright, so it refills the machine rows around
-    // the entry instead and gates every other rebuild on the signature.
+    // GNOME rebuilds its menu outright, so it hides the rows a query excludes
+    // rather than rebuilding around the entry, and gates a rebuild on the
+    // signature - which the query is no longer an input to.
     const gnome = read('gnome/tailgauge@arzaroth.github.io/extension.ts');
-    assert.match(gnome, /_refillMachines\(entry\)/);
+    assert.match(gnome, /this\._applySearch\(\)/);
     assert.match(gnome, /signature !== this\._signature/);
+});
+
+// The model says what a row is findable by and hands it over as `searchKey`.
+// A frontend that builds a haystack of its own is a fourth search behaviour,
+// and it is the one the Rust port cannot follow across the process boundary.
+test('no frontend assembles its own search haystack', () => {
+    for (const [name, source] of frontends) {
+        assert.match(source, /\bsearchKey\b/, `${name} never reads searchKey`);
+        for (const field of ['DisplayName', 'HostName', 'DNSName', 'UserName', 'City', 'Country'])
+            assert.equal(new RegExp(`\\.${field}\\b`).test(source), false,
+                `${name} reads ${field} to search on; searchKey already carries it`);
+    }
+});
+
+// The query changing must not change what resolvePanel is handed, or the panel
+// is rebuilt on every keystroke - which is the whole reason the test above
+// exists.
+test('no frontend feeds its search query back into resolvePanel', () => {
+    for (const [name, source] of frontends) {
+        const start = source.indexOf('Model.resolvePanel(');
+        const options = source.slice(start, source.indexOf('})', start));
+        assert.equal(/machineQuery|mullvadQuery/.test(options), false,
+            `${name} resolves the panel against the query it is typing`);
+    }
 });
 
 // A reaped poll produced no answer, so it must not be reported as one.
