@@ -56,6 +56,11 @@ export const TailscaleService = GObject.registerClass({
     declare _startupTicks: number;
     declare _settingsChangedId: number;
 
+    // Every provider probed on PATH, and the one the panel drives. `installed`
+    // stays the gate every command already checks: it now means the active
+    // provider is one we can actually drive.
+    declare providers: Model.ProviderState[];
+    declare activeProviderId: string;
     declare installed: boolean;
     declare running: boolean;
     declare needsLogin: boolean;
@@ -99,6 +104,8 @@ export const TailscaleService = GObject.registerClass({
         this._timeouts = new Map();
         this._destroyed = false;
 
+        this.providers = [];
+        this.activeProviderId = '';
         this.installed = false;
         this.running = false;
         this.needsLogin = false;
@@ -198,6 +205,8 @@ export const TailscaleService = GObject.registerClass({
     // shape, so the panel they get back cannot disagree.
     snapshot(): Model.PanelState {
         return {
+            providers: this.providers,
+            activeProviderId: this.activeProviderId,
             installed: this.installed,
             running: this.running,
             active: this.active,
@@ -383,8 +392,12 @@ export const TailscaleService = GObject.registerClass({
             this._refreshStatusAndAccounts(forceAccounts);
             return;
         }
-        const started = this._run('which', ['which', 'tailscale'], (status) => {
-            this.installed = status === 0;
+        const started = this._run('which', ['which', ...Model.providerCliNames()], (_status, stdout) => {
+            this.providers = Model.parseProviderProbe(stdout);
+            this.installed = Model.providerReady({
+                providers: this.providers,
+                activeProviderId: this.activeProviderId,
+            });
             if (this.installed) {
                 this._refreshStatusAndAccounts(false);
                 if (!this._cancellables.has('watch'))

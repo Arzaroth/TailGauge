@@ -7,6 +7,11 @@ Item {
 
     property int refreshIntervalSec: 30
 
+    // Every provider probed on PATH, and the one the panel drives. `installed`
+    // stays the gate every command already checks: it now means the active
+    // provider is one we can actually drive.
+    property var providers: []
+    property string activeProviderId: ""
     property bool installed: false
     property bool running: false
     property bool needsLogin: false
@@ -75,6 +80,8 @@ Item {
     // shape, so the panel they get back cannot disagree.
     function snapshot() {
         return {
+            providers: providers,
+            activeProviderId: activeProviderId,
             installed: installed,
             running: running,
             active: active,
@@ -211,7 +218,11 @@ Item {
 
     function _handle(kind, exitCode, stdout, stderr) {
         if (kind === "which") {
-            root.installed = exitCode === 0
+            root.providers = Model.parseProviderProbe(stdout)
+            root.installed = Model.providerReady({
+                providers: root.providers,
+                activeProviderId: root.activeProviderId
+            })
             if (root.installed) {
                 root.refreshStatusAndAccounts()
                 if (!root._inflight["watch"]) root.watch()
@@ -402,7 +413,7 @@ Item {
             refreshStatusAndAccounts(forceAccounts === true)
             return
         }
-        if (_run("which", ["which", "tailscale"])) refreshing = true
+        if (_run("which", ["which"].concat(Model.providerCliNames()))) refreshing = true
     }
 
     function refreshStatusAndAccounts(forceAccounts) {
