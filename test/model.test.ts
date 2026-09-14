@@ -1203,3 +1203,20 @@ test('the toggle hint names the provider it will act on', () => {
     assert.equal(M.resolvePanel(state({providers: detected('netbird')}), {}).header.toggleHint,
         M.toggleHint(state({providers: detected('netbird')})));
 });
+
+test('relative times are translated like every other panel string', () => {
+    const shout = (text: string) => text.toUpperCase();
+    assert.equal(M.formatSince('2026-09-14T05:59:00Z', NOW, shout), '1 MINUTE AGO');
+    assert.equal(M.formatSince('2026-09-14T05:59:50Z', NOW, shout), 'JUST NOW');
+    assert.equal(M.formatSince('2026-09-14T03:00:00Z', NOW, shout), '3 HOURS AGO');
+    // The count is interpolated, not concatenated, so a translation can move it.
+    assert.equal(M.formatSince('2026-09-14T05:59:00Z', NOW, () => 'il y a %1 minute'),
+        'il y a 1 minute');
+
+    const rows = M.peerDetailRows({
+        ConnectionType: 'P2P', LatencyMs: 20, LastHandshake: '2026-09-14T05:59:00Z',
+    }, shout, NOW);
+    const by = Object.fromEntries(rows.map(r => [r.id, r.sublabel]));
+    assert.equal(by['detail:handshake'], '1 MINUTE AGO', 'the value, not just its label');
+    assert.match(by['detail:connection'], /20 MS/, 'the latency unit too');
+});
