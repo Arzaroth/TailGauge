@@ -316,6 +316,78 @@ test('both searches ignore case, in the query and in what they match', () => {
     assert.ok(cities(anyCity.toUpperCase()).length > 0);
 });
 
+// The search key is what the frontends filter on: the model decides what a row
+// is findable by, and the frontend does nothing but test a substring. A key
+// built anywhere but here is a fourth search behaviour waiting to disagree.
+test('every filtered row carries a lowercased key and the scope that filters it', () => {
+    const rows = section(M.resolvePanel(state(), {}), 'machines').rows;
+    const laptop = only(rows, r => r.label === 'laptop', 'laptop row');
+    assert.equal(laptop.searchScope, 'machines');
+    for (const needle of ['laptop', 'laptop.example.ts.net', '100.64.0.2', 'linux', 'alice'])
+        assert.ok(laptop.searchKey.includes(needle), `the key does not carry ${needle}`);
+    assert.equal(laptop.searchKey, laptop.searchKey.toLowerCase());
+
+    const picker = only(
+        section(M.resolvePanel(state(), {mullvadPickerOpen: true}), 'exitNodes').rows,
+        r => r.kind === 'mullvadPicker', 'Mullvad picker row');
+    const paris = only(picker.children, c => c.label === 'Paris', 'Paris row');
+    assert.equal(paris.searchScope, 'mullvad');
+    assert.equal(paris.searchKey, 'paris france');
+});
+
+// The field itself, and the rows the model draws unconditionally, must never be
+// swept away by the query being typed into them.
+test('the search field and the unfiltered rows carry no scope', () => {
+    const long = section(M.resolvePanel(state({peers: manyPeers}), {}), 'machines');
+    assert.equal(only(long.rows, r => r.kind === 'machineSearch', 'search row').searchScope, '');
+
+    const picker = only(
+        section(M.resolvePanel(state(), {mullvadPickerOpen: true}), 'exitNodes').rows,
+        r => r.kind === 'mullvadPicker', 'Mullvad picker row');
+    assert.equal(picker.searchScope, '');
+    assert.equal(picker.searchKey, '');
+});
+
+// A keyless row in a scope is the message that scope shows when its query
+// matches nothing, which is how a frontend knows to draw it without deciding
+// for itself what an empty result reads like.
+test('each empty-result row is the keyless row of its scope', () => {
+    const machines = section(M.resolvePanel(state({peers: manyPeers}), {machineQuery: 'nowhere'}), 'machines');
+    const none = only(machines.rows, r => r.kind === 'empty', 'machines empty row');
+    assert.equal(none.searchScope, 'machines');
+    assert.equal(none.searchKey, '');
+
+    const picker = only(
+        section(M.resolvePanel(state(), {mullvadQuery: 'zzz', mullvadPickerOpen: true}), 'exitNodes').rows,
+        r => r.kind === 'mullvadPicker', 'Mullvad picker row');
+    assert.equal(picker.children[0].searchScope, 'mullvad');
+    assert.equal(picker.children[0].searchKey, '');
+});
+
+// The cursor walks the navigation list, not the rows, so a frontend filtering
+// the rows has to filter the cursor's stops by exactly the same test.
+test('navigation repeats the scope and key of the row it points at', () => {
+    const panel = M.resolvePanel(state({peers: manyPeers}), {mullvadPickerOpen: true});
+    const byId = new Map<string, ModelTypes.PanelRow>();
+    for (const s of panel.sections)
+        for (const row of s.rows) {
+            byId.set(row.id, row);
+            for (const child of row.children) byId.set(child.id, child);
+        }
+
+    for (const entry of panel.navigation) {
+        if (entry.sectionId === 'header') {
+            assert.equal(entry.searchScope, '');
+            continue;
+        }
+        const row = only([...byId.values()], r => r.id === entry.rowId, `row ${entry.rowId}`);
+        assert.equal(entry.searchScope, row.searchScope);
+        assert.equal(entry.searchKey, row.searchKey);
+    }
+    assert.ok(panel.navigation.some(e => e.searchScope === 'machines'));
+    assert.ok(panel.navigation.some(e => e.searchScope === 'mullvad'));
+});
+
 test('the machines search appears only for a list long enough to need it', () => {
     assert.equal(section(M.resolvePanel(state(), {}), 'machines').rows.some(r => r.kind === 'machineSearch'), false);
 
