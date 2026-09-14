@@ -1,0 +1,82 @@
+{
+  "peers": {
+    "total": 3,
+    "connected": 2,
+    "details": [
+      {
+        "fqdn": "nas.netbird.selfhosted",
+        "netbirdIp": "100.85.0.2/16",
+        "publicKey": "BBBB2222",
+        "status": "Connected",
+        "connectionType": "P2P",
+        "latency": 1500000,
+        "transferReceived": 4096,
+        "transferSent": 2048,
+        "networks": []
+      },
+      {
+        "fqdn": "laptop.netbird.selfhosted",
+        "netbirdIp": "100.85.0.3/16",
+        "publicKey": "CCCC3333",
+        "status": "Connected",
+        "connectionType": "Relayed",
+        "latency": 42000000,
+        "transferReceived": 10,
+        "transferSent": 10,
+        "networks": []
+      },
+      {
+        "fqdn": "offline-box.netbird.selfhosted",
+        "netbirdIp": "100.85.0.4/16",
+        "publicKey": "DDDD4444",
+        "status": "Disconnected",
+        "connectionType": "-",
+        "latency": 0,
+        "transferReceived": 0,
+        "transferSent": 0,
+        "networks": []
+      }
+    ]
+  },
+  "cliVersion": "0.78.1",
+  "daemonVersion": "0.77.0",
+  "daemonStatus": "Connected",
+  "management": {
+    "url": "https://bird.arzaroth.com:443",
+    "connected": true,
+    "error": ""
+  },
+  "signal": {
+    "url": "https://bird.arzaroth.com:443",
+    "connected": true,
+    "error": ""
+  },
+  "relays": {
+    "total": 1,
+    "available": 0,
+    "details": [
+      {
+        "uri": "rels://bird.arzaroth.com:443",
+        "available": false,
+        "error": "relay connection is not established"
+      }
+    ]
+  },
+  "netbirdIp": "100.85.0.1/16",
+  "publicKey": "AAAA1111",
+  "usesKernelInterface": false,
+  "wireguardPort": 0,
+  "fqdn": "workstation.netbird.selfhosted",
+  "quantumResistance": false,
+  "quantumResistancePermissive": false,
+  "networks": null,
+  "forwardingRules": 0,
+  "dnsServers": [],
+  "events": [],
+  "lazyConnectionEnabled": false,
+  "profileName": "default",
+  "sshServer": {
+    "enabled": false,
+    "sessions": []
+  }
+}
