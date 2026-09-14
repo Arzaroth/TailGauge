@@ -899,3 +899,89 @@ test('the switcher never offers a provider it cannot drive', () => {
         .filter(p => p.supported).map(p => p.id));
     assert.deepEqual(M.drivableProviders({providers: detected()}), []);
 });
+
+// ---------------------------------------------------------------------------
+// The bar icon and its tooltip
+// ---------------------------------------------------------------------------
+
+const summary = (id: string, over: Partial<ModelTypes.ProviderSummary> = {}) => ({
+    ...M.summarizeProvider(id, null), ...over,
+});
+
+test('summarizeProvider reads a status result, or survives not having one', () => {
+    const ts = M.summarizeProvider('tailscale', status);
+    assert.equal(ts.label, 'Tailscale');
+    assert.equal(ts.running, true);
+    assert.equal(ts.selfName, 'workstation');
+    assert.equal(ts.selfIp, '100.64.0.1');
+
+    const nb = M.summarizeProvider('netbird', nbIdle);
+    assert.equal(nb.label, 'NetBird');
+    assert.equal(nb.running, false);
+
+    for (const bad of [null, {ok: false}, {ok: true, unavailable: true}]) {
+        const s = M.summarizeProvider('tailscale', bad);
+        assert.equal(s.running, false, 'an unusable status is not a connection');
+        assert.equal(s.id, 'tailscale', 'but it is still that provider');
+    }
+});
+
+test('the bar icon describes the machine, not the panel view', () => {
+    const both = detected('tailscale', 'netbird');
+    const summaries = [summary('tailscale', {running: true, selfName: 'workstation', selfIp: '100.64.0.1'}),
+                       summary('netbird', {state: 'Idle'})];
+    // Viewing idle NetBird while Tailscale is up must not read as disconnected.
+    const viewingNetbird = M.resolvePanel(
+        {providers: both, activeProviderId: 'netbird', summaries, active: false}, {});
+    assert.equal(viewingNetbird.bar.connected, true, 'Tailscale is still up');
+    assert.equal(viewingNetbird.bar.crossed, false);
+    // The panel hero still describes what you are looking at.
+    assert.equal(viewingNetbird.header.toggleChecked, false, 'NetBird itself is off');
+
+    const viewingTailscale = M.resolvePanel(
+        {providers: both, activeProviderId: 'tailscale', summaries, active: true}, {});
+    // The tooltip reorders to put the viewed provider first; the icon does not move.
+    for (const field of ['connected', 'warning', 'crossed'] as const)
+        assert.equal(viewingTailscale.bar[field], viewingNetbird.bar[field],
+            `switching the view changed bar.${field}`);
+});
+
+test('the bar goes dark only when every provider is down', () => {
+    const both = detected('tailscale', 'netbird');
+    const down = M.resolvePanel({providers: both,
+        summaries: [summary('tailscale'), summary('netbird')]}, {});
+    assert.equal(down.bar.connected, false);
+    assert.equal(down.bar.crossed, true);
+
+    const pending = M.resolvePanel({providers: both,
+        summaries: [summary('tailscale', {needsLogin: true}), summary('netbird')]}, {});
+    assert.equal(pending.bar.warning, true);
+    assert.equal(pending.bar.crossed, false, 'needing a login is not being crossed out');
+});
+
+test('the tooltip says what each installed provider is doing, active first', () => {
+    const both = detected('tailscale', 'netbird');
+    const summaries = [summary('tailscale', {running: true, selfName: 'workstation', selfIp: '100.64.0.1'}),
+                       summary('netbird', {state: 'Idle'})];
+    assert.deepEqual(M.resolvePanel({providers: both, summaries}, {}).bar.tooltip,
+        ['Tailscale  connected · workstation · 100.64.0.1', 'NetBird  Idle']);
+    // The one being viewed leads, whichever it is.
+    assert.deepEqual(M.resolvePanel({providers: both, activeProviderId: 'netbird', summaries}, {}).bar.tooltip,
+        ['NetBird  Idle', 'Tailscale  connected · workstation · 100.64.0.1']);
+    assert.deepEqual(M.resolvePanel({providers: both,
+        summaries: [summary('tailscale', {needsLogin: true}), summary('netbird')]}, {}).bar.tooltip,
+        ['Tailscale  needs login', 'NetBird  disconnected']);
+});
+
+test('the tooltip falls back rather than lying about what it knows', () => {
+    assert.deepEqual(M.resolvePanel({providers: detected()}, {}).bar.tooltip,
+        ['No supported VPN CLI on PATH. Looked for Tailscale, NetBird.']);
+    // Installed but never polled.
+    assert.deepEqual(M.resolvePanel({providers: detected('netbird')}, {}).bar.tooltip,
+        ['NetBird  not checked']);
+});
+
+test('with no summaries the bar still follows the one provider we know about', () => {
+    assert.equal(M.resolvePanel(state(), {}).bar.connected, true, 'legacy snapshot, Tailscale up');
+    assert.equal(M.resolvePanel(state({active: false}), {}).bar.connected, false);
+});

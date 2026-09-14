@@ -198,7 +198,30 @@ export interface NavEntry {
   action: string
 }
 
+// What one provider is doing, whether or not it is the one on screen. The bar
+// icon and its tooltip are about the machine, not about the panel's current
+// view, so they read these rather than the active provider's fields.
+export interface ProviderSummary {
+  id: string
+  label: string
+  running: boolean
+  needsLogin: boolean
+  selfName: string
+  selfIp: string
+  state: string
+}
+
+// The bar icon answers "am I on a mesh VPN", which is not the same question as
+// "what is the panel showing".
+export interface BarState {
+  connected: boolean
+  warning: boolean
+  crossed: boolean
+  tooltip: string[]
+}
+
 export interface Panel {
+  bar: BarState
   header: PanelHeader
   status: PanelStatus
   sections: PanelSection[]
@@ -263,6 +286,7 @@ export interface ProviderState {
 export interface PanelState {
   providers?: ProviderState[]
   activeProviderId?: string
+  summaries?: ProviderSummary[]
   installed?: boolean
   running?: boolean
   active?: boolean
@@ -1275,6 +1299,97 @@ function panelRow(row: PanelRowInput): PanelRow {
   }
 }
 
+// Build one provider's summary from whatever its status poll returned, so a
+// frontend stores a shape the panel reads rather than a parser result.
+function summarizeProvider(providerId: Raw, status: Raw): ProviderSummary {
+  var provider = providerById(providerId)
+  var summary: ProviderSummary = {
+    id: provider ? provider.id : String(providerId || ""),
+    label: provider ? provider.label : String(providerId || ""),
+    running: false,
+    needsLogin: false,
+    selfName: "",
+    selfIp: "",
+    state: ""
+  }
+  if (!status || status.ok !== true || status.unavailable === true) return summary
+  summary.running = status.running === true
+  summary.needsLogin = status.needsLogin === true
+  summary.selfName = String(status.selfName || "")
+  summary.selfIp = String(status.selfIp || "")
+  summary.state = String(status.daemonState || "")
+  return summary
+}
+
+function summaryFor(state: PanelState, id: string): ProviderSummary | null {
+  var summaries = (state || {}).summaries
+  if (!summaries || typeof summaries.length !== "number") return null
+  for (var i = 0; i < summaries.length; i++) {
+    if (summaries[i] && String(summaries[i].id) === id) return summaries[i]
+  }
+  return null
+}
+
+function providerStateWord(t: Translate, summary: ProviderSummary | null): string {
+  if (!summary) return t("not checked")
+  if (summary.needsLogin) return t("needs login")
+  if (summary.running) return t("connected")
+  return summary.state !== "" ? summary.state : t("disconnected")
+}
+
+// One line per installed provider, the active one first, so hovering the bar
+// answers "what is up" without opening the panel.
+function barTooltip(state: PanelState, t: Translate): string[] {
+  var installed = installedProviders(state)
+  if (installed.length === 0) {
+    return [formatText(t("No supported VPN CLI on PATH. Looked for %1."), providerLabelList())]
+  }
+  var current = activeProvider(state)
+  var ordered: ProviderDescriptor[] = []
+  if (current) ordered.push(current)
+  for (var i = 0; i < installed.length; i++) {
+    if (!current || installed[i].id !== current.id) ordered.push(installed[i])
+  }
+
+  var lines: string[] = []
+  for (var j = 0; j < ordered.length; j++) {
+    var provider = ordered[j]
+    var summary = summaryFor(state, provider.id)
+    var parts = [providerStateWord(t, summary)]
+    if (summary && summary.running) {
+      if (summary.selfName !== "") parts.push(summary.selfName)
+      if (summary.selfIp !== "") parts.push(summary.selfIp)
+    }
+    lines.push(provider.label + "  " + parts.join(" \u00b7 "))
+  }
+  return lines
+}
+
+// Aggregate, deliberately: switching which provider the panel shows must not
+// change an icon that describes the machine's connections.
+function barState(state: PanelState, t: Translate): BarState {
+  var summaries = state.summaries
+  var connected = false
+  var warning = false
+  if (summaries && typeof summaries.length === "number" && summaries.length > 0) {
+    for (var i = 0; i < summaries.length; i++) {
+      if (!summaries[i]) continue
+      if (summaries[i].running === true) connected = true
+      if (summaries[i].needsLogin === true) warning = true
+    }
+  } else {
+    // Nothing has reported yet: fall back to the active provider's own state.
+    connected = state.active === true
+    warning = state.needsLogin === true
+  }
+  return {
+    connected: connected,
+    warning: warning,
+    crossed: !connected && !warning,
+    tooltip: barTooltip(state, t)
+  }
+}
+
 function panelHeader(state: PanelState, t: Translate, phraseIndex?: number): PanelHeader {
   var index = typeof phraseIndex === "number" ? phraseIndex : 0
   var label = providerLabel(state)
@@ -1707,6 +1822,7 @@ function resolvePanel(state: PanelState | null | undefined, options?: ResolveOpt
   ]
 
   return {
+    bar: barState(source, t),
     header: header,
     status: panelStatus(source, t),
     sections: sections,
@@ -1758,6 +1874,8 @@ export {
   providerReady,
   drivableProviders,
   providerCommands,
+  summarizeProvider,
+  barState,
   providerById,
   installedProviders,
   activeProvider,

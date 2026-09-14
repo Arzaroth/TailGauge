@@ -33,11 +33,12 @@ MouseArea {
 
         TailGaugeIcon {
             iconSize: Math.min(compact.height, Kirigami.Units.iconSizes.smallMedium)
-            color: compact.service.active ? Kirigami.Theme.textColor
-                                          : Qt.darker(Kirigami.Theme.textColor, 1.55)
+            // The bar describes the machine, not the panel's current view.
+            color: root.barState.connected ? Kirigami.Theme.textColor
+                                           : Qt.darker(Kirigami.Theme.textColor, 1.55)
             badgeColor: Kirigami.Theme.negativeTextColor
-            crossed: !compact.service.active && !compact.service.needsLogin
-            warning: compact.service.needsLogin
+            crossed: root.barState.crossed
+            warning: root.barState.warning
             Layout.alignment: Qt.AlignVCenter
         }
 

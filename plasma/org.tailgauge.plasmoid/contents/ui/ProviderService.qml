@@ -16,6 +16,12 @@ Item {
     // switch belongs to the provider that was asked, not the one now shown.
     property var _pollProvider: ({})
 
+    // One entry per installed provider, kept whether or not it is the one on
+    // screen, so the bar icon and its tooltip describe the machine.
+    property var summaries: []
+    property int _bgIndex: 0
+    property string _bgProviderId: ""
+
     property var networks: []
     property string selectingNetworkId: ""
     property var providers: []
@@ -88,7 +94,8 @@ Item {
     // shape, so the panel they get back cannot disagree.
     function _commands() {
       return Model.providerCommands({
-        networks: networks,
+        summaries: summaries,
+      networks: networks,
       selectingNetworkId: selectingNetworkId,
       providers: providers,
         activeProviderId: activeProviderId
@@ -242,7 +249,7 @@ Item {
     function _handle(kind, exitCode, stdout, stderr) {
         // A poll answering for the provider we just left would be parsed with
         // the wrong parser and land as an empty panel.
-        if (kind !== "which" && _stale(kind)) return
+        if (kind !== "which" && kind !== "bgStatus" && _stale(kind)) return
         if (kind === "which") {
             root.providers = Model.parseProviderProbe(stdout)
             root.installed = Model.providerReady({
@@ -277,7 +284,13 @@ Item {
                     root.lastError = Model.elideStatus(stderr || stdout || "Could not list Tailscale connections")
                 }
             }
-        } else if (kind === "networks") {
+        } else if (kind === "bgStatus") {
+        root._setSummary(root._bgProviderId,
+          exitCode === 0 ? Model.parseProviderStatus({
+            providers: root.providers,
+            activeProviderId: root._bgProviderId
+          }, stdout) : null)
+      } else if (kind === "networks") {
         root._pollSettled(kind)
         root.parseNetworks(exitCode === 0 ? stdout : "")
       } else if (kind === "selectNetwork") {
@@ -459,6 +472,7 @@ Item {
         }
         if (_commands().exitNodeList && _run("mullvad", _commands().exitNodeList)) launched = true
       if (_commands().networks && _run("networks", _commands().networks)) launched = true
+      _pollNextIdleProvider()
 
         var now = Date.now()
         var shouldRefreshAccounts = forceAccounts === true || accounts.length === 0 || now - _lastAccountsRefreshMs > 60000
@@ -508,6 +522,7 @@ Item {
         providers: root.providers,
         activeProviderId: root.activeProviderId
       }, raw)
+        _setSummary(activeProviderId, parsed)
         if (!parsed.ok) {
             resetUnavailable(parsed.message || "Status error")
             lastError = parsed.error || "Failed to parse tailscale status"
@@ -570,12 +585,49 @@ Item {
       for (var i = 0; i < polls.length; i++) _reap(polls[i])
       // The old provider's machines and accounts are not this one's.
       resetUnavailable("Switching")
+      // Seed from what the background poll already knows, so the header does
+      // not flash disconnected on the way to a provider that is up.
+      for (var j = 0; j < summaries.length; j++) {
+        if (String(summaries[j].id) !== id) continue
+        running = summaries[j].running
+        needsLogin = summaries[j].needsLogin
+        selfName = summaries[j].selfName
+        selfIp = summaries[j].selfIp
+      }
       installed = Model.providerReady({
         providers: providers,
         activeProviderId: activeProviderId
       })
       providerChanged(id)
       refresh(true)
+    }
+
+    function _setSummary(providerId, parsed) {
+      var next = []
+      var replaced = false
+      for (var i = 0; i < summaries.length; i++) {
+        if (String(summaries[i].id) === String(providerId)) {
+          next.push(Model.summarizeProvider(providerId, parsed))
+          replaced = true
+        } else next.push(summaries[i])
+      }
+      if (!replaced) next.push(Model.summarizeProvider(providerId, parsed))
+      summaries = _stable(summaries, next)
+    }
+
+    // One inactive provider per tick, so the tooltip stays current without
+    // running every provider's whole poll set every time.
+    function _pollNextIdleProvider() {
+      var others = []
+      var all = Model.drivableProviders({ providers: providers, activeProviderId: activeProviderId })
+      for (var i = 0; i < all.length; i++) {
+        if (all[i].id !== activeProviderId) others.push(all[i])
+      }
+      if (others.length === 0) return
+      var provider = others[_bgIndex % others.length]
+      _bgIndex = (_bgIndex + 1) % others.length
+      _bgProviderId = provider.id
+      _run("bgStatus", provider.commands.status)
     }
 
     function parseNetworks(raw) {
