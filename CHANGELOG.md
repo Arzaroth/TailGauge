@@ -4,6 +4,30 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **One binary, `tailgauge`, replaces the eight shell helpers.** A subcommand
+  per job - `ctl`, `watch`, `notify`, `send`, `receive`, `file-select`, `copy`,
+  `update` - and a symlink per subcommand beside it, so `tailgauge-ctl toggle`
+  on a key binding still resolves: the binary reads the name it was invoked as.
+  969 lines of bash are gone, including a `tailscale status --json` parsed with
+  `sed` and an exit-node table sliced with `awk`.
+
+- **The release publishes a binary archive per architecture**, x86_64 and
+  aarch64, carrying the binary and the three frontend payloads. `tailgauge
+  update` replaces the binary next to itself and reinstalls whichever frontends
+  are present from the same archive, so the binary and the QML it feeds cannot
+  end up a release apart.
+
+### Fixed
+
+- **The IPN watcher reports the change it saw.** `tailgauge-watch` returned 0
+  from inside a `while` that was the last element of a pipeline, so the return
+  ended the subshell and the unconditional `return 2` below it answered for the
+  function: every state change on the bus was reported as an expired wait. The
+  frontends refresh on 0 and only on 0, so the bus has never woken a panel -
+  the poll floor has been carrying it.
+
 ### Changed
 
 - **Typing in a search field no longer rebuilds the panel.** The model now
@@ -11,6 +35,11 @@ All notable changes to this project are documented here.
   the three frontends do nothing but test the substring. `resolvePanel` no
   longer takes the machine and region queries, so the panel it returns is the
   same object from one keystroke to the next.
+
+- **Neither store can install the binary**, as neither could install `bin/`, so
+  a store-installed TailGauge is still the panel only. Upgrading from 0.4.0 or
+  earlier means re-running the install script: the helpers tarball went with
+  the helpers, so the old shell updater has no asset left to fetch.
 
 ## [0.4.0]
 
