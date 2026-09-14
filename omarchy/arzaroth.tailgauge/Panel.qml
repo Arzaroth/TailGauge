@@ -453,16 +453,12 @@ Panel {
                   id: refreshButton
                   anchors.verticalCenter: parent.verticalCenter
                   visible: root.panel.header.toggleVisible
-                  iconText: "\udb81\udd50"
+                  iconText: "󰑐"
+                  tooltipText: "Refresh"
                   foreground: hero.foreground
                   hoverColor: hero.foreground
+                  fontFamily: hero.fontFamily
                   onClicked: tailscale.refresh(true)
-
-                  PanelToolTip {
-                    visible: refreshButton.containsMouse
-                    text: "Refresh"
-                    fontFamily: hero.fontFamily
-                  }
                 }
 
                 ToggleSwitch {
