@@ -277,7 +277,7 @@ Item {
         } else if (kind === "action") {
             if (exitCode !== 0) {
                 root._desired = -1
-                root.lastError = Model.elideStatus(stderr || stdout || "Tailscale command failed")
+                root.lastError = Model.elideStatus(stderr || stdout || "Command failed")
                 root.actionStatus = root.lastError
                 actionStatusTimer.restart()
             } else {
@@ -740,7 +740,7 @@ Item {
             if (!root._loginInProgress || root._loginUrlOpened) return
             if (!root.openAuthUrlFrom(root.authUrl, true)) {
                 root._loginInProgress = false
-                root.actionStatus = "Tailscale login link not available yet"
+                root.actionStatus = "Login link not available yet"
             }
         }
     }

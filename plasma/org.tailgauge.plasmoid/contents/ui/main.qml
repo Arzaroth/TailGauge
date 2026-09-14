@@ -36,11 +36,14 @@ PlasmoidItem {
     Plasmoid.icon: "network-vpn"
     Plasmoid.status: service.active ? PlasmaCore.Types.ActiveStatus : PlasmaCore.Types.PassiveStatus
 
-    toolTipMainText: service.installed ? (service.selfName || "Tailscale") : "Tailscale"
+    // The provider the panel is driving, so the tooltip never names the wrong one.
+    readonly property string providerLabel: Model.providerLabel(service.snapshot())
+
+    toolTipMainText: service.installed ? (service.selfName || providerLabel) : providerLabel
     toolTipSubText: {
-        if (!service.installed) return i18n("Tailscale CLI is not installed or not on PATH.")
+        if (!service.installed) return i18n("No supported VPN CLI on PATH.")
         if (service.lastError !== "") return service.lastError
-        if (!service.active) return i18n("Tailscale is disconnected")
+        if (!service.active) return i18n("%1 is disconnected", providerLabel)
         var lines = [service.statusText]
         if (service.selfIp !== "") lines.push(service.selfIp)
         var exit = activeExitNodeName()
