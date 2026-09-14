@@ -6,6 +6,17 @@ All notable changes to this project are documented here.
 
 ### Added
 
+- **The bar icon describes the machine, not the panel's current view.** Every
+  installed provider is polled, one idle provider per tick, so switching which
+  one the panel shows no longer reads as a disconnection from one that is still
+  up. Hovering the icon lists each installed provider and what it is doing,
+  the one being viewed first.
+
+- **A machine row opens onto what it is actually doing**: how the tunnel is
+  carried and its latency, the endpoint, the last handshake, bytes each way,
+  and the routes it carries. Both providers report this; only what a provider
+  actually sent becomes a row, so a peer that said nothing grows no arrow.
+
 - **NetBird is a second provider TailGauge can drive.** It parses
   `netbird status --json` into the same machine list, self row and copy actions
   Tailscale gets, and adds a Networks section for the routes
@@ -37,6 +48,22 @@ All notable changes to this project are documented here.
   frontends never execute under Node, so what the parity and distribution
   tests assert about them is not in the number either. CI prints the same
   report on every run; no threshold gates the build.
+
+### Fixed
+
+- **A poll belonged to whichever provider was active when it answered.** All
+  providers shared one runner per kind while the parser dispatched on the
+  current provider, so switching mid-poll fed one provider's output to the
+  other's parser, which reads as a connected daemon with no peers and no
+  networks. Each poll now records the provider it was launched for, a reply
+  that outlives a switch is dropped, and switching reaps the polls in flight
+  so the new provider is asked at once.
+
+- **The watcher was Tailscale's.** `tailgauge-watch` blocks on tailscaled's
+  event bus and every service ran it whatever was active, so under another
+  provider the panel rode an unrelated daemon's events and refreshed at most
+  every 300 seconds. The watch command belongs to the provider now, and one
+  without it falls back to the poll timer.
 
 ### Changed
 
