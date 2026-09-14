@@ -62,6 +62,7 @@ export const ProviderService = GObject.registerClass({
     declare _preLoginAuthUrl: string;
     declare _startupTicks: number;
     declare _settingsChangedId: number;
+    declare _providerChangedId: number;
 
     // Every provider probed on PATH, and the one the panel drives. `installed`
     // stays the gate every command already checks: it now means the active
@@ -189,6 +190,16 @@ export const ProviderService = GObject.registerClass({
         }));
 
         this._settingsChangedId = this._settings.connect('changed::refresh-interval', () => this._armRefresh());
+        // The QML frontends bind this and adopt on change; here it was read
+        // once, so a write from anywhere else went unnoticed until restart.
+        this._providerChangedId = this._settings.connect('changed::active-provider', () => {
+            const id = this._settings.get_string('active-provider');
+            // switchProvider writes this itself, so its own write must not
+            // recurse back through the switch.
+            if (id === this.activeProviderId) return;
+            const provider = Model.providerById(id);
+            if (provider) this.switchProvider(provider);
+        });
         this._armRefresh();
         this._addTimeout('startup', STARTUP_RAMP_MS, () => {
             this._startupTicks += 1;
@@ -673,6 +684,9 @@ export const ProviderService = GObject.registerClass({
         });
         this._settings.set_string('active-provider', id);
         this.refresh(true);
+        // refresh() does not arm the watcher, and the old provider's was just
+        // cancelled. This one may not have a watch command at all.
+        this.watch();
         this.emit('changed');
     }
 
@@ -1023,6 +1037,10 @@ export const ProviderService = GObject.registerClass({
         if (this._settingsChangedId) {
             this._settings.disconnect(this._settingsChangedId);
             this._settingsChangedId = 0;
+        }
+        if (this._providerChangedId) {
+            this._settings.disconnect(this._providerChangedId);
+            this._providerChangedId = 0;
         }
     }
 });
