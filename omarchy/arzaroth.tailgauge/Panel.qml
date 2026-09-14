@@ -142,6 +142,10 @@ Panel {
     close()
   }
 
+  function headerAction(actionId) {
+    if (actionId === "refresh") tailscale.refresh(true)
+  }
+
   function rowAction(row, actionId) {
     if (actionId === "send") sendPeerFile(row)
     else if (actionId === "detail") toggleDetail(row)
@@ -446,19 +450,19 @@ Panel {
                 Row {
                 spacing: Style.space(6)
 
-                // GNOME and Plasma reach a manual refresh through their own
-                // menus; on Omarchy it was middle-click on the bar and nothing
-                // said so.
-                PanelActionButton {
-                  id: refreshButton
-                  anchors.verticalCenter: parent.verticalCenter
-                  visible: root.panel.header.toggleVisible
-                  iconText: "󰑐"
-                  tooltipText: "Refresh"
-                  foreground: hero.foreground
-                  hoverColor: hero.foreground
-                  fontFamily: hero.fontFamily
-                  onClicked: tailscale.refresh(true)
+                Repeater {
+                  model: root.panel.header.actions
+
+                  PanelActionButton {
+                    required property var modelData
+                    anchors.verticalCenter: parent.verticalCenter
+                    iconText: modelData.glyph
+                    tooltipText: modelData.label
+                    foreground: hero.foreground
+                    hoverColor: hero.foreground
+                    fontFamily: hero.fontFamily
+                    onClicked: root.headerAction(modelData.id)
+                  }
                 }
 
                 ToggleSwitch {

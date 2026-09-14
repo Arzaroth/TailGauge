@@ -300,7 +300,9 @@ class TailGaugeIndicator extends PanelMenu.Button {
 
         this._menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-        this._refreshItem = new PopupMenu.PopupMenuItem(_('Refresh'));
+        // Labelled from the panel, not from here, so every desktop names it
+        // the same way and it is translated once.
+        this._refreshItem = new PopupMenu.PopupMenuItem('');
         this._refreshItem.connect('activate', () => this._service.refresh(true));
         this._menu.addMenuItem(this._refreshItem);
 
@@ -392,6 +394,9 @@ class TailGaugeIndicator extends PanelMenu.Button {
         else
             this._statusItem.label.remove_style_class_name('tailgauge-error');
 
+        const refresh = panel.header.actions.find(a => a.id === 'refresh');
+        this._refreshItem.label.text = refresh ? refresh.label : '';
+        this._refreshItem.visible = refresh !== undefined;
         this._refreshItem.setSensitive(panel.header.toggleVisible);
 
         this._footerItem.label.text = panel.footer;

@@ -48,10 +48,7 @@ test('frontend-local strings are desktop conventions only', () => {
 test('the Omarchy frontend writes no user-visible string', () => {
     // QML takes either quote, and this repository writes both.
     const written = [...omarchySource.matchAll(/\b(?:text|placeholderText|tooltipText|title|meta|label):\s*(["'])((?:(?!\1).){4,}?)\1/g)]
-        .map(m => m[2])
-        // Same allowance the other two frontends get: a desktop convention is
-        // the frontend's to name, because it is not panel content.
-        .filter(s => !DESKTOP_ONLY.has(s));
+        .map(m => m[2]);
     assert.deepEqual(written, [],
         `resolvePanel should be producing these: ${written.join(', ')}`);
 });
@@ -247,4 +244,12 @@ test('every service hands resolvePanel every field the resolver reads', () => {
         const missing = declared.filter(f => !fields.has(f));
         assert.deepEqual(missing, [], `${name} never sends ${missing.join(', ')}`);
     }
+});
+
+// A control the model puts on the header has to appear on every desktop, or
+// the panels differ in what you can do rather than in how it looks.
+test('every frontend draws the header controls the model hands it', () => {
+    for (const [name, source] of frontends)
+        assert.match(source, /header\.actions/,
+            `${name} never reads the header's actions`);
 });

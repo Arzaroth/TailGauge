@@ -198,6 +198,8 @@ export interface PanelHeader {
   crossed: boolean
   warning: boolean
   dimmed: boolean
+  // Controls beside the switch, in the same vocabulary a row's actions use.
+  actions: RowAction[]
 }
 
 export interface PanelStatus {
@@ -1582,7 +1584,10 @@ function panelHeader(state: PanelState, t: Translate, phraseIndex?: number): Pan
       : (state.needsLogin ? t("Authorize this device") : formatText(t("Turn %1 on"), label)),
     crossed: !state.active && !state.needsLogin,
     warning: state.needsLogin === true,
-    dimmed: !state.active
+    dimmed: !state.active,
+    actions: present
+      ? [{ id: "refresh", label: t("Refresh"), icon: "view-refresh-symbolic", glyph: "\udb81\udc50" }]
+      : []
   }
 }
 
