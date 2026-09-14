@@ -94,16 +94,16 @@ Item {
   // shape, so the panels they get back cannot disagree.
   function _commands() {
     return Model.providerCommands({
-      summaries: summaries,
-    networks: networks,
-    selectingNetworkId: selectingNetworkId,
-    providers: providers,
+      providers: providers,
       activeProviderId: activeProviderId
     }) || {}
   }
 
   function snapshot() {
     return {
+      summaries: summaries,
+      networks: networks,
+      selectingNetworkId: selectingNetworkId,
       providers: providers,
       activeProviderId: activeProviderId,
       installed: installed,

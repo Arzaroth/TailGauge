@@ -219,3 +219,29 @@ test('no service hardcodes a provider binary in its argv', () => {
         }
     }
 });
+
+// The three snapshots agreeing with each other is not enough: they agreed
+// while all three were missing the same fields, because an insertion landed in
+// a neighbouring object literal. The resolver's own input type is the
+// authority on what a snapshot owes it.
+test('every service hands resolvePanel every field the resolver reads', () => {
+    const model = read('shared/model.ts');
+    const block = model.slice(model.indexOf('export interface PanelState {'));
+    const declared = [...block.slice(0, block.indexOf('\n}')).matchAll(/^\s*(\w+)\??:/gm)]
+        .map(m => m[1]);
+    assert.ok(declared.length > 20, 'PanelState was not found');
+
+    for (const [name, file] of Object.entries({
+        plasma: 'plasma/org.tailgauge.plasmoid/contents/ui/ProviderService.qml',
+        gnome: 'gnome/tailgauge@arzaroth.github.io/provider.ts',
+        omarchy: 'omarchy/arzaroth.tailgauge/Service.qml'
+    })) {
+        const src = read(file);
+        const body = src.split('snapshot()')[1] ?? '';
+        const start = body.indexOf('return {');
+        const fields = new Set([...body.slice(start, body.indexOf('}', start))
+            .matchAll(/^\s*(\w+):/gm)].map(m => m[1]));
+        const missing = declared.filter(f => !fields.has(f));
+        assert.deepEqual(missing, [], `${name} never sends ${missing.join(', ')}`);
+    }
+});
