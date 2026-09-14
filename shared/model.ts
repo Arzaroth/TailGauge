@@ -206,6 +206,10 @@ export interface ProviderDescriptor {
   label: string
   // Probed on PATH to decide whether the provider is installed at all.
   cli: string
+  // Whether this model can actually parse the CLI yet. A provider can be
+  // installed and named by the panel before anything knows how to drive it,
+  // and a frontend must not fire one provider's commands at another's binary.
+  supported: boolean
   capabilities: ProviderCapabilities
 }
 
@@ -266,6 +270,7 @@ var PROVIDERS: ProviderDescriptor[] = [
     id: "tailscale",
     label: "Tailscale",
     cli: "tailscale",
+    supported: true,
     capabilities: {
       exitNodes: true,
       mullvad: true,
@@ -279,6 +284,7 @@ var PROVIDERS: ProviderDescriptor[] = [
     id: "netbird",
     label: "NetBird",
     cli: "netbird",
+    supported: false,
     capabilities: {
       exitNodes: false,
       mullvad: false,
@@ -301,6 +307,25 @@ function providerDescriptors(): ProviderDescriptor[] {
 function providerCliNames(): string[] {
   var out: string[] = []
   for (var i = 0; i < PROVIDERS.length; i++) out.push(PROVIDERS[i].cli)
+  return out
+}
+
+// `which a b` prints one absolute path per binary it resolved and reports the
+// misses on stderr, so the exit code is a miss count rather than an answer.
+// Only stdout decides, and only lines that are real paths.
+function parseProviderProbe(raw: Raw): ProviderState[] {
+  var found: { [cli: string]: boolean } = {}
+  var lines = String(raw || "").split(/\r?\n/)
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim()
+    if (line.charAt(0) !== "/") continue
+    var base = line.slice(line.lastIndexOf("/") + 1)
+    if (base !== "") found[base] = true
+  }
+  var out: ProviderState[] = []
+  for (var j = 0; j < PROVIDERS.length; j++) {
+    out.push({ id: PROVIDERS[j].id, installed: found[PROVIDERS[j].cli] === true })
+  }
   return out
 }
 
@@ -346,9 +371,21 @@ function activeProvider(state: PanelState | null | undefined): ProviderDescripto
   for (var i = 0; i < available.length; i++) {
     if (available[i].id === wanted) return available[i]
   }
+  // With no choice made, land on one this model can actually drive rather than
+  // on whichever the registry lists first.
+  for (var j = 0; j < available.length; j++) {
+    if (available[j].supported) return available[j]
+  }
   // A selection naming a provider that is gone falls back rather than blanking
   // the panel: uninstalling one provider must not strand the other.
   return available[0]
+}
+
+// Installed and parseable. The frontends poll only when this holds, so one
+// provider's commands are never fired at another's binary.
+function providerReady(state: PanelState | null | undefined): boolean {
+  var provider = activeProvider(state)
+  return provider !== null && provider.supported === true
 }
 
 function providerSupports(state: PanelState | null | undefined, capability: ProviderCapability): boolean {
@@ -973,7 +1010,8 @@ function panelRow(row: PanelRowInput): PanelRow {
 function panelHeader(state: PanelState, t: Translate, phraseIndex?: number): PanelHeader {
   var index = typeof phraseIndex === "number" ? phraseIndex : 0
   var label = providerLabel(state)
-  var present = activeProvider(state) !== null
+  // A provider we cannot drive yet is named, but its switch would do nothing.
+  var present = providerReady(state)
   var meta = state.active
     ? t(ACTIVE_PHRASES[((index % ACTIVE_PHRASES.length) + ACTIVE_PHRASES.length) % ACTIVE_PHRASES.length])
     : formatText(t("%1 is disconnected"), label)
@@ -1001,11 +1039,15 @@ function panelHeader(state: PanelState, t: Translate, phraseIndex?: number): Pan
 // Precedence, in one place: a command's own progress beats a stale error, and
 // both beat the idle line.
 function panelStatus(state: PanelState, t: Translate): PanelStatus {
-  if (activeProvider(state) === null) {
+  var provider = activeProvider(state)
+  if (provider === null) {
     return {
       text: formatText(t("No supported VPN CLI on PATH. Looked for %1."), providerLabelList()),
       tone: "dim"
     }
+  }
+  if (!provider.supported) {
+    return { text: formatText(t("%1 is installed, but TailGauge cannot drive it yet."), provider.label), tone: "dim" }
   }
   if (state.actionStatus) return { text: String(state.actionStatus), tone: "dim" }
   if (state.lastError) return { text: String(state.lastError), tone: "error" }
@@ -1099,7 +1141,7 @@ function selfSection(state: PanelState, t: Translate): PanelSection {
   return {
     id: "self",
     title: t("This device"),
-    visible: activeProvider(state) !== null && state.active === true && rows.length > 0,
+    visible: providerReady(state) && state.active === true && rows.length > 0,
     empty: "",
     rows: rows
   }
@@ -1286,7 +1328,7 @@ function machinesSection(state: PanelState, t: Translate, machineQuery: string):
   return {
     id: "machines",
     title: t("Machines"),
-    visible: activeProvider(state) !== null && state.active === true,
+    visible: providerReady(state) && state.active === true,
     empty: t("No machines found on this tailnet."),
     rows: rows
   }
@@ -1381,6 +1423,8 @@ function panelNavIndexOf(panel: Panel | null | undefined, rowId: Raw): number {
 export {
   providerDescriptors,
   providerCliNames,
+  parseProviderProbe,
+  providerReady,
   providerById,
   installedProviders,
   activeProvider,
