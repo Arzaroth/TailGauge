@@ -1,9 +1,9 @@
 {
   "uuid": "tailgauge@arzaroth.github.io",
-  "version": 9,
+  "version": 10,
   "name": "TailGauge",
-  "version-name": "0.3.4",
-  "description": "Tailscale in the GNOME panel: connection state, on/off, account switching, exit nodes including Mullvad regions, machine browsing with copy actions, and Taildrop file sending. Drives the tailscale CLI directly.",
+  "version-name": "0.4.0",
+  "description": "Tailscale and NetBird in the GNOME panel: connection state, on/off, account switching, exit nodes including Mullvad regions, networks, machine browsing with copy actions, and Taildrop file sending. Drives each provider's CLI directly.",
   "shell-version": [
     "45",
     "46",

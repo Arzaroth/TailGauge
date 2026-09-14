@@ -2,11 +2,11 @@
     "KPlugin": {
         "Id": "org.tailgauge.plasmoid",
         "Name": "TailGauge",
-        "Description": "Tailscale status, exit nodes, machines and Taildrop in the panel",
+        "Description": "Tailscale and NetBird status, exit nodes, networks, machines and Taildrop in the panel",
         "Icon": "network-vpn",
         "Category": "Network",
         "License": "MIT",
-        "Version": "0.3.4",
+        "Version": "0.4.0",
         "Website": "https://github.com/Arzaroth/TailGauge",
         "Authors": [
             { "Name": "Arzaroth" }

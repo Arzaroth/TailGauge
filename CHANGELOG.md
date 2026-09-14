@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.4.0]
+
 ### Added
 
 - **The bar icon describes the machine, not the panel's current view.** Every
@@ -11,6 +13,9 @@ All notable changes to this project are documented here.
   one the panel shows no longer reads as a disconnection from one that is still
   up. Hovering the icon lists each installed provider and what it is doing,
   the one being viewed first.
+
+- **A refresh control sits in the panel header** on every desktop, rather than
+  being a middle click on the bar that nothing advertised.
 
 - **A machine row opens onto what it is actually doing**: how the tunnel is
   carried and its latency, the endpoint, the last handshake, bytes each way,
@@ -66,6 +71,12 @@ All notable changes to this project are documented here.
   without it falls back to the poll timer.
 
 ### Changed
+
+- **The bar icon no longer toggles the connection.** It describes the machine
+  rather than one provider, so right click on Omarchy and middle click on
+  Plasma were turning off a provider you could not see, and leaving the icon
+  lit when the other one was still up. Both cycle which provider the panel is
+  about now, and do nothing when only one is installed.
 
 - **The model no longer describes itself as Tailscale's.** `Peer.TailscaleIPs`
   and `TailscaleIPv6` are `IPv4` and `IPv6`, `tailnetExitNodes` is
