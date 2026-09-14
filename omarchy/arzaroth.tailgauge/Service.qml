@@ -19,6 +19,12 @@ Item {
 
   // One entry per installed provider, kept whether or not it is the one on
   // screen, so the bar icon and its tooltip describe the machine.
+  // The last good panel for each provider, so switching shows what that
+  // provider looked like a moment ago rather than an empty panel until its
+  // first poll lands.
+  property var _cache: ({})
+  property string _cachedProviderId: ""
+
   property var summaries: []
   property int _bgIndex: 0
   property string _bgProviderId: ""
@@ -509,6 +515,7 @@ Item {
       activeProviderId: root.activeProviderId
     }, raw)
     _setSummary(activeProviderId, parsed)
+    _cachedProviderId = activeProviderId
     if (!parsed.ok) {
       resetUnavailable(parsed.message || "Status error")
       lastError = parsed.error || "Failed to parse tailscale status"
@@ -569,8 +576,13 @@ Item {
   function _adoptProvider() {
     var polls = ["status", "mullvad", "accounts", "networks", "watch"]
     for (var i = 0; i < polls.length; i++) _reap(polls[i])
-    // The previous provider's machines and accounts are not this one's.
-    resetUnavailable("Switching")
+    // The previous provider's machines and accounts are not this one's,
+    // but they are still worth keeping for when it comes back.
+    _saveCache(_cachedProviderId)
+    _cachedProviderId = activeProviderId
+    if (!_restoreCache(activeProviderId)) resetUnavailable("Switching")
+    // A toggle pending on the provider we just left is not pending here.
+    _desired = -1
     // Seed from what the background poll already knows, so the header does
     // not flash disconnected on the way to a provider that is up.
     for (var j = 0; j < summaries.length; j++) {
@@ -595,6 +607,27 @@ Item {
     if (id === "" || id === activeProviderId) return
     activeProviderId = id
     providerChanged(id)
+  }
+
+  readonly property var _cachedFields: [
+    "running", "needsLogin", "daemonState", "statusText", "authUrl",
+    "selfName", "selfDnsName", "selfIp", "selfUserId", "selfPeer", "fileSharing",
+    "peers", "exitNodes", "ownExitNodes", "mullvadExitNodes", "mullvadRegions",
+    "networks", "accounts", "selectedAccountId", "selectedAccountLabel"
+  ]
+
+  function _saveCache(id) {
+    if (!id) return
+    var snap = {}
+    for (var i = 0; i < _cachedFields.length; i++) snap[_cachedFields[i]] = root[_cachedFields[i]]
+    _cache[id] = snap
+  }
+
+  function _restoreCache(id) {
+    var snap = id ? _cache[id] : null
+    if (!snap) return false
+    for (var i = 0; i < _cachedFields.length; i++) root[_cachedFields[i]] = snap[_cachedFields[i]]
+    return true
   }
 
   function _setSummary(providerId, parsed) {

@@ -48,7 +48,10 @@ test('frontend-local strings are desktop conventions only', () => {
 test('the Omarchy frontend writes no user-visible string', () => {
     // QML takes either quote, and this repository writes both.
     const written = [...omarchySource.matchAll(/\b(?:text|placeholderText|tooltipText|title|meta|label):\s*(["'])((?:(?!\1).){4,}?)\1/g)]
-        .map(m => m[2]);
+        .map(m => m[2])
+        // Same allowance the other two frontends get: a desktop convention is
+        // the frontend's to name, because it is not panel content.
+        .filter(s => !DESKTOP_ONLY.has(s));
     assert.deepEqual(written, [],
         `resolvePanel should be producing these: ${written.join(', ')}`);
 });
