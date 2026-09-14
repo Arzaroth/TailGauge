@@ -41,6 +41,21 @@ export interface Peer {
   LatencyMs?: number
 }
 
+// A NetBird network: a route the daemon can be told to take or leave.
+export interface Network {
+  id: string
+  range: string
+  domains: string[]
+  selected: boolean
+  status: string
+}
+
+export interface NetworksResult {
+  ok: boolean
+  networks: Network[]
+  message: string
+}
+
 export interface Account {
   id: string
   nickname?: string
@@ -259,6 +274,8 @@ export interface PanelState {
   fileSharing?: boolean
   peers?: Peer[]
   ownExitNodes?: Peer[]
+  networks?: Network[]
+  selectingNetworkId?: string
   mullvadRegions?: Peer[]
   accounts?: Account[]
   selectedAccountId?: string
@@ -964,6 +981,71 @@ function netbirdPeer(raw: Raw): Peer {
   }
 }
 
+function splitNetworkList(value: Raw): string[] {
+  var text = String(value || "").trim()
+  if (text === "" || text === "-") return []
+  var parts = text.split(",")
+  var result: string[] = []
+  for (var i = 0; i < parts.length; i++) {
+    var part = parts[i].trim()
+    if (part !== "") result.push(part)
+  }
+  return result
+}
+
+// `netbird networks list` prints a block per network rather than a table, so
+// this reads fields off indented lines until the next "- ID:" starts one.
+function parseNetbirdNetworks(raw: Raw): NetworksResult {
+  var text = String(raw || "").trim()
+  if (text === "") return { ok: true, networks: [], message: "" }
+  if (text.indexOf("No networks available.") !== -1) return { ok: true, networks: [], message: "" }
+  if (text.indexOf("Available Networks:") === -1) {
+    return { ok: false, networks: [], message: text.split(/\r?\n/)[0] }
+  }
+
+  var lines = text.split(/\r?\n/)
+  var networks: Network[] = []
+  var current: Network | null = null
+
+  for (var i = 0; i < lines.length; i++) {
+    var trimmed = lines[i].trim()
+    if (trimmed === "" || trimmed === "Available Networks:") continue
+
+    var idMatch = /^-\s*ID:\s*(.*)$/.exec(trimmed)
+    if (idMatch) {
+      if (current) networks.push(current)
+      current = { id: idMatch[1].trim(), range: "", domains: [], selected: false, status: "" }
+      continue
+    }
+    if (!current) continue
+    // A resolved-address line, which carries no field we show.
+    if (/^\[.+?\]:/.test(trimmed)) continue
+
+    var field = /^([A-Za-z ]+):\s*(.*)$/.exec(trimmed)
+    if (!field) continue
+    var key = field[1].trim().toLowerCase()
+    var value = field[2].trim()
+    // A "-" is how the CLI spells an absent value, in the range as in the
+    // domain list. Neither is something to show.
+    if (key === "network") current.range = value === "-" ? "" : value
+    else if (key === "domains") current.domains = splitNetworkList(value)
+    else if (key === "status") {
+      current.status = value
+      current.selected = value.toLowerCase() === "selected"
+    }
+  }
+  if (current) networks.push(current)
+
+  return { ok: true, networks: networks, message: "" }
+}
+
+function networkSubtitle(network: Raw): string {
+  if (!network) return ""
+  if (network.range) return String(network.range)
+  var domains = network.domains || []
+  return domains.length > 0 ? domains.join(", ") : ""
+}
+
 function parseNetbirdStatus(raw: Raw): StatusResult {
   var text = String(raw || "").trim()
   if (text === "") return { ok: true, unavailable: true, message: "Disconnected" }
@@ -1439,6 +1521,38 @@ function exitNodesSection(state: PanelState, t: Translate, recentRegions: string
 
 var MACHINE_SEARCH_MIN = 8
 
+function networksSection(state: PanelState, t: Translate): PanelSection {
+  var supported = providerSupports(state, "networks")
+  var networks = supported ? (state.networks || []) : []
+  var rows: PanelRow[] = []
+  for (var i = 0; i < networks.length; i++) {
+    var network = networks[i]
+    var id = String(network.id || "")
+    var selected = network.selected === true
+    rows.push(panelRow({
+      id: "network:" + id,
+      kind: "network",
+      label: id,
+      sublabel: networkSubtitle(network),
+      icon: selected ? "checkmark-symbolic" : "network-workgroup-symbolic",
+      glyph: selected ? "\uf00c" : "\udb81\udedb",
+      action: "selectNetwork",
+      current: selected,
+      bold: selected,
+      busy: String(state.selectingNetworkId || "") === id,
+      hint: selected ? t("Leave") : t("Join"),
+      payload: network
+    }))
+  }
+  return {
+    id: "networks",
+    title: t("Networks"),
+    visible: supported && state.active === true && rows.length > 0,
+    empty: "",
+    rows: rows
+  }
+}
+
 function machinesSection(state: PanelState, t: Translate, machineQuery: string): PanelSection {
   var query = String(machineQuery || "")
   var all = state.active ? (state.peers || []) : []
@@ -1534,6 +1648,7 @@ function resolvePanel(state: PanelState | null | undefined, options?: ResolveOpt
     selfSection(source, t),
     connectionsSection(source, t),
     exitNodesSection(source, t, opts.recentRegions || [], opts.mullvadQuery || "", opts.mullvadPickerOpen === true),
+    networksSection(source, t),
     machinesSection(source, t, opts.machineQuery || "")
   ]
 
@@ -1621,6 +1736,8 @@ export {
   parseStatus,
   parseAccounts,
   parseNetbirdStatus,
+  parseNetbirdNetworks,
+  networkSubtitle,
   peerAddress,
   exitNodeTarget,
   firstUrl,
