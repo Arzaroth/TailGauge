@@ -1078,3 +1078,51 @@ test('a machine row carries its detail behind a disclosure arrow', () => {
     // Only the one asked for.
     assert.equal(only(open.rows, r => r.label === 'laptop', 'laptop row').expanded, false);
 });
+
+test('a zero date is "never", from either provider', () => {
+    // Tailscale fills the handshake only once a session is up; an idle peer
+    // carries the year-1 timestamp, which read as 739872 days ago.
+    const idle = M.peerFromStatus('x', {
+        LastHandshake: '0001-01-01T00:00:00Z',
+        LastSeen: '2026-09-14T05:00:00Z',
+        Relay: 'par',
+    }, {});
+    assert.equal(idle.LastHandshake, '');
+    assert.equal(idle.LastSeen, '2026-09-14T05:00:00Z');
+
+    const rows = M.peerDetailRows(idle, (x: string) => x, NOW);
+    const by = Object.fromEntries(rows.map(r => [r.id, r.sublabel]));
+    assert.equal(by['detail:handshake'], undefined, 'no handshake, no row');
+    assert.equal(by['detail:seen'], '1 hour ago', 'last seen stands in for it');
+    assert.equal(by['detail:connection'], 'Relayed via par');
+});
+
+test('a live handshake wins over last seen', () => {
+    const live = M.peerFromStatus('x', {
+        CurAddr: '1.2.3.4:41641',
+        LastHandshake: '2026-09-14T05:59:00Z',
+        LastSeen: '2026-09-14T05:00:00Z',
+    }, {});
+    const by = Object.fromEntries(
+        M.peerDetailRows(live, (x: string) => x, NOW).map(r => [r.id, r.sublabel]));
+    assert.equal(by['detail:handshake'], '1 minute ago');
+    assert.equal(by['detail:seen'], undefined, 'not both');
+});
+
+test('the hero carries the active provider mark', () => {
+    const ts = M.resolvePanel(state({providers: detected('tailscale')}), {}).header;
+    const nb = M.resolvePanel(state({providers: detected('netbird')}), {}).header;
+    assert.notEqual(ts.glyph, nb.glyph, 'each provider is drawn as itself');
+    assert.equal(ts.glyph, M.providerById('tailscale')!.glyph);
+    assert.equal(nb.icon, M.providerById('netbird')!.icon);
+    // Nothing installed still draws something rather than an empty box.
+    const none = M.resolvePanel(state({providers: detected(), installed: false}), {}).header;
+    assert.notEqual(none.glyph, '');
+});
+
+test('every provider brings its own mark', () => {
+    for (const p of M.providerDescriptors()) {
+        assert.ok(p.glyph.length > 0, `${p.id} has no glyph`);
+        assert.ok(p.icon.length > 0, `${p.id} has no icon name`);
+    }
+});

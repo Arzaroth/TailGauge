@@ -45,6 +45,7 @@ export interface Peer {
   RxBytes?: number
   TxBytes?: number
   LastHandshake?: string
+  LastSeen?: string
   Routes?: string[]
 }
 
@@ -182,6 +183,8 @@ export interface PanelSection {
 export interface PanelHeader {
   id: string
   title: string
+  icon: string
+  glyph: string
   meta: string
   action: string
   toggleVisible: boolean
@@ -276,6 +279,8 @@ export interface ProviderDescriptor {
   // installed and named by the panel before anything knows how to drive it,
   // and a frontend must not fire one provider's commands at another's binary.
   supported: boolean
+  icon: string
+  glyph: string
   capabilities: ProviderCapabilities
   commands: ProviderCommands
 }
@@ -343,6 +348,8 @@ var PROVIDERS: ProviderDescriptor[] = [
     label: "Tailscale",
     cli: "tailscale",
     supported: true,
+    icon: "network-vpn-symbolic",
+    glyph: "\udb83\udea0",
     capabilities: {
       exitNodes: true,
       mullvad: true,
@@ -375,6 +382,8 @@ var PROVIDERS: ProviderDescriptor[] = [
     label: "NetBird",
     cli: "netbird",
     supported: true,
+    icon: "network-workgroup-symbolic",
+    glyph: "\udb85\uddc6",
     capabilities: {
       exitNodes: false,
       mullvad: false,
@@ -684,7 +693,8 @@ function peerFromStatus(id: string, peer: Raw, users: Raw): Peer {
     Relay: String(peer.Relay || ""),
     RxBytes: typeof peer.RxBytes === "number" ? peer.RxBytes : 0,
     TxBytes: typeof peer.TxBytes === "number" ? peer.TxBytes : 0,
-    LastHandshake: String(peer.LastHandshake || ""),
+    LastHandshake: isZeroTime(peer.LastHandshake) ? "" : String(peer.LastHandshake || ""),
+    LastSeen: isZeroTime(peer.LastSeen) ? "" : String(peer.LastSeen || ""),
     Routes: peer.PrimaryRoutes || []
   }
 }
@@ -1014,7 +1024,7 @@ function netbirdOnline(status: Raw): boolean {
   return String(status || "").toLowerCase() === "connected"
 }
 
-function isZeroNetbirdTime(value: Raw): boolean {
+function isZeroTime(value: Raw): boolean {
   var text = String(value || "").trim()
   return text === "" || text.indexOf("0001-01-01") === 0
 }
@@ -1047,7 +1057,7 @@ function netbirdPeer(raw: Raw): Peer {
     Relay: String(value.relayAddress || ""),
     RxBytes: Number(value.transferReceived || 0),
     TxBytes: Number(value.transferSent || 0),
-    LastHandshake: isZeroNetbirdTime(value.lastWireguardHandshake)
+    LastHandshake: isZeroTime(value.lastWireguardHandshake)
       ? "" : String(value.lastWireguardHandshake || ""),
     Routes: value.networks && typeof value.networks.length === "number" ? value.networks : []
   }
@@ -1490,7 +1500,11 @@ function peerDetailRows(peer: Raw, t: Translate, nowMs?: number): PanelRow[] {
 
   detail("connection", t("Connection"), connection)
   detail("endpoint", t("Endpoint"), String(peer.Endpoint || ""))
-  detail("handshake", t("Last handshake"), formatSince(peer.LastHandshake, nowMs))
+  var handshake = formatSince(peer.LastHandshake, nowMs)
+  detail("handshake", t("Last handshake"), handshake)
+  // Tailscale fills the handshake and byte counters only once a session is up.
+  // For an idle peer, when the control plane last saw it is all there is.
+  if (handshake === "") detail("seen", t("Last seen"), formatSince(peer.LastSeen, nowMs))
 
   var rx = Number(peer.RxBytes || 0)
   var tx = Number(peer.TxBytes || 0)
@@ -1507,6 +1521,7 @@ function peerDetailRows(peer: Raw, t: Translate, nowMs?: number): PanelRow[] {
 function panelHeader(state: PanelState, t: Translate, phraseIndex?: number): PanelHeader {
   var index = typeof phraseIndex === "number" ? phraseIndex : 0
   var label = providerLabel(state)
+  var provider = activeProvider(state)
   // A provider we cannot drive yet is named, but its switch would do nothing.
   var present = providerReady(state)
   var meta = state.active
@@ -1515,6 +1530,8 @@ function panelHeader(state: PanelState, t: Translate, phraseIndex?: number): Pan
   return {
     id: "header",
     title: present ? (state.selfName || label) : label,
+    icon: provider ? provider.icon : "network-vpn-symbolic",
+    glyph: provider ? provider.glyph : "\udb83\udea0",
     meta: meta,
     action: "toggle",
     toggleVisible: present,
@@ -1874,7 +1891,7 @@ function machinesSection(state: PanelState, t: Translate, machineQuery: string,
         id: "detail",
         label: expanded ? t("Hide details") : t("Show details"),
         icon: expanded ? "pan-up-symbolic" : "pan-down-symbolic",
-        glyph: expanded ? "\u2303" : "\u2304"
+        glyph: expanded ? "\udb80\udd43" : "\udb80\udd40"
       })
     }
     if (canSendFiles(state, peer))
