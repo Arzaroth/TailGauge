@@ -52,14 +52,72 @@ Panel {
   readonly property string cursorRowId: cursorIndex >= 0 && cursorIndex < panel.navigation.length
     ? String(panel.navigation[cursorIndex].rowId) : ""
 
+  // ---- search ---------------------------------------------------------------
+  // The model decides what a row is findable by and hands it over as a
+  // pre-lowercased key; the only thing left here is the substring test.
+
+  readonly property bool machinesMatched: scopeMatched("machines")
+  readonly property bool mullvadMatched: scopeMatched("mullvad")
+
+  function searchQuery(scope) {
+    if (scope === "machines") return machineQuery.trim().toLowerCase()
+    if (scope === "mullvad") return mullvadQuery.trim().toLowerCase()
+    return ""
+  }
+
+  // Rows and navigation entries carry the same two fields, so both sides of the
+  // panel stay filtered by one predicate rather than by two that drift.
+  function searchMatches(item) {
+    if (!item || item.searchScope === "") return true
+    var query = searchQuery(item.searchScope)
+    return query === "" || item.searchKey.indexOf(query) !== -1
+  }
+
+  function scopeMatched(scope) {
+    if (searchQuery(scope) === "") return true
+    var nav = panel.navigation
+    for (var i = 0; i < nav.length; i++)
+      if (nav[i].searchScope === scope && searchMatches(nav[i])) return true
+    return false
+  }
+
+  function rowVisible(row) {
+    if (!row || row.searchScope === "") return true
+    if (row.searchKey !== "") return searchMatches(row)
+    return !(row.searchScope === "machines" ? machinesMatched : mullvadMatched)
+  }
+
   // ---- cursor ---------------------------------------------------------------
 
   function moveCursor(delta) {
     cursorActive = true
-    var count = panel.navigation.length
-    if (count === 0) return
-    cursorIndex = Math.max(0, Math.min(count - 1, cursorIndex + delta))
+    var nav = panel.navigation
+    if (nav.length === 0) return
+    var step = delta < 0 ? -1 : 1
+    var index = cursorIndex
+    for (var moves = Math.abs(delta); moves > 0; moves--) {
+      var next = index + step
+      while (next >= 0 && next < nav.length && !searchMatches(nav[next])) next += step
+      if (next < 0 || next >= nav.length) break
+      index = next
+    }
+    cursorIndex = index
     scrollCursorIntoView()
+  }
+
+  // A query that filters the selected row out from under the cursor has to
+  // leave it somewhere it can still be seen.
+  onMachineQueryChanged: keepCursorVisible()
+  onMullvadQueryChanged: keepCursorVisible()
+
+  function keepCursorVisible() {
+    var nav = panel.navigation
+    if (cursorIndex < 0 || cursorIndex >= nav.length || searchMatches(nav[cursorIndex])) return
+    for (var down = cursorIndex + 1; down < nav.length; down++)
+      if (searchMatches(nav[down])) { cursorIndex = down; return }
+    for (var up = cursorIndex - 1; up >= 0; up--)
+      if (searchMatches(nav[up])) { cursorIndex = up; return }
+    cursorIndex = 0
   }
 
   function selectedRow() {
@@ -614,7 +672,7 @@ Panel {
 
                   Text {
                     textFormat: Text.PlainText
-                    visible: rowGroup.isEmpty
+                    visible: rowGroup.isEmpty && root.rowVisible(rowGroup.modelData)
                     width: parent.width
                     text: rowGroup.modelData ? rowGroup.modelData.label : ""
                     color: root.dim
@@ -657,6 +715,7 @@ Panel {
 
                   RowView {
                     visible: !rowGroup.isEmpty && !rowGroup.isSearch
+                      && root.rowVisible(rowGroup.modelData)
                     width: parent.width
                     row: rowGroup.modelData
                   }
@@ -700,6 +759,7 @@ Panel {
                     RowView {
                       id: childView
                       required property int index
+                      visible: root.rowVisible(childView.row)
                       width: rowGroup.width - Style.space(16)
                       x: Style.space(16)
                       row: rowGroup.modelData
