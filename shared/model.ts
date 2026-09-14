@@ -35,10 +35,17 @@ export interface Peer {
   City?: string
   Status?: string
   MullvadRegion?: boolean
-  // NetBird only: how the tunnel is carried, and its round trip. -1 is "not
-  // measured" rather than "instant".
+  // How the tunnel is carried, and its round trip. -1 is "not measured"
+  // rather than "instant"; only NetBird reports a latency.
   ConnectionType?: string
   LatencyMs?: number
+  // What the expanded row shows. Absent where the provider does not say.
+  Endpoint?: string
+  Relay?: string
+  RxBytes?: number
+  TxBytes?: number
+  LastHandshake?: string
+  Routes?: string[]
 }
 
 // A NetBird network: a route the daemon can be told to take or leave.
@@ -322,6 +329,8 @@ export interface ResolveOptions {
   mullvadQuery?: string
   mullvadPickerOpen?: boolean
   machineQuery?: string
+  expandedPeerId?: string
+  nowMs?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -340,7 +349,9 @@ var PROVIDERS: ProviderDescriptor[] = [
       fileSend: true,
       accounts: true,
       networks: false,
-      connectionQuality: false
+      // Empty CurAddr with a relay region is a relayed peer, so the direct or
+      // relayed reading is there for the asking.
+      connectionQuality: true
     },
     commands: {
       status: ["tailscale", "status", "--json"],
@@ -665,7 +676,16 @@ function peerFromStatus(id: string, peer: Raw, users: Raw): Peer {
     Tags: peer.Tags || [],
     ExitNodeOption: peer.ExitNodeOption === true,
     ExitNode: peer.ExitNode === true,
-    Mullvad: isMullvadPeer(peer)
+    Mullvad: isMullvadPeer(peer),
+    // A direct address means the traffic is not going through a relay.
+    ConnectionType: String(peer.CurAddr || "") !== "" ? "P2P" : (peer.Relay ? "Relayed" : ""),
+    LatencyMs: -1,
+    Endpoint: String(peer.CurAddr || ""),
+    Relay: String(peer.Relay || ""),
+    RxBytes: typeof peer.RxBytes === "number" ? peer.RxBytes : 0,
+    TxBytes: typeof peer.TxBytes === "number" ? peer.TxBytes : 0,
+    LastHandshake: String(peer.LastHandshake || ""),
+    Routes: peer.PrimaryRoutes || []
   }
 }
 
@@ -994,6 +1014,11 @@ function netbirdOnline(status: Raw): boolean {
   return String(status || "").toLowerCase() === "connected"
 }
 
+function isZeroNetbirdTime(value: Raw): boolean {
+  var text = String(value || "").trim()
+  return text === "" || text.indexOf("0001-01-01") === 0
+}
+
 function netbirdPeer(raw: Raw): Peer {
   var value = raw || {}
   var fqdn = cleanDnsName(String(value.fqdn || ""))
@@ -1017,7 +1042,14 @@ function netbirdPeer(raw: Raw): Peer {
     Mullvad: false,
     Status: String(value.status || ""),
     ConnectionType: String(value.connectionType || ""),
-    LatencyMs: latencyNs > 0 ? latencyNs / 1000000 : -1
+    LatencyMs: latencyNs > 0 ? latencyNs / 1000000 : -1,
+    Endpoint: String((value.iceCandidateEndpoint || {}).remote || ""),
+    Relay: String(value.relayAddress || ""),
+    RxBytes: Number(value.transferReceived || 0),
+    TxBytes: Number(value.transferSent || 0),
+    LastHandshake: isZeroNetbirdTime(value.lastWireguardHandshake)
+      ? "" : String(value.lastWireguardHandshake || ""),
+    Routes: value.networks && typeof value.networks.length === "number" ? value.networks : []
   }
 }
 
@@ -1390,6 +1422,88 @@ function barState(state: PanelState, t: Translate): BarState {
   }
 }
 
+function formatBytes(value: Raw): string {
+  var bytes = Number(value || 0)
+  if (!(bytes > 0)) return "0 B"
+  var units = ["B", "KB", "MB", "GB", "TB"]
+  var i = 0
+  while (bytes >= 1024 && i < units.length - 1) {
+    bytes = bytes / 1024
+    i += 1
+  }
+  // One decimal below 10 keeps "1.4 MB" from rounding to "1 MB".
+  var shown = bytes >= 10 || i === 0 ? String(Math.round(bytes)) : String(Math.round(bytes * 10) / 10)
+  return shown + " " + units[i]
+}
+
+function formatSince(value: Raw, nowMs: Raw): string {
+  var text = String(value || "").trim()
+  if (text === "") return ""
+  var then = Date.parse(text)
+  if (isNaN(then)) return ""
+  var now = typeof nowMs === "number" ? nowMs : Date.now()
+  var seconds = Math.floor((now - then) / 1000)
+  if (seconds < 0) return ""
+  if (seconds < 60) return "just now"
+  var minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return minutes + (minutes === 1 ? " minute ago" : " minutes ago")
+  var hours = Math.floor(minutes / 60)
+  if (hours < 24) return hours + (hours === 1 ? " hour ago" : " hours ago")
+  var days = Math.floor(hours / 24)
+  return days + (days === 1 ? " day ago" : " days ago")
+}
+
+// How the tunnel is carried, in words rather than a provider's shorthand.
+function connectionSummary(peer: Raw, t: Translate): string {
+  if (!peer) return ""
+  var kind = String(peer.ConnectionType || "")
+  var relay = String(peer.Relay || "")
+  if (kind === "P2P" || kind === "Direct") return t("Direct peer-to-peer")
+  if (kind === "Relayed" || relay !== "") {
+    return relay !== "" ? formatText(t("Relayed via %1"), relay) : t("Relayed")
+  }
+  return ""
+}
+
+// The rows behind a machine's disclosure arrow. Only what the provider
+// actually reported: an absent reading is a row that is not there.
+function peerDetailRows(peer: Raw, t: Translate, nowMs?: number): PanelRow[] {
+  var rows: PanelRow[] = []
+  if (!peer) return rows
+
+  function detail(id: string, label: string, value: string): void {
+    if (value === "") return
+    rows.push(panelRow({
+      id: "detail:" + id,
+      kind: "detail",
+      label: label,
+      sublabel: value,
+      navigable: false
+    }))
+  }
+
+  var connection = connectionSummary(peer, t)
+  var latency = typeof peer.LatencyMs === "number" && peer.LatencyMs >= 0
+    ? Math.round(peer.LatencyMs) + " ms" : ""
+  if (connection !== "" && latency !== "") connection = connection + " \u00b7 " + latency
+  else if (connection === "") connection = latency
+
+  detail("connection", t("Connection"), connection)
+  detail("endpoint", t("Endpoint"), String(peer.Endpoint || ""))
+  detail("handshake", t("Last handshake"), formatSince(peer.LastHandshake, nowMs))
+
+  var rx = Number(peer.RxBytes || 0)
+  var tx = Number(peer.TxBytes || 0)
+  if (rx > 0 || tx > 0) {
+    detail("transfer", t("Transfer"), "\u2193 " + formatBytes(rx) + "   \u2191 " + formatBytes(tx))
+  }
+
+  var routes = peer.Routes || []
+  if (routes.length > 0) detail("routes", t("Routes"), routes.join(", "))
+
+  return rows
+}
+
 function panelHeader(state: PanelState, t: Translate, phraseIndex?: number): PanelHeader {
   var index = typeof phraseIndex === "number" ? phraseIndex : 0
   var label = providerLabel(state)
@@ -1721,7 +1835,8 @@ function networksSection(state: PanelState, t: Translate): PanelSection {
   }
 }
 
-function machinesSection(state: PanelState, t: Translate, machineQuery: string): PanelSection {
+function machinesSection(state: PanelState, t: Translate, machineQuery: string,
+                         expandedPeerId: string, nowMs?: number): PanelSection {
   var query = String(machineQuery || "")
   var all = state.active ? (state.peers || []) : []
   var rows: PanelRow[] = []
@@ -1751,7 +1866,17 @@ function machinesSection(state: PanelState, t: Translate, machineQuery: string):
   for (var i = 0; i < peers.length; i++) {
     var peer = peers[i]
     var copyOptions = peerCopyOptions(peer)
+    var details = peerDetailRows(peer, t, nowMs)
+    var expanded = details.length > 0 && String(expandedPeerId) === String(peer.id || "")
     var actions: RowAction[] = []
+    if (details.length > 0) {
+      actions.push({
+        id: "detail",
+        label: expanded ? t("Hide details") : t("Show details"),
+        icon: expanded ? "pan-up-symbolic" : "pan-down-symbolic",
+        glyph: expanded ? "\u2303" : "\u2304"
+      })
+    }
     if (canSendFiles(state, peer))
       actions.push({ id: "send", label: t("Send files"), icon: "document-send-symbolic", glyph: "󰒊" })
     if (copyOptions.length > 0)
@@ -1766,6 +1891,8 @@ function machinesSection(state: PanelState, t: Translate, machineQuery: string):
       action: copyOptions.length > 0 ? "copy" : "",
       actions: actions,
       copyOptions: copyOptions,
+      children: details,
+      expanded: expanded,
       payload: peer
     }))
   }
@@ -1818,7 +1945,8 @@ function resolvePanel(state: PanelState | null | undefined, options?: ResolveOpt
     connectionsSection(source, t),
     exitNodesSection(source, t, opts.recentRegions || [], opts.mullvadQuery || "", opts.mullvadPickerOpen === true),
     networksSection(source, t),
-    machinesSection(source, t, opts.machineQuery || "")
+    machinesSection(source, t, opts.machineQuery || "",
+      String(opts.expandedPeerId || ""), opts.nowMs)
   ]
 
   return {
@@ -1923,6 +2051,10 @@ export {
   canSendFiles,
   formatText,
   peerCopyOptions,
+  peerDetailRows,
+  formatBytes,
+  formatSince,
+  connectionSummary,
   peerSubtitle,
   filterMachines,
   resolvePanel,
