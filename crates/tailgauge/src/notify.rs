@@ -124,3 +124,91 @@ fn detached(cmd: &mut Command) -> &mut Command {
     }
     cmd
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    fn notification() -> Notification<'static> {
+        Notification {
+            summary: "Received shot.png",
+            body: "Saved to ~/Downloads",
+            urgency: "normal",
+            image: Some("/home/me/Downloads/shot.png"),
+            open: Some("/home/me/Downloads/shot.png"),
+        }
+    }
+
+    #[test]
+    fn the_message_is_never_read_as_options() {
+        // A body that starts with a dash is a message: notify-send would take
+        // "--wait" from a peer's name as its own flag otherwise.
+        let mut n = notification();
+        n.summary = "--wait";
+        n.body = "-u critical";
+        let args = n.post_args();
+        let sep = args.iter().position(|a| a == "--").expect("a separator");
+        assert_eq!(&args[sep + 1..], ["--wait", "-u critical"]);
+    }
+
+    #[test]
+    fn an_image_is_a_file_url_and_is_absent_when_there_is_none() {
+        assert!(
+            notification()
+                .base_args()
+                .contains(&"--hint=string:image-path:file:///home/me/Downloads/shot.png".into())
+        );
+        let mut n = notification();
+        n.image = None;
+        assert!(!n.base_args().iter().any(|a| a.contains("image-path")));
+    }
+
+    #[test]
+    fn only_the_waiting_copy_asks_for_an_action() {
+        // `--wait` blocks until the notification is dismissed, so the copy that
+        // has a panel to get back to must not pass it.
+        assert!(!notification().post_args().iter().any(|a| a == "--wait"));
+        let waiting = notification().wait_args();
+        assert!(waiting.contains(&"--wait".to_string()));
+        assert!(waiting.contains(&"--action=default=Open".to_string()));
+    }
+
+    /// The detached copy is this same binary, so what it is re-executed with
+    /// has to parse back into the notification it came from.
+    #[test]
+    fn the_detached_copy_is_handed_the_same_notification() {
+        let n = notification();
+        let path = "/home/me/Downloads/shot.png";
+        let mut argv = vec!["tailgauge".to_string()];
+        argv.extend(n.relaunch_args(path));
+
+        let cli = crate::Cli::parse_from(argv);
+        let Some(crate::Command::Notify {
+            image,
+            open,
+            urgency,
+            await_action,
+            summary,
+            body,
+        }) = cli.command
+        else {
+            panic!("the relaunch argv is not a notify command")
+        };
+        assert!(await_action, "or the copy would post and exit at once");
+        assert_eq!(summary, n.summary);
+        assert_eq!(body, n.body);
+        assert_eq!(urgency, n.urgency);
+        assert_eq!(image.as_deref(), n.image);
+        assert_eq!(open.as_deref(), Some(path));
+    }
+
+    #[test]
+    fn a_notification_with_nothing_to_open_is_still_relaunchable() {
+        let mut n = notification();
+        n.image = None;
+        let mut argv = vec!["tailgauge".to_string()];
+        argv.extend(n.relaunch_args("/tmp/x"));
+        assert!(crate::Cli::try_parse_from(argv).is_ok());
+    }
+}

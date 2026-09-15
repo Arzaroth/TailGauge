@@ -54,3 +54,36 @@ fn pipe_into(program: &str, args: &[&str], text: &str) -> Result<bool> {
         .write_all(text.as_bytes())?;
     Ok(child.wait()?.success())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wl_copy_is_tried_first_only_under_wayland() {
+        // On an X11 session with XWayland tooling installed, wl-copy writes to
+        // a selection nothing on screen is reading: the paste silently does
+        // nothing.
+        let names = |wayland| -> Vec<&'static str> {
+            candidates(wayland).into_iter().map(|(p, _)| p).collect()
+        };
+        assert_eq!(names(true), ["wl-copy", "xclip", "xsel"]);
+        assert_eq!(names(false), ["xclip", "xsel", "wl-copy"]);
+    }
+
+    #[test]
+    fn each_tool_is_asked_for_the_clipboard_rather_than_the_primary_selection() {
+        // The default for both X11 tools is the middle-click selection, which
+        // is not what a Copy row means.
+        let args = |name: &str| -> Vec<&'static str> {
+            candidates(false)
+                .into_iter()
+                .find(|(p, _)| *p == name)
+                .map(|(_, a)| a.to_vec())
+                .expect(name)
+        };
+        assert_eq!(args("xclip"), ["-selection", "clipboard"]);
+        assert_eq!(args("xsel"), ["--clipboard", "--input"]);
+        assert!(args("wl-copy").is_empty());
+    }
+}

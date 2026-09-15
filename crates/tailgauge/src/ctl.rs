@@ -330,6 +330,56 @@ pub fn exit_nodes(provider: &ProviderDescriptor) -> Outcome {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tailgauge_core::providers::provider_by_id;
+
+    fn tailscale() -> &'static ProviderDescriptor {
+        provider_by_id("tailscale").expect("tailscale is a provider")
+    }
+
+    fn netbird() -> &'static ProviderDescriptor {
+        provider_by_id("netbird").expect("netbird is a provider")
+    }
+
+    fn why(outcome: Outcome) -> String {
+        match outcome {
+            Outcome::Failed(why) => why,
+            Outcome::Ok => panic!("it went ahead"),
+            Outcome::Disconnected => panic!("it reported a connection"),
+        }
+    }
+
+    /// What a frontend hands back is what the panel gave it, so the cases are
+    /// built the same way rather than written out by hand.
+    fn payload(peer: &core::Peer) -> String {
+        serde_json::to_string(peer).expect("a peer serializes")
+    }
+
+    fn tailnet_peer() -> core::Peer {
+        core::Peer {
+            id: "n1".into(),
+            host_name: "box".into(),
+            dns_name: "box.tail.ts.net.".into(),
+            display_name: "box".into(),
+            ipv4: vec!["100.64.0.1".into()],
+            online: true,
+            exit_node_option: true,
+            ..core::Peer::default()
+        }
+    }
+
+    fn mullvad_peer() -> core::Peer {
+        core::Peer {
+            id: "n2".into(),
+            host_name: "de-ber-wg-001".into(),
+            dns_name: "de-ber-wg-001.mullvad.ts.net.".into(),
+            display_name: "de-ber-wg-001".into(),
+            ipv4: vec!["100.64.0.9".into()],
+            online: true,
+            exit_node_option: true,
+            mullvad: true,
+            ..core::Peer::default()
+        }
+    }
 
     #[test]
     fn the_login_url_is_scraped_out_of_whatever_surrounds_it() {
@@ -342,6 +392,103 @@ mod tests {
             login_url("visit https://login.tailscale.com/a/1234abcd to log in").as_deref(),
             Some("https://login.tailscale.com/a/1234abcd"),
             "the URL must not swallow the rest of the sentence"
+        );
+    }
+
+    #[test]
+    fn a_daemon_that_is_not_carrying_traffic_says_why() {
+        assert_eq!(idle_line("NeedsLogin"), "Needs login");
+        assert_eq!(idle_line(""), "Disconnected");
+        assert_eq!(idle_line("Unknown"), "Disconnected");
+        // Anything else the daemon calls itself is worth printing as it stands
+        // rather than flattening into "Disconnected".
+        assert_eq!(idle_line("Starting"), "Starting");
+    }
+
+    #[test]
+    fn a_connection_missing_its_name_or_address_still_reads_as_a_sentence() {
+        assert_eq!(
+            connected_line("box", "100.64.0.1"),
+            "Connected as box (100.64.0.1)"
+        );
+        assert_eq!(connected_line("", ""), "Connected as unknown (no address)");
+    }
+
+    #[test]
+    fn the_words_for_no_exit_node_all_mean_the_empty_target() {
+        for word in ["off", "none", "clear", "OFF", "None"] {
+            assert_eq!(requested_node(word), "", "{word}");
+        }
+        assert_eq!(requested_node("de-ber-wg-001"), "de-ber-wg-001");
+    }
+
+    #[test]
+    fn the_operator_is_the_user_running_the_command_rather_than_the_one_here() {
+        // Resolved by the shell that runs it: a widget started without a user
+        // in its environment would otherwise authorize nobody.
+        let command = authorize_command("tailscale");
+        assert!(command.starts_with("pkexec tailscale set --operator="));
+        assert!(command.contains("$(id -un)"));
+    }
+
+    #[test]
+    fn a_peer_that_is_already_the_exit_node_resolves_to_a_disconnection() {
+        let mut routing = tailnet_peer();
+        routing.exit_node = true;
+        assert_eq!(target_of(&payload(&routing)).as_deref(), Ok(""));
+        assert_eq!(
+            target_of(&payload(&tailnet_peer())).as_deref(),
+            Ok("box.tail.ts.net")
+        );
+    }
+
+    #[test]
+    fn a_mullvad_node_is_routed_through_by_address_and_a_tailnet_one_by_name() {
+        // A Mullvad node is not in the peer list under a name the CLI will
+        // take back, so its address is the only handle on it.
+        assert_eq!(
+            target_of(&payload(&mullvad_peer())).as_deref(),
+            Ok("100.64.0.9")
+        );
+        assert_eq!(
+            address_of(&payload(&mullvad_peer())).as_deref(),
+            Ok("de-ber-wg-001.mullvad.ts.net"),
+            "the address it is shown and copied under is still the name"
+        );
+        assert_eq!(
+            address_of(&payload(&tailnet_peer())).as_deref(),
+            Ok("box.tail.ts.net")
+        );
+    }
+
+    #[test]
+    fn a_payload_that_is_not_a_peer_is_refused_rather_than_guessed_at() {
+        for bad in ["not json", "[]", "{}", "null"] {
+            assert!(target_of(bad).is_err(), "{bad}");
+            assert!(address_of(bad).is_err(), "{bad}");
+        }
+    }
+
+    /// Each of these returns before anything is spawned, which is what keeps
+    /// one provider's command off another provider's daemon.
+    #[test]
+    fn a_provider_is_never_asked_for_what_it_does_not_have() {
+        assert_eq!(
+            why(exit_node(netbird(), Some("de-ber-wg-001"))),
+            "NetBird has no exit nodes"
+        );
+        assert_eq!(why(exit_nodes(netbird())), "NetBird has no exit nodes");
+        assert_eq!(
+            why(switch_account(netbird(), "acct-1")),
+            "NetBird has no profiles to switch"
+        );
+        assert_eq!(
+            why(authorize(netbird())),
+            "NetBird has no profiles to operate"
+        );
+        assert_eq!(
+            why(select_network(tailscale(), "net-1", true)),
+            "Tailscale has no networks"
         );
     }
 }
