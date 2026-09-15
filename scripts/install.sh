@@ -85,7 +85,8 @@ command -v cargo >/dev/null 2>&1 || {
 bindir="$HOME/.local/bin"
 mkdir -p "$bindir"
 install -m 755 "$root/target/release/tailgauge" "$bindir/tailgauge"
-for alias in ctl watch notify send receive file-select copy update; do
+# No `update` alias: updating is a flag on the binary, not a subcommand.
+for alias in ctl watch notify send receive file-select copy; do
   ln -sfn tailgauge "$bindir/tailgauge-$alias"
 done
 echo "Installed tailgauge into $bindir"

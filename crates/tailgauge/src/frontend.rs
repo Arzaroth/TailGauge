@@ -66,6 +66,11 @@ pub struct Frontend {
     pub restart: Restart,
 }
 
+pub fn find(id: &str) -> Option<&'static Frontend> {
+    let id = id.trim().to_lowercase();
+    FRONTENDS.iter().find(|f| f.id == id)
+}
+
 pub const FRONTENDS: &[Frontend] = &[
     Frontend {
         id: "plasma",
@@ -227,6 +232,17 @@ impl Frontend {
         Ok(dest.to_path_buf())
     }
 
+    /// Whether the installed copy is in a state its desktop can load. Only
+    /// GSettings schemas can be half-installed this way; everything else is
+    /// covered by the directory being there at all.
+    pub fn schemas_ready(&self) -> bool {
+        self.dest_dir().is_none_or(|d| self.schemas_ready_in(&d))
+    }
+
+    fn schemas_ready_in(&self, dir: &Path) -> bool {
+        !self.gsettings_schemas || dir.join("schemas/gschemas.compiled").is_file()
+    }
+
     /// Locate this frontend's payload under an archive root or a checkout.
     pub fn payload_in(&self, source_root: &Path) -> Option<PathBuf> {
         let archived = source_root.join(ARCHIVE_ROOT).join(self.payload);
@@ -311,11 +327,11 @@ fn copy_dir(src: &Path, dest: &Path) -> Result<()> {
 mod tests {
     use super::*;
 
-    fn find(id: &str) -> &'static Frontend {
-        FRONTENDS
-            .iter()
-            .find(|f| f.id == id)
-            .expect("known frontend")
+    #[test]
+    fn ids_resolve_case_insensitively() {
+        assert_eq!(find("plasma").unwrap().id, "plasma");
+        assert_eq!(find("  GNOME ").unwrap().id, "gnome");
+        assert!(find("aqua").is_none());
     }
 
     fn repo_root() -> PathBuf {
@@ -392,17 +408,23 @@ mod tests {
             r#"{"KPlugin":{"Version":"0.5.0"}}"#,
         )
         .unwrap();
-        assert_eq!(find("plasma").version_in(&dir).as_deref(), Some("0.5.0"));
+        assert_eq!(
+            find("plasma").unwrap().version_in(&dir).as_deref(),
+            Some("0.5.0")
+        );
 
         std::fs::write(dir.join("metadata.json"), r#"{"version-name":"v0.5.0"}"#).unwrap();
         assert_eq!(
-            find("gnome").version_in(&dir).as_deref(),
+            find("gnome").unwrap().version_in(&dir).as_deref(),
             Some("0.5.0"),
             "a leading v must not read as a different version"
         );
 
         std::fs::write(dir.join("manifest.json"), r#"{"version":"0.5.0"}"#).unwrap();
-        assert_eq!(find("omarchy").version_in(&dir).as_deref(), Some("0.5.0"));
+        assert_eq!(
+            find("omarchy").unwrap().version_in(&dir).as_deref(),
+            Some("0.5.0")
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -410,7 +432,7 @@ mod tests {
     #[test]
     fn payload_is_found_in_an_archive_or_a_checkout() {
         let dir = scratch("layout");
-        let plasma = find("plasma");
+        let plasma = find("plasma").unwrap();
 
         std::fs::create_dir_all(dir.join(ARCHIVE_ROOT).join(plasma.payload)).unwrap();
         assert_eq!(
@@ -447,7 +469,7 @@ mod tests {
 
     #[test]
     fn install_replaces_rather_than_merges() {
-        let plasma = find("plasma");
+        let plasma = find("plasma").unwrap();
         let dir = scratch("install");
 
         let archive = dir.join("archive");
@@ -489,7 +511,7 @@ mod tests {
     /// The old install must survive a failed replacement.
     #[test]
     fn a_failed_replacement_leaves_the_old_install_where_it_was() {
-        let plasma = find("plasma");
+        let plasma = find("plasma").unwrap();
         let dir = scratch("rollback");
 
         let src = dir.join(ARCHIVE_ROOT).join(plasma.payload);
@@ -540,7 +562,7 @@ mod tests {
 
     #[test]
     fn a_failed_install_leaves_nothing_staged() {
-        let plasma = find("plasma");
+        let plasma = find("plasma").unwrap();
         let dir = scratch("install-fail");
         let dest = dir.join("plasmoids").join(plasma.artifact);
         std::fs::create_dir_all(&dest).unwrap();
@@ -562,7 +584,7 @@ mod tests {
     #[test]
     fn a_gnome_install_compiles_its_schemas() {
         let dir = scratch("schemas");
-        let gnome = find("gnome");
+        let gnome = find("gnome").unwrap();
         let dest = dir.join("extensions").join(gnome.artifact);
 
         let installed = gnome.install_into(&repo_root(), &dest);
@@ -577,7 +599,7 @@ mod tests {
         } else {
             installed.expect("install");
             assert!(
-                dest.join("schemas/gschemas.compiled").is_file(),
+                gnome.schemas_ready_in(&dest),
                 "the installed extension has no compiled schemas"
             );
             assert!(
@@ -585,6 +607,10 @@ mod tests {
                 "the payload landed too"
             );
         }
+
+        // A frontend with no schemas is ready wherever it is - the check must
+        // not turn into a file the Plasma applet is now expected to grow.
+        assert!(find("plasma").unwrap().schemas_ready_in(&dest));
 
         let _ = std::fs::remove_dir_all(&dir);
     }

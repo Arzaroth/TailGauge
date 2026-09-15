@@ -169,7 +169,7 @@ export const ProviderService = GObject.registerClass({
         // send action does not flicker away on a slow first poll.
         this.helpers = true;
         this._attentive = false;
-        this.update = {available: false, updatable: false, latest: '', url: '', error: ''};
+        this.update = {available: false, current: '', latest: ''};
         this.updating = false;
 
         this._lastAccountsRefreshMs = 0;
@@ -407,7 +407,7 @@ export const ProviderService = GObject.registerClass({
     }
 
     checkUpdate(force = false): void {
-        const argv = ['tailgauge', 'update', '--check', '--json'];
+        const argv = ['tailgauge', '--check-update'];
         if (force)
             argv.push('--force');
         // --check exits 2 when an update is available, which is a result, not a
@@ -418,17 +418,17 @@ export const ProviderService = GObject.registerClass({
             try {
                 this.update = JSON.parse(stdout);
             } catch (e) {
-                this.update = {available: false, updatable: false, latest: '', url: '', error: ''};
+                this.update = {available: false, current: '', latest: ''};
             }
         });
     }
 
     applyUpdate(): void {
-        if (this.updating || this.update?.updatable !== true)
+        if (this.updating || this.update?.available !== true)
             return;
         this.updating = true;
         this.actionStatus = _('Updating TailGauge…');
-        this._run('applyUpdate', ['tailgauge', 'update', '--apply', '--quiet'], (status, stdout, stderr) => {
+        this._run('applyUpdate', ['tailgauge', '--update'], (status, stdout, stderr) => {
             this.updating = false;
             if (status !== 0) {
                 this.lastError = Model.elideStatus(stderr || stdout || _('Update failed'));
