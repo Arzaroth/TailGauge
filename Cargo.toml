@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/tailgauge"]
+members = ["crates/tailgauge-core", "crates/tailgauge"]
 
 [workspace.package]
 version = "0.4.0"
