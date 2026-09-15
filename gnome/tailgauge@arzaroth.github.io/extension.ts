@@ -257,7 +257,6 @@ class TailGaugeIndicator extends PanelMenu.Button {
     // regions live in a submenu that PopupMenu shows and hides on its own.
     _panel(): Model.Panel {
         return Model.resolvePanel(this._service.snapshot(), {
-            t: _,
             recentRegions: this._settings.get_strv('recent-mullvad-regions'),
             mullvadPickerOpen: true,
             phraseIndex: this._phraseIndex,

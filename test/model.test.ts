@@ -560,18 +560,21 @@ test('every row is fully formed, so neither frontend has to fill a gap', () => {
         s.rows.forEach(visit);
 });
 
-test('the translator reaches every user-visible string', () => {
-    const panel = M.resolvePanel(state({installed: false}), {t: s => `«${s}»`});
-    assert.match(panel.status.text, /^«.*»$/);
-    assert.match(panel.header.toggleHint, /^«.*»$/);
+// The model writes the strings the panel shows, so every one of them arrives
+// finished. Nothing is left for a frontend to resolve, which is the rule
+// parity.test.ts enforces from the other side.
+test('every user-visible string arrives finished', () => {
+    const panel = M.resolvePanel(state({installed: false}), {});
+    assert.equal(panel.status.text, 'No supported VPN CLI on PATH. Looked for Tailscale, NetBird.');
+    assert.ok(panel.header.toggleHint.length > 0, 'the toggle says what it would do');
     for (const s of panel.sections) {
-        // The update banner carries no header, so it has no title to translate.
+        // The update banner carries no header, so it has no title.
         if (s.title === '')
             continue;
-        assert.match(s.title, /^«.*»$/);
+        assert.match(s.title, /^[A-Z]/, `${s.id} has no title a reader could use`);
     }
-    const machines = section(M.resolvePanel(state({peers: []}), {t: s => `«${s}»`}), 'machines');
-    assert.match(machines.empty, /^«.*»$/);
+    assert.equal(section(M.resolvePanel(state({peers: []}), {}), 'machines').empty,
+        'No machines found on this tailnet.');
 });
 
 test('a busy row reports which command it is waiting on', () => {
@@ -613,10 +616,10 @@ test('an update in flight marks the row busy', () => {
     assert.equal(row.busy, true);
 });
 
-test('the version substitutes into the translated template', () => {
-    const row = section(M.resolvePanel(state({update: {available: true, latest: '2.3.4'}}),
-        {t: s => `«${s}»`}), 'update').rows[0];
-    assert.equal(row.label, '«TailGauge %1 is available»'.replace('%1', '2.3.4'));
+test('the version substitutes into its template', () => {
+    const row = section(M.resolvePanel(state({update: {available: true, latest: '2.3.4'}}), {}),
+        'update').rows[0];
+    assert.equal(row.label, 'TailGauge 2.3.4 is available');
     assert.equal(M.formatText('a %1 b', 'X'), 'a X b');
 });
 
@@ -624,8 +627,7 @@ test('the version substitutes into the translated template', () => {
 
 test('the footer carries the version the frontend passed', () => {
     assert.equal(M.resolvePanel(state({version: '1.2.3'}), {}).footer, 'TailGauge v1.2.3');
-    assert.equal(M.resolvePanel(state({version: '1.2.3'}), {t: s => `«${s}»`}).footer,
-        '«TailGauge v%1»'.replace('%1', '1.2.3'));
+    assert.equal(M.resolvePanel(state({version: '1.2.3'}), {}).footer, 'TailGauge v1.2.3');
 });
 
 test('a frontend that knows no version gets no footer', () => {
@@ -1113,7 +1115,7 @@ test('peerDetailRows shows only what was actually reported', () => {
         ConnectionType: 'P2P', LatencyMs: 20, Endpoint: '[2001:db8::1]:51820',
         RxBytes: 424, TxBytes: 472, LastHandshake: '2026-09-14T05:59:00Z',
         Routes: ['192.168.42.0/24'],
-    }, (x: string) => x, NOW);
+    }, NOW);
     const by = Object.fromEntries(rows.map(r => [r.id, r.sublabel]));
     assert.equal(by['detail:connection'], 'Direct peer-to-peer · 20 ms');
     assert.equal(by['detail:endpoint'], '[2001:db8::1]:51820');
@@ -1123,16 +1125,15 @@ test('peerDetailRows shows only what was actually reported', () => {
     assert.equal(rows.every(r => r.kind === 'detail' && !r.navigable), true);
 
     // A peer that reported nothing gets no rows, so no arrow.
-    assert.deepEqual(M.peerDetailRows({}, (x: string) => x, NOW), []);
-    assert.deepEqual(M.peerDetailRows(null, (x: string) => x, NOW), []);
+    assert.deepEqual(M.peerDetailRows({}, NOW), []);
+    assert.deepEqual(M.peerDetailRows(null, NOW), []);
 });
 
 test('a relayed peer names its relay', () => {
-    const t = (x: string) => x;
-    assert.equal(M.connectionSummary({ConnectionType: 'Relayed', Relay: 'ams'}, t), 'Relayed via ams');
-    assert.equal(M.connectionSummary({ConnectionType: '', Relay: 'ams'}, t), 'Relayed via ams');
-    assert.equal(M.connectionSummary({ConnectionType: 'P2P'}, t), 'Direct peer-to-peer');
-    assert.equal(M.connectionSummary({}, t), '');
+    assert.equal(M.connectionSummary({ConnectionType: 'Relayed', Relay: 'ams'}), 'Relayed via ams');
+    assert.equal(M.connectionSummary({ConnectionType: '', Relay: 'ams'}), 'Relayed via ams');
+    assert.equal(M.connectionSummary({ConnectionType: 'P2P'}), 'Direct peer-to-peer');
+    assert.equal(M.connectionSummary({}), '');
 });
 
 test('bytes and elapsed time read like a human wrote them', () => {
@@ -1189,7 +1190,7 @@ test('a zero date is "never", from either provider', () => {
     assert.equal(idle.LastHandshake, '');
     assert.equal(idle.LastSeen, '2026-09-14T05:00:00Z');
 
-    const rows = M.peerDetailRows(idle, (x: string) => x, NOW);
+    const rows = M.peerDetailRows(idle, NOW);
     const by = Object.fromEntries(rows.map(r => [r.id, r.sublabel]));
     assert.equal(by['detail:handshake'], undefined, 'no handshake, no row');
     assert.equal(by['detail:seen'], '1 hour ago', 'last seen stands in for it');
@@ -1203,7 +1204,7 @@ test('a live handshake wins over last seen', () => {
         LastSeen: '2026-09-14T05:00:00Z',
     }, {});
     const by = Object.fromEntries(
-        M.peerDetailRows(live, (x: string) => x, NOW).map(r => [r.id, r.sublabel]));
+        M.peerDetailRows(live, NOW).map(r => [r.id, r.sublabel]));
     assert.equal(by['detail:handshake'], '1 minute ago');
     assert.equal(by['detail:seen'], undefined, 'not both');
 });
@@ -1242,7 +1243,7 @@ test('an idle peer still opens onto something', () => {
         LastHandshake: '0001-01-01T00:00:00Z', LastSeen: '0001-01-01T00:00:00Z',
     }, {});
     const by = Object.fromEntries(
-        M.peerDetailRows(idle, (x: string) => x, NOW).map(r => [r.id, r.sublabel]));
+        M.peerDetailRows(idle, NOW).map(r => [r.id, r.sublabel]));
     assert.equal(by['detail:connection'], 'Relayed via lhr');
     assert.equal(by['detail:added'], '1 day ago');
 
@@ -1253,7 +1254,7 @@ test('an idle peer still opens onto something', () => {
         PrimaryRoutes: ['10.0.0.0/8'],
     }, {});
     assert.equal(Object.keys(Object.fromEntries(
-        M.peerDetailRows(busy, (x: string) => x, NOW).map(r => [r.id, r.sublabel])))
+        M.peerDetailRows(busy, NOW).map(r => [r.id, r.sublabel])))
         .includes('detail:added'), false);
 });
 
@@ -1273,10 +1274,9 @@ test('the header carries its controls, so every desktop draws the same ones', ()
     assert.deepEqual(M.resolvePanel(state({providers: detected(), installed: false}), {}).header.actions, []);
 });
 
-test('header controls are translated like every other panel string', () => {
-    const shout = (text: string) => text.toUpperCase();
-    const header = M.resolvePanel(state({providers: detected('tailscale')}), {t: shout}).header;
-    assert.equal(only(header.actions, a => a.id === 'refresh', 'refresh').label, 'REFRESH');
+test('header controls carry the label the model wrote', () => {
+    const header = M.resolvePanel(state({providers: detected('tailscale')}), {}).header;
+    assert.equal(only(header.actions, a => a.id === 'refresh', 'refresh').label, 'Refresh');
 });
 
 test('cycling lands on the next drivable provider, and wraps', () => {
@@ -1299,19 +1299,15 @@ test('the toggle hint names the provider it will act on', () => {
         M.toggleHint(state({providers: detected('netbird')})));
 });
 
-test('relative times are translated like every other panel string', () => {
-    const shout = (text: string) => text.toUpperCase();
-    assert.equal(M.formatSince('2026-09-14T05:59:00Z', NOW, shout), '1 MINUTE AGO');
-    assert.equal(M.formatSince('2026-09-14T05:59:50Z', NOW, shout), 'JUST NOW');
-    assert.equal(M.formatSince('2026-09-14T03:00:00Z', NOW, shout), '3 HOURS AGO');
-    // The count is interpolated, not concatenated, so a translation can move it.
-    assert.equal(M.formatSince('2026-09-14T05:59:00Z', NOW, () => 'il y a %1 minute'),
-        'il y a 1 minute');
+test('a relative time is interpolated, not concatenated', () => {
+    assert.equal(M.formatSince('2026-09-14T05:59:00Z', NOW), '1 minute ago');
+    assert.equal(M.formatSince('2026-09-14T05:59:50Z', NOW), 'just now');
+    assert.equal(M.formatSince('2026-09-14T03:00:00Z', NOW), '3 hours ago');
 
     const rows = M.peerDetailRows({
         ConnectionType: 'P2P', LatencyMs: 20, LastHandshake: '2026-09-14T05:59:00Z',
-    }, shout, NOW);
+    }, NOW);
     const by = Object.fromEntries(rows.map(r => [r.id, r.sublabel]));
-    assert.equal(by['detail:handshake'], '1 MINUTE AGO', 'the value, not just its label');
-    assert.match(by['detail:connection'], /20 MS/, 'the latency unit too');
+    assert.equal(by['detail:handshake'], '1 minute ago', 'the value, not just its label');
+    assert.match(by['detail:connection'], /20 ms/, 'the latency unit too');
 });

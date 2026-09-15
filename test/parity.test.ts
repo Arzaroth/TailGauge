@@ -25,6 +25,9 @@ const frontends = [['plasma', plasmaSource], ['gnome', gnomeSource], ['omarchy',
 
 // Rows GNOME shows that Plasma puts in the applet context menu instead. Both
 // are desktop conventions, not panel content, so they are allowed to differ.
+// Everything else the panel shows is written in shared/model.ts and arrives
+// finished: there is no translator to hand it to, and has not been since the
+// binary took the strings over.
 const DESKTOP_ONLY = new Set(['Refresh', 'Settings']);
 
 const plasmaStrings = new Set([...plasmaSource.matchAll(/i18n\("([^"]{4,})"\)/g)].map(m => m[1]));
@@ -74,6 +77,15 @@ test('no frontend re-derives the status precedence', () => {
         assert.equal(/actionStatus\s*!==\s*['"]{2}\s*\?/.test(source), false,
             `${name} ranks actionStatus against lastError; panelStatus already did`);
     }
+});
+
+// The model writes the strings; a frontend that wraps one in its desktop's
+// translator is either translating something already finished, or writing one
+// of its own.
+test('no frontend hands a panel string to a translator', () => {
+    for (const [name, source] of frontends)
+        assert.equal(/\bt:\s|Translate\b/.test(source), false,
+            `${name} still passes resolvePanel a translator`);
 });
 
 test('every frontend reads the panel through resolvePanel', () => {

@@ -29,7 +29,6 @@ Item {
     // exist, their order, their rows, every label, and the cursor's traversal
     // order. This file only decides what a row looks like.
     readonly property var panel: Model.resolvePanel(service.snapshot(), {
-        t: (text) => i18n(text),
         recentRegions: root.recentMullvadRegions,
         mullvadPickerOpen: full.mullvadPickerOpen,
         expandedPeerId: full.expandedPeerId,
