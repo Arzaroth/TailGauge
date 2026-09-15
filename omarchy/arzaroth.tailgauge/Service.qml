@@ -1,151 +1,68 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
-import "Model.js" as Model
 
+// Everything this widget knows, read by one call to the tailgauge binary.
+//
+// There is no model here and no parsing: `tailgauge panel --json` probes for
+// the CLIs, polls every installed provider at once, and returns the whole
+// resolved panel - the bar, the header, every section, and the cursor's
+// traversal order. This file spawns it, pushes the answer into `panel`, and
+// turns a row's action back into a command.
 Item {
   id: root
 
   property var settings: ({})
-
-  // Every provider probed on PATH, and the one the panel drives. `installed`
-  // stays the gate every command already checks: it now means the active
-  // provider is one we can actually drive.
   signal providerChanged(string id)
 
-  // Which provider each poll was launched for. A reply that outlives a
-  // switch belongs to the provider that was asked, not the one now shown.
-  property var _pollProvider: ({})
+  // ---- what the binary answered ---------------------------------------------
 
-  // One entry per installed provider, kept whether or not it is the one on
-  // screen, so the bar icon and its tooltip describe the machine.
-  // The last good panel for each provider, so switching shows what that
-  // provider looked like a moment ago rather than an empty panel until its
-  // first poll lands.
-  property var _cache: ({})
-  property string _cachedProviderId: ""
+  // Push-assigned when a snapshot lands, rather than computed: the panel is on
+  // the far side of a process boundary now, so it arrives rather than being
+  // derived. Everything bound downstream of it is unchanged.
+  property var panel: _empty
+  readonly property var _empty: ({
+    bar: { connected: false, warning: false, crossed: true, tooltip: [] },
+    header: { id: "header", title: "TailGauge", providerId: "", icon: "", glyph: "",
+              meta: "", action: "toggle", toggleVisible: false, toggleEnabled: false,
+              toggleChecked: false, busy: false, toggleHint: "", crossed: true,
+              warning: false, dimmed: true, actions: [] },
+    status: { text: "Checking…", tone: "dim" },
+    sections: [],
+    footer: "",
+    navigation: []
+  })
 
-  property var summaries: []
-  property int _bgIndex: 0
-  property string _bgProviderId: ""
+  readonly property bool installed: panel.header.toggleVisible
+  readonly property bool active: panel.header.toggleChecked
+  readonly property string statusText: panel.status.text
 
-  property var networks: []
-  property string selectingNetworkId: ""
-  property var providers: []
+  // ---- what only this side knows --------------------------------------------
+
+  property var ui: ({})
   property string activeProviderId: ""
-  property bool installed: false
-  property bool running: false
-  property bool needsLogin: false
-
-  // Optimistic off state so the UI reacts the instant you click, rather than
-  // waiting for the next status refresh. _desired is -1 while we just follow
-  // the real state, or 0/1 while a toggle is still catching up.
-  property int _desired: -1
-  readonly property bool active: _desired === -1 ? running : (_desired === 1)
-  property bool refreshing: false
-  property string daemonState: "Unknown"
-  property string statusText: "Checking…"
-  property string selfName: ""
-  property string selfDnsName: ""
-  property string selfIp: ""
-  property string selfUserId: ""
-  property var selfPeer: null
-  property bool fileSharing: false
-  property string authUrl: ""
-  property var peers: []
-  property var exitNodes: []
-  property var ownExitNodes: []
-  property var mullvadExitNodes: []
-  property var mullvadRegions: []
-  property var accounts: []
-  property string selectedAccountId: ""
-  property string selectedAccountLabel: ""
-  property string switchingAccountId: ""
-  property string settingExitNodeId: ""
-  property bool accountsAccessDenied: false
   property string actionStatus: ""
   property string lastError: ""
-
-  // Assume the helpers are there until the probe says otherwise, so the send
-  // button does not flicker away on a slow first poll.
-  property bool helpers: true
-  property var update: ({ available: false, current: "", latest: "" })
   property bool updating: false
 
-  // This widget's own version, read from the manifest sitting next to it. The
-  // widget and the helpers install separately, so the panel reports the one it
-  // is actually running rather than the one the last release carried.
+  // This widget's own version, read from the manifest sitting next to it: the
+  // binary reports its own, and the footer says so when the two disagree.
   property string version: ""
+  property string switchingAccountId: ""
+  property string settingExitNodeId: ""
+  property string selectingNetworkId: ""
 
-  property bool _loginInProgress: false
-  property bool _loginUrlOpened: false
-  property string _preLoginAuthUrl: ""
-  property string _loginOutput: ""
-  property string _loginError: ""
-  property double _lastAccountsRefreshMs: 0
+  // The optimistic toggle: -1 is "whatever the daemon says", 0 and 1 are a
+  // click that has not been reconciled yet. Only the layer it lives in moved.
+  property int _desired: -1
 
-  readonly property int refreshIntervalSec: intSetting("refreshIntervalSec", 30, 5, 3600)
+  readonly property bool busy: actionProc.running || switchProc.running || exitNodeProc.running
+    || selectNetworkProc.running || operatorProc.running
 
-  // Only work the user asked for. A status poll, the watcher or an update check
-  // is not something the panel should ever report as busy, let alone gate a
-  // control on.
-  readonly property bool busy: actionProc.running || loginProc.running || switchProc.running
-    || exitNodeProc.running || operatorProc.running || applyUpdateProc.running
-
-  // True while the panel is on screen. Polling follows it: fast enough to feel
-  // live while it is open, lazy while it is not.
+  // An open panel is worth polling for; a closed one rides the watcher.
   property bool attentive: false
 
-  // The flat state resolvePanel() reads. All three frontends hand it the same
-  // shape, so the panels they get back cannot disagree.
-  function _commands() {
-    return Model.providerCommands({
-      providers: providers,
-      activeProviderId: activeProviderId
-    }) || {}
-  }
-
-  function snapshot() {
-    return {
-      summaries: summaries,
-      networks: networks,
-      selectingNetworkId: selectingNetworkId,
-      providers: providers,
-      activeProviderId: activeProviderId,
-      installed: installed,
-      running: running,
-      active: active,
-      needsLogin: needsLogin,
-      busy: busy,
-      selfName: selfName,
-      selfIp: selfIp,
-      selfUserId: selfUserId,
-      selfPeer: selfPeer,
-      fileSharing: fileSharing,
-      peers: peers,
-      ownExitNodes: ownExitNodes,
-      mullvadRegions: mullvadRegions,
-      accounts: accounts,
-      selectedAccountId: selectedAccountId,
-      switchingAccountId: switchingAccountId,
-      settingExitNodeId: settingExitNodeId,
-      accountsAccessDenied: accountsAccessDenied,
-      actionStatus: actionStatus,
-      lastError: lastError,
-      helpers: helpers,
-      update: update,
-      updating: updating,
-      version: version
-    }
-  }
-
-  // A poll that changed nothing must not look like a change. Every parse builds
-  // fresh arrays, and a new one reaches resolvePanel() as a different panel,
-  // which rebuilds every row in it - several times a minute, destroying
-  // whatever a search field held along with the focus that was in it.
-  function _stable(current, next) {
-    return JSON.stringify(current) === JSON.stringify(next) ? current : next
-  }
+  readonly property int refreshIntervalSec: intSetting("refreshIntervalSec", 30, 5, 3600)
 
   function setting(name, fallback) {
     var value = settings ? settings[name] : undefined
@@ -153,532 +70,83 @@ Item {
   }
 
   function intSetting(name, fallback, min, max) {
-    var n = parseInt(String(setting(name, fallback)), 10)
-    if (!isFinite(n)) n = fallback
-    if (n < min) n = min
-    if (n > max) n = max
-    return n
+    var value = parseInt(setting(name, fallback), 10)
+    if (isNaN(value)) return fallback
+    return Math.max(min, Math.min(max, value))
   }
 
-  // ---- command plumbing -----------------------------------------------------
+  // ---- asking ---------------------------------------------------------------
 
-  // uwsm hands the shell a PATH that often lacks ~/.local/bin, which is where
-  // the installer drops the Taildrop, clipboard and update helpers.
-  function _shellArgv(command) {
-    return ["sh", "-c", 'export PATH="$HOME/.local/bin:$HOME/bin:/usr/local/bin:$PATH"; ' + command]
-  }
-
-  function _runner(kind) {
-    switch (kind) {
-    case "which": return whichProc
-    case "status": return statusProc
-    case "accounts": return accountsProc
-    case "mullvad": return mullvadProc
-    case "networks": return networksProc
-    case "bgStatus": return bgStatusProc
-    case "selectNetwork": return selectNetworkProc
-    case "action": return actionProc
-    case "switch": return switchProc
-    case "exitNode": return exitNodeProc
-    case "operator": return operatorProc
-    case "watch": return watchProc
-    case "helpers": return helpersProc
-    case "update": return updateProc
-    case "applyUpdate": return applyUpdateProc
+  // What the binary cannot read off the machine: which provider is being shown,
+  // what this side is optimistically showing, and what it has in flight.
+  function _ui() {
+    var out = {
+      activeProviderId: root.activeProviderId,
+      busy: root.busy,
+      updating: root.updating,
+      version: root.version,
+      actionStatus: root.actionStatus,
+      lastError: root.lastError,
+      switchingAccountId: root.switchingAccountId,
+      settingExitNodeId: root.settingExitNodeId,
+      selectingNetworkId: root.selectingNetworkId
     }
-    return null
+    if (root._desired !== -1) out.active = root._desired === 1
+    for (var key in root.ui) out[key] = root.ui[key]
+    return out
   }
 
-  function _run(kind, argv) {
-    var proc = _runner(kind)
-    if (!proc || proc.running) return false
-    _pollProvider[kind] = activeProviderId
-    proc.command = _shellArgv(Model.shellCommand(argv))
+  function refresh() {
+    if (panelProc.running) return
+    panelProc.command = ["tailgauge", "panel", "--json", "--ui", JSON.stringify(_ui())]
+    panelProc.running = true
+  }
+
+  // A click that changes what the panel shows - opening the picker, expanding a
+  // machine - has to redraw now rather than on the next tick.
+  onUiChanged: refresh()
+
+  Process {
+    id: panelProc
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var next = null
+        try {
+          next = JSON.parse(text)
+        } catch (e) {
+          root.lastError = "The panel could not be read: " + e
+          return
+        }
+        if (!next || !next.header) return
+        root.panel = next
+        // The daemon caught up with the click, so stop overriding it.
+        if (root._desired !== -1 && next.header.toggleChecked === (root._desired === 1))
+          root._desired = -1
+      }
+    }
+    stderr: StdioCollector {
+      onStreamFinished: if (text.trim() !== "") root.lastError = text.trim()
+    }
+  }
+
+  // ---- acting ---------------------------------------------------------------
+
+  // Every command is the binary's. Nothing here names a provider's CLI, so one
+  // provider's argv can never be fired at another's daemon.
+  function _ctl(proc, action, extra) {
+    if (proc.running) return false
+    var argv = ["tailgauge", "ctl"]
+    if (root.activeProviderId !== "") argv = argv.concat(["--provider", root.activeProviderId])
+    argv.push(action)
+    if (extra !== undefined) argv = argv.concat(extra)
+    proc.command = argv
     proc.running = true
     return true
-  }
-
-  function _runShell(kind, command) {
-    var proc = _runner(kind)
-    if (!proc || proc.running) return false
-    proc.command = _shellArgv(command)
-    proc.running = true
-    return true
-  }
-
-  // Armed by the launch and disarmed by the landing, so it only ever fires on a
-  // poll that really did hang. Left armed it reaps whichever healthy poll is in
-  // flight fifteen seconds later, which at the three-second cadence of an open
-  // panel is nearly always one.
-  function _pollSettled(kind) {
-    var polls = ["status", "mullvad", "accounts", "networks"]
-    for (var i = 0; i < polls.length; i++) {
-      if (polls[i] === kind) continue
-      var proc = _runner(polls[i])
-      if (proc && proc.running) return
-    }
-    pollWatchdog.stop()
-  }
-
-  // The watcher is meant to sit there for minutes; reaping it as a hung poll
-  // would restart it forever.
-  function _reap(kind) {
-    var proc = _runner(kind)
-    if (!proc || !proc.running) return
-    proc.reaped = true
-    proc.running = false
   }
 
   function _detach(argv) {
-    Quickshell.execDetached(_shellArgv(Model.shellCommand(argv)))
-  }
-
-  function _stale(kind) {
-    return _pollProvider[kind] !== undefined
-      && _pollProvider[kind] !== activeProviderId
-  }
-
-  function _handle(kind, exitCode, stdout, stderr) {
-    // A poll answering for the provider we just left would be parsed with
-    // the wrong parser and land as an empty panel.
-    if (kind !== "which" && kind !== "bgStatus" && _stale(kind)) return
-    if (kind === "which") {
-      root.providers = Model.parseProviderProbe(stdout)
-      root.installed = Model.providerReady({
-        providers: root.providers,
-        activeProviderId: root.activeProviderId
-      })
-      if (root.installed) {
-        root.refreshStatusAndAccounts()
-        if (!watchProc.running) root.watch()
-      } else {
-        root.refreshing = false
-        root.resetUnavailable("Not installed")
-      }
-    } else if (kind === "status") {
-      root.refreshing = false
-      root._pollSettled(kind)
-      if (exitCode === 0) root.parseStatus(stdout)
-      else {
-        root.resetUnavailable("Disconnected")
-        root.lastError = stderr.trim()
-      }
-    } else if (kind === "accounts") {
-      root._pollSettled(kind)
-      if (exitCode === 0) root.parseAccounts(stdout)
-      else {
-        root.parseAccounts("")
-        if (Model.isProfilesAccessDenied(stderr) || Model.isProfilesAccessDenied(stdout)) {
-          root.accountsAccessDenied = true
-          root.lastError = "Authorize Tailscale operator to show connections"
-        } else {
-          root.lastError = Model.elideStatus(stderr || stdout || "Could not list Tailscale connections")
-        }
-      }
-    } else if (kind === "bgStatus") {
-      root._setSummary(root._bgProviderId,
-        exitCode === 0 ? Model.parseProviderStatus({
-          providers: root.providers,
-          activeProviderId: root._bgProviderId
-        }, stdout) : null)
-    } else if (kind === "networks") {
-      root._pollSettled(kind)
-      root.parseNetworks(exitCode === 0 ? stdout : "")
-    } else if (kind === "selectNetwork") {
-      root.selectingNetworkId = ""
-      if (exitCode !== 0) root.lastError = Model.elideStatus(stderr || stdout || "Network change failed")
-      root.refresh(false)
-    } else if (kind === "mullvad") {
-      root._pollSettled(kind)
-      root.parseMullvadExitNodes(exitCode === 0 ? stdout : "")
-    } else if (kind === "action") {
-      if (exitCode !== 0) {
-        root._desired = -1
-        root.lastError = Model.elideStatus(stderr || stdout || "Command failed")
-        root.actionStatus = root.lastError
-        actionStatusTimer.restart()
-      } else {
-        root.lastError = ""
-        root.actionStatus = ""
-      }
-      delayedRefresh.restart()
-    } else if (kind === "login") {
-      var combined = stdout + "\n" + stderr
-      var opened = root.openAuthUrlFrom(combined, true)
-      if (exitCode !== 0 && !opened) {
-        root._desired = -1
-        root._loginInProgress = false
-        root.lastError = Model.elideStatus(combined || "tailscale up failed")
-        root.actionStatus = root.lastError
-        actionStatusTimer.restart()
-      } else if (!opened) {
-        root.lastError = ""
-        root.actionStatus = ""
-      }
-      delayedRefresh.restart()
-    } else if (kind === "switch") {
-      if (exitCode !== 0) {
-        root.lastError = Model.elideStatus(stderr || stdout || "Account switch failed")
-        root.actionStatus = root.lastError
-        actionStatusTimer.restart()
-      } else {
-        root.lastError = ""
-        root.actionStatus = ""
-        root._lastAccountsRefreshMs = 0
-      }
-      root.switchingAccountId = ""
-      delayedRefresh.restart()
-    } else if (kind === "exitNode") {
-      if (exitCode !== 0) {
-        root.lastError = Model.elideStatus(stderr || stdout || "Exit node selection failed")
-        root.actionStatus = root.lastError
-        actionStatusTimer.restart()
-      } else {
-        root.lastError = ""
-        root.actionStatus = ""
-      }
-      root.settingExitNodeId = ""
-      delayedRefresh.restart()
-    } else if (kind === "watch") {
-    // 0 means something changed, 2 means the wait simply expired. Anything
-    // else is a broken watcher, so back off rather than spin.
-      if (exitCode === 0) root.refresh()
-      rearmWatch.interval = (exitCode === 0 || exitCode === 2) ? 250 : 30000
-      rearmWatch.restart()
-    } else if (kind === "helpers") {
-      root.helpers = exitCode === 0
-    } else if (kind === "update") {
-    // --check exits 2 when an update is available, which is a result, not a
-    // failure.
-      if (exitCode === 0 || exitCode === 2) {
-        try {
-          root.update = root._stable(root.update, JSON.parse(stdout))
-        } catch (e) {
-          root.update = { available: false, current: "", latest: "" }
-        }
-      }
-    } else if (kind === "applyUpdate") {
-      root.updating = false
-      if (exitCode !== 0) {
-        root.lastError = Model.elideStatus(stderr || stdout || "Update failed")
-        root.actionStatus = root.lastError
-        actionStatusTimer.restart()
-      } else {
-        root.actionStatus = "Updated - restart the shell to load it"
-        actionStatusTimer.restart()
-        root.checkUpdate(true)
-      }
-    } else if (kind === "operator") {
-      if (exitCode !== 0) {
-        root.lastError = Model.elideStatus(stderr || stdout || "Tailscale authorization failed")
-        root.actionStatus = root.lastError
-        actionStatusTimer.restart()
-      } else {
-        root.accountsAccessDenied = false
-        root.lastError = ""
-        root.actionStatus = "Tailscale operator authorized"
-        actionStatusTimer.restart()
-        root._lastAccountsRefreshMs = 0
-      }
-      delayedRefresh.restart()
-    }
-  }
-
-  // ---- actions --------------------------------------------------------------
-
-  function copyToClipboard(value) {
-    var text = String(value || "")
-    if (text === "") return
-    _detach(["tailgauge", "copy", text])
-  }
-
-  function copyPeerIp(peer) {
-    if (!peer) return
-    var ips = Model.filterIPv4(peer.IPv4 || [])
-    copyToClipboard(ips.length > 0 ? ips[0] : "")
-  }
-
-  function copyPeerName(peer) {
-    if (!peer) return
-    copyToClipboard(Model.displayHostName(peer.HostName, peer.DNSName))
-  }
-
-  function copyPeerDnsName(peer) {
-    if (!peer) return
-    copyToClipboard(Model.cleanDnsName(peer.DNSName))
-  }
-
-  function canSendFiles(peer) {
-    if (!fileSharing || !running || !peer) return false
-    return Model.isTaildropTarget(peer, selfUserId)
-  }
-
-  function sendFile(peer) {
-    if (!canSendFiles(peer)) return
-    var target = Model.peerAddress(peer)
-    if (target === "") return
-    _detach(["tailgauge", "send", target])
-  }
-
-  // Re-armed from a timer rather than from inside its own handler, which is
-  // still mid-teardown when this runs.
-  function watch() {
-    if (!installed) return
-    var watch = _commands().watch
-    if (watch) _run("watch", watch(300))
-  }
-
-  function checkUpdate(force) {
-    var argv = ["tailgauge", "--check-update"]
-    if (force === true) argv.push("--force")
-    _run("update", argv)
-  }
-
-  function applyUpdate() {
-    if (updating || !update || update.available !== true) return
-    updating = true
-    actionStatus = "Updating TailGauge…"
-    _run("applyUpdate", ["tailgauge", "--update"])
-  }
-
-  function openUrl(url) {
-    var target = String(url || "")
-    if (target === "") return
-    Quickshell.execDetached(["omarchy-launch-browser", target])
-  }
-
-  function refresh(forceAccounts) {
-    if (installed) {
-      refreshStatusAndAccounts(forceAccounts === true)
-      return
-    }
-    if (_run("which", ["which"].concat(Model.providerCliNames()))) refreshing = true
-  }
-
-  function refreshStatusAndAccounts(forceAccounts) {
-    if (!installed) return
-    var launched = false
-    if (_run("status", _commands().status)) {
-      refreshing = true
-      launched = true
-    }
-    if (_commands().exitNodeList && _run("mullvad", _commands().exitNodeList)) launched = true
-    if (_commands().networks && _run("networks", _commands().networks)) launched = true
-    _pollNextIdleProvider()
-
-    var now = Date.now()
-    var shouldRefreshAccounts = forceAccounts === true || accounts.length === 0 || now - _lastAccountsRefreshMs > 60000
-    if (shouldRefreshAccounts) {
-      if (_commands().accounts && _run("accounts", _commands().accounts)) {
-        _lastAccountsRefreshMs = now
-        launched = true
-      }
-    }
-  // Arm on the launch that needs watching and leave it alone after that.
-  // Restarting it every refresh pushes the deadline out ahead of a hung
-  // process forever once the refresh interval is shorter than the timeout,
-  // and refreshIntervalSec goes down to five seconds.
-    if (launched && !pollWatchdog.running) pollWatchdog.start()
-  }
-
-  function resetUnavailable(message) {
-    running = false
-    needsLogin = false
-    _desired = -1
-    daemonState = "Unavailable"
-    statusText = message
-    selfName = ""
-    selfDnsName = ""
-    selfIp = ""
-    selfUserId = ""
-    selfPeer = null
-    fileSharing = false
-    authUrl = ""
-    peers = []
-    exitNodes = []
-    ownExitNodes = []
-    mullvadExitNodes = []
-    networks = []
-    selectingNetworkId = ""
-    mullvadRegions = []
-    accounts = []
-    selectedAccountId = ""
-    selectedAccountLabel = ""
-    switchingAccountId = ""
-    settingExitNodeId = ""
-    accountsAccessDenied = false
-  }
-
-  function parseStatus(raw) {
-    var parsed = Model.parseProviderStatus({
-      providers: root.providers,
-      activeProviderId: root.activeProviderId
-    }, raw)
-    _setSummary(activeProviderId, parsed)
-    _cachedProviderId = activeProviderId
-    if (!parsed.ok) {
-      resetUnavailable(parsed.message || "Status error")
-      lastError = parsed.error || "Failed to parse tailscale status"
-      console.warn("tailgauge", lastError)
-      return
-    }
-    if (parsed.unavailable) {
-      resetUnavailable(parsed.message || "Disconnected")
-      return
-    }
-
-    daemonState = parsed.daemonState
-    running = parsed.running
-  // Reality caught up to the pending toggle, so stop overriding.
-    if (_desired !== -1 && running === (_desired === 1)) _desired = -1
-    needsLogin = parsed.needsLogin
-    authUrl = parsed.authUrl
-    if (needsLogin && _loginInProgress && !_loginUrlOpened && authUrl !== "" && authUrl !== _preLoginAuthUrl)
-      openAuthUrlFrom(authUrl, false)
-    selfName = parsed.selfName
-    selfDnsName = parsed.selfDnsName
-    selfIp = parsed.selfIp
-    selfUserId = parsed.selfUserId
-    selfPeer = _stable(selfPeer, parsed.selfPeer)
-    fileSharing = parsed.fileSharing
-    peers = _stable(peers, parsed.running ? parsed.peers : [])
-    ownExitNodes = _stable(ownExitNodes, parsed.running ? parsed.exitNodes : [])
-    exitNodes = parsed.running ? ownExitNodes.concat(mullvadRegions) : []
-
-    if (needsLogin) statusText = "Needs login"
-    else if (running) {
-      statusText = "Connected"
-      _loginInProgress = false
-      _loginUrlOpened = false
-      _preLoginAuthUrl = ""
-      loginTimeoutTimer.stop()
-    } else if (daemonState === "Stopped") {
-      statusText = "Disconnected"
-    } else {
-      statusText = daemonState
-    }
-    lastError = ""
-  }
-
-  function parseAccounts(raw) {
-    var parsed = Model.parseAccounts(raw)
-    accounts = _stable(accounts, parsed.accounts)
-    selectedAccountId = parsed.selectedAccountId
-    selectedAccountLabel = parsed.selectedAccountLabel
-    accountsAccessDenied = false
-  }
-
-  // Every change to the active provider lands here, not just a click. The
-  // desktop delivers this widget's settings after the first polls have gone
-  // out, so the persisted choice arrives late and has to re-ask.
-  onActiveProviderIdChanged: root._adoptProvider()
-
-  function _adoptProvider() {
-    var polls = ["status", "mullvad", "accounts", "networks", "watch"]
-    for (var i = 0; i < polls.length; i++) _reap(polls[i])
-    // The previous provider's machines and accounts are not this one's,
-    // but they are still worth keeping for when it comes back.
-    _saveCache(_cachedProviderId)
-    _cachedProviderId = activeProviderId
-    if (!_restoreCache(activeProviderId)) resetUnavailable("Switching")
-    // A toggle pending on the provider we just left is not pending here.
-    _desired = -1
-    // Seed from what the background poll already knows, so the header does
-    // not flash disconnected on the way to a provider that is up.
-    for (var j = 0; j < summaries.length; j++) {
-      if (String(summaries[j].id) !== activeProviderId) continue
-      running = summaries[j].running
-      needsLogin = summaries[j].needsLogin
-      selfName = summaries[j].selfName
-      selfIp = summaries[j].selfIp
-    }
-    installed = Model.providerReady({
-      providers: providers,
-      activeProviderId: activeProviderId
-    })
-    refresh(true)
-    // The old provider's watcher was just reaped; this one may not have one.
-    watch()
-  }
-
-  function switchProvider(provider) {
-    if (!provider) return
-    var id = String(provider.id || "")
-    if (id === "" || id === activeProviderId) return
-    activeProviderId = id
-    providerChanged(id)
-  }
-
-  readonly property var _cachedFields: [
-    "running", "needsLogin", "daemonState", "statusText", "authUrl",
-    "selfName", "selfDnsName", "selfIp", "selfUserId", "selfPeer", "fileSharing",
-    "peers", "exitNodes", "ownExitNodes", "mullvadExitNodes", "mullvadRegions",
-    "networks", "accounts", "selectedAccountId", "selectedAccountLabel"
-  ]
-
-  function _saveCache(id) {
-    if (!id) return
-    var snap = {}
-    for (var i = 0; i < _cachedFields.length; i++) snap[_cachedFields[i]] = root[_cachedFields[i]]
-    _cache[id] = snap
-  }
-
-  function _restoreCache(id) {
-    var snap = id ? _cache[id] : null
-    if (!snap) return false
-    for (var i = 0; i < _cachedFields.length; i++) root[_cachedFields[i]] = snap[_cachedFields[i]]
-    return true
-  }
-
-  function _setSummary(providerId, parsed) {
-    var next = []
-    var replaced = false
-    for (var i = 0; i < summaries.length; i++) {
-      if (String(summaries[i].id) === String(providerId)) {
-        next.push(Model.summarizeProvider(providerId, parsed))
-        replaced = true
-      } else next.push(summaries[i])
-    }
-    if (!replaced) next.push(Model.summarizeProvider(providerId, parsed))
-    summaries = _stable(summaries, next)
-  }
-
-  // One inactive provider per tick, so the tooltip stays current without
-  // running every provider's whole poll set every time.
-  function _pollNextIdleProvider() {
-    var others = []
-    var all = Model.drivableProviders({ providers: providers, activeProviderId: activeProviderId })
-    for (var i = 0; i < all.length; i++) {
-      if (all[i].id !== activeProviderId) others.push(all[i])
-    }
-    if (others.length === 0) return
-    var provider = others[_bgIndex % others.length]
-    _bgIndex = (_bgIndex + 1) % others.length
-    _bgProviderId = provider.id
-    _run("bgStatus", provider.commands.status)
-  }
-
-  function parseNetworks(raw) {
-    var parsed = Model.parseNetbirdNetworks(raw)
-    if (!parsed.ok) {
-      lastError = Model.elideStatus(parsed.message)
-      return
-    }
-    networks = _stable(networks, parsed.networks)
-  }
-
-  function selectNetwork(network) {
-    if (!installed || !running || !network) return
-    var id = String(network.id || "")
-    if (id === "") return
-    if (_run("selectNetwork", _commands().selectNetwork(id, network.selected !== true)))
-      selectingNetworkId = id
-  }
-
-  function parseMullvadExitNodes(raw) {
-    mullvadExitNodes = Model.parseExitNodeList(raw)
-    mullvadRegions = _stable(mullvadRegions, Model.mullvadRegionOptions(mullvadExitNodes))
-    exitNodes = running ? ownExitNodes.concat(mullvadRegions) : []
+    detachProc.command = argv
+    detachProc.running = true
   }
 
   function toggleTailscale() {
@@ -688,116 +156,125 @@ Item {
   }
 
   function down() {
-  // No progress status here: the greyed icon and hero line already convey the
-  // optimistic off, so only a failure is worth a message.
+    // No progress status here: the greyed icon and hero line already convey the
+    // optimistic off, so only a failure is worth a message.
     _desired = 0
-    _run("action", _commands().down)
+    refresh()
+    _ctl(actionProc, "down")
   }
 
+  // The binary scrapes the login URL off the daemon's own output and opens it,
+  // so the state machine that used to live here - waiting on the stream,
+  // guarding against opening twice, timing the wait out - is gone with it.
   function loginOrUp() {
-    if (!installed || loginProc.running) return
-    _desired = -1
-    var plan = Model.loginPlan(needsLogin, authUrl, root._commands().up)
-    if (plan.authUrl !== "") {
-      _loginUrlOpened = false
-      openAuthUrlFrom(plan.authUrl, true)
-      return
-    }
-    _loginOutput = ""
-    _loginError = ""
-    if (needsLogin) actionStatus = "Starting Tailscale login…"
-    else _desired = 1
-    _loginInProgress = needsLogin
-    _loginUrlOpened = false
-    _preLoginAuthUrl = authUrl
-    loginProc.command = _shellArgv(Model.shellCommand(plan.command))
-    loginProc.running = true
-    if (needsLogin) loginTimeoutTimer.restart()
+    if (!installed) return
+    _desired = 1
+    refresh()
+    if (_ctl(actionProc, "up")) actionStatus = "Turning it on…"
   }
 
   function switchAccount(id) {
     var accountId = String(id || "")
-    if (!installed || accountId === "" || accountId === selectedAccountId) return
-    if (_run("switch", _commands().switchAccount(accountId))) switchingAccountId = accountId
+    if (!installed || accountId === "") return
+    if (_ctl(switchProc, "switch-account", [accountId])) switchingAccountId = accountId
   }
 
+  // The row's payload goes back as it came: which address a peer is reached at
+  // is the model's rule, and a Mullvad node is set by address where a tailnet
+  // one is set by name.
   function setExitNode(peer) {
-    if (!installed || !running || !peer) return
-    var isActive = peer.ExitNode === true
-    var target = isActive ? "" : Model.exitNodeTarget(peer)
-    if (!isActive && target === "") return
-    if (_run("exitNode", _commands().setExitNode(target)))
+    if (!installed || !peer) return
+    if (_ctl(exitNodeProc, "exit-node", ["--peer", JSON.stringify(peer)]))
       settingExitNodeId = String(peer.id || "")
   }
 
-  // The shell that runs the command resolves the user name, so the widget does
-  // not have to care whether it was started with an environment that carries
-  // one.
+  function selectNetwork(network) {
+    if (!installed || !network) return
+    var id = String(network.id || "")
+    if (id === "") return
+    var argv = [id]
+    if (network.selected === true) argv.push("--leave")
+    if (_ctl(selectNetworkProc, "select-network", argv)) selectingNetworkId = id
+  }
+
   function authorizeTailscaleOperator() {
     if (!installed) return
-    if (_runShell("operator", 'pkexec tailscale set --operator="$(id -un)"'))
-      actionStatus = "Authorizing Tailscale operator…"
+    if (_ctl(operatorProc, "authorize")) actionStatus = "Authorizing the operator…"
   }
 
-  function openAuthUrlFrom(text, allowFallback) {
-    if (_loginUrlOpened) return true
-    var url = Model.firstUrl(text, allowFallback === true ? authUrl : "")
-    if (url !== "") {
-    // Turning on ended up needing browser auth, so stop pretending we're up.
-      _desired = -1
-      _loginUrlOpened = true
-      _loginInProgress = false
-      loginTimeoutTimer.stop()
-      openUrl(url)
-      return true
-    }
-    return false
+  function switchProvider(provider) {
+    if (!provider) return
+    var id = String(provider.id || "")
+    if (id === "" || id === activeProviderId) return
+    activeProviderId = id
+    // The panel belongs to the old provider until the next answer arrives.
+    panel = _empty
+    providerChanged(id)
+    refresh()
   }
 
-  function handleLoginOutput(data, isError) {
-    var text = String(data || "")
-    if (isError) _loginError += text + "\n"
-    else _loginOutput += text + "\n"
-    if (_loginInProgress && !_loginUrlOpened) openAuthUrlFrom(text, false)
+  function openUrl(url) {
+    var target = String(url || "")
+    if (target !== "") _detach(["xdg-open", target])
   }
 
-  // ---- processes ------------------------------------------------------------
+  function copyToClipboard(value) {
+    var text = String(value || "")
+    if (text !== "") _detach(["tailgauge", "copy", text])
+  }
 
-  component Runner: Process {
-    id: proc
-    property string kind: ""
-    // Set while the watchdog kills this one. A reaped poll is not a result:
-    // reporting the exit code of a command that was never allowed to answer
-    // reads as "Disconnected" from a tailnet that never went anywhere.
-    property bool reaped: false
-    running: false
-    command: []
-    stdout: StdioCollector { id: outCollector; waitForEnd: true }
-    stderr: StdioCollector { id: errCollector; waitForEnd: true }
+  function copyPeerName(peer) { if (peer) copyToClipboard(peer.DisplayName || peer.HostName) }
+  function copyPeerDnsName(peer) { if (peer) copyToClipboard(peer.DNSName) }
+  function copyPeerIp(peer) {
+    if (peer && peer.IPv4 && peer.IPv4.length > 0) copyToClipboard(peer.IPv4[0])
+  }
+
+  function sendFile(peer) {
+    if (peer) _detach(["tailgauge", "send", "--peer", JSON.stringify(peer)])
+  }
+
+  function checkUpdate(force) {
+    if (updateProc.running) return
+    var argv = ["tailgauge", "--check-update"]
+    if (force === true) argv.push("--force")
+    updateProc.command = argv
+    updateProc.running = true
+  }
+
+  function applyUpdate() {
+    if (updating) return
+    updating = true
+    actionStatus = "Updating TailGauge…"
+    refresh()
+    applyUpdateProc.running = true
+  }
+
+  // ---- the processes --------------------------------------------------------
+
+  // One shape for every command: it either worked, or it said why. A failure
+  // that names nothing still clears the progress line, or the panel reports
+  // something in flight that finished minutes ago.
+  component Action: Process {
+    property string clears: ""
+    stdout: StdioCollector {}
+    stderr: StdioCollector { id: errors }
     onExited: function (exitCode) {
-      if (proc.reaped) {
-        proc.reaped = false
-        return
-      }
-      root._handle(proc.kind, exitCode, String(outCollector.text || ""), String(errCollector.text || ""))
+      if (clears === "account") root.switchingAccountId = ""
+      else if (clears === "exitNode") root.settingExitNodeId = ""
+      else if (clears === "network") root.selectingNetworkId = ""
+      root.actionStatus = ""
+      root.lastError = exitCode === 0 ? "" : (errors.text.trim() || "The command failed")
+      delayedRefresh.restart()
     }
   }
 
-  Runner { id: whichProc; kind: "which" }
-  Runner { id: statusProc; kind: "status" }
-  Runner { id: accountsProc; kind: "accounts" }
-  Runner { id: mullvadProc; kind: "mullvad" }
-  Runner { id: networksProc; kind: "networks" }
-  Runner { id: bgStatusProc; kind: "bgStatus" }
-  Runner { id: selectNetworkProc; kind: "selectNetwork" }
-  Runner { id: actionProc; kind: "action" }
-  Runner { id: switchProc; kind: "switch" }
-  Runner { id: exitNodeProc; kind: "exitNode" }
-  Runner { id: operatorProc; kind: "operator" }
-  Runner { id: watchProc; kind: "watch" }
-  Runner { id: helpersProc; kind: "helpers" }
-  Runner { id: updateProc; kind: "update" }
-  Runner { id: applyUpdateProc; kind: "applyUpdate" }
+  Action { id: actionProc }
+  Action { id: switchProc; clears: "account" }
+  Action { id: exitNodeProc; clears: "exitNode" }
+  Action { id: selectNetworkProc; clears: "network" }
+  Action { id: operatorProc }
+
+  Process { id: detachProc }
 
   FileView {
     path: Qt.resolvedUrl("manifest.json").toString().replace(/^file:\/\//, "")
@@ -809,35 +286,52 @@ Item {
       } catch (e) {
         root.version = ""
       }
+      root.refresh()
     }
     onLoadFailed: root.version = ""
   }
 
-  // Login is the one command read as it prints: the auth URL has to be opened
-  // while `tailscale up` is still running, not once it has given up.
   Process {
-    id: loginProc
-    running: false
-    command: []
-    stdout: SplitParser { onRead: function (data) { root.handleLoginOutput(data, false) } }
-    stderr: SplitParser { onRead: function (data) { root.handleLoginOutput(data, true) } }
+    id: updateProc
+    stdout: StdioCollector { onStreamFinished: root.refresh() }
+  }
+
+  Process {
+    id: applyUpdateProc
+    command: ["tailgauge", "--update"]
+    stdout: StdioCollector {}
+    stderr: StdioCollector { id: updateErrors }
     onExited: function (exitCode) {
-      root._handle("login", exitCode, String(root._loginOutput || ""), String(root._loginError || ""))
+      root.updating = false
+      root.actionStatus = ""
+      if (exitCode !== 0) root.lastError = updateErrors.text.trim() || "The update failed"
+      root.checkUpdate(true)
     }
   }
 
-  // ---- timers ---------------------------------------------------------------
+  // The watcher carries the news: it blocks until the daemon reports a change,
+  // so a change made anywhere shows up at once rather than on the next tick.
+  Process {
+    id: watchProc
+    command: ["tailgauge", "watch", "300"]
+    onExited: function (exitCode) {
+      if (exitCode === 0) root.refresh()
+      // 0 is a change and 2 is an expired wait; anything else is a broken
+      // watcher, so back off rather than spin.
+      rearmWatch.interval = (exitCode === 0 || exitCode === 2) ? 250 : 30000
+      rearmWatch.restart()
+    }
+  }
 
   Timer {
     id: rearmWatch
     interval: 250
-    repeat: false
-    onTriggered: root.watch()
+    onTriggered: if (!watchProc.running) watchProc.running = true
   }
 
+  // The floor under the watcher, and the only thing running when there is no
+  // watcher to be had.
   Timer {
-  // The watcher carries the news; this is the floor under it, and the only
-  // thing running when the watcher is unavailable.
     interval: (root.attentive ? 3 : Math.max(5, root.refreshIntervalSec)) * 1000
     repeat: true
     running: true
@@ -845,25 +339,17 @@ Item {
     onTriggered: root.refresh()
   }
 
+  // A command changes what the daemon will say next, so ask again once it has
+  // had a moment to settle rather than racing it.
   Timer {
-  // After a fresh login session the first poll usually lands before tailscaled
-  // has connected, which left the icon stale until the next periodic refresh.
-  // Poll quickly until the service shows up, or give up after ~30 seconds.
-    id: startupRamp
-    property int ticks: 0
-    interval: 2000
-    repeat: true
-    running: true
-    onTriggered: {
-      ticks += 1
-      if (root.running || ticks >= 15) startupRamp.running = false
-      else root.refresh()
-    }
+    id: delayedRefresh
+    interval: 600
+    onTriggered: root.refresh()
   }
 
+  // The check is cached for six hours in the binary, so this mostly reads a
+  // file; the interval is about how stale the banner may be, not rate limits.
   Timer {
-  // The helper caches its GitHub answer, so this mostly reads a file; the
-  // interval is about how stale the banner may be, not about rate limits.
     interval: 6 * 3600 * 1000
     repeat: true
     running: true
@@ -871,51 +357,8 @@ Item {
     onTriggered: root.checkUpdate()
   }
 
-  Timer {
-    id: delayedRefresh
-    interval: 600
-    repeat: false
-    onTriggered: root.refresh()
+  Component.onCompleted: {
+    activeProviderId = String(setting("activeProvider", ""))
+    watchProc.running = true
   }
-
-  Timer {
-  // Every poll is skipped while its own command is still running, so one that
-  // never exits - tailscale can hang on a network that is coming and going -
-  // silently stops the panel refreshing at all, and it stays stopped. Reap
-  // anything still running well inside the refresh interval so the next tick
-  // starts clean.
-    id: pollWatchdog
-    interval: 15000
-    repeat: false
-    onTriggered: {
-      root._reap("status")
-      root._reap("mullvad")
-      root._reap("accounts")
-      root._reap("networks")
-      root._reap("bgStatus")
-      root.refreshing = false
-    }
-  }
-
-  Timer {
-    id: actionStatusTimer
-    interval: 2200
-    repeat: false
-    onTriggered: root.actionStatus = ""
-  }
-
-  Timer {
-    id: loginTimeoutTimer
-    interval: 10000
-    repeat: false
-    onTriggered: {
-      if (!root._loginInProgress || root._loginUrlOpened) return
-      if (!root.openAuthUrlFrom(root.authUrl, true)) {
-        root._loginInProgress = false
-        root.actionStatus = "Login link not available yet"
-      }
-    }
-  }
-
-  Component.onCompleted: root._run("helpers", ["which", "tailgauge"])
 }

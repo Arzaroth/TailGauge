@@ -75,8 +75,9 @@ cp "$model_esm" "$build/$EXTENSION_UUID/model.js"
 # ---- Omarchy --------------------------------------------------------------
 # The shell's plugin registry refuses symlinks anywhere inside a plugin folder,
 # so the model is copied in beside the QML rather than linked.
+# No model copy: the Omarchy widget asks the binary for its panel rather than
+# resolving one, so there is nothing here for it to import.
 cp -r "$root/omarchy/$PLUGIN_ID" "$build/$PLUGIN_ID"
-cp "$model_plain" "$build/$PLUGIN_ID/Model.js"
 
 # GNOME reads the extension's own schema source the moment schemas/ exists, so
 # a directory holding the XML and no compiled blob is worse than no schemas at
