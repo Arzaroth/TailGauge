@@ -2137,6 +2137,7 @@ export {
   formatSince,
   connectionSummary,
   peerSubtitle,
+  peerRowSubtitle,
   machineSearchKey,
   resolvePanel,
   panelRowAt,

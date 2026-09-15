@@ -15,6 +15,7 @@ pub mod bar;
 pub mod exit_nodes;
 pub mod fmt;
 pub mod netbird;
+pub mod panel;
 pub mod panel_state;
 pub mod peer;
 pub mod providers;
