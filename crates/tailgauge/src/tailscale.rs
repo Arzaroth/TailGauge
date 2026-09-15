@@ -20,26 +20,6 @@ pub fn backend_state(status: &Value) -> &str {
         .unwrap_or("")
 }
 
-pub fn running(status: &Value) -> bool {
-    backend_state(status) == "Running"
-}
-
-pub fn self_host_name(status: &Value) -> Option<&str> {
-    status.pointer("/Self/HostName").and_then(Value::as_str)
-}
-
-/// The machine's own tailnet address, v4 for preference: it is the one anybody
-/// reads out loud.
-pub fn self_ip(status: &Value) -> Option<&str> {
-    let ips = status
-        .pointer("/Self/TailscaleIPs")
-        .and_then(Value::as_array)?;
-    let addrs = || ips.iter().filter_map(Value::as_str);
-    addrs()
-        .find(|ip| ip.contains('.'))
-        .or_else(|| addrs().next())
-}
-
 /// The exit node currently routing this machine, by hostname.
 ///
 /// Read off `exit-node list` rather than the status JSON, because a Mullvad
@@ -144,18 +124,5 @@ IP             HOSTNAME                      COUNTRY        CITY           STATU
     fn a_short_row_is_not_a_slice_out_of_bounds() {
         let table = format!("{TABLE}100.100.0.4\n");
         assert!(first_active_host(&table).is_some());
-    }
-
-    #[test]
-    fn the_v4_address_is_the_one_reported() {
-        let status = serde_json::json!({
-            "Self": {"HostName": "workstation", "TailscaleIPs": ["fd7a::1", "100.64.0.1"]}
-        });
-        assert_eq!(self_ip(&status), Some("100.64.0.1"));
-        assert_eq!(self_host_name(&status), Some("workstation"));
-
-        let v6_only = serde_json::json!({"Self": {"TailscaleIPs": ["fd7a::1"]}});
-        assert_eq!(self_ip(&v6_only), Some("fd7a::1"));
-        assert_eq!(self_ip(&serde_json::json!({})), None);
     }
 }

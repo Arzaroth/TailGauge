@@ -97,8 +97,12 @@ fn resolve(cli: Cli) -> Result<Action, String> {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Drive tailscaled: the connection, and the exit node.
+    /// Drive the VPN daemon: the connection, and the exit node.
     Ctl {
+        /// Which provider to act on. Defaults to the one the panel is showing,
+        /// which is the first drivable one installed.
+        #[arg(long)]
+        provider: Option<String>,
         #[command(subcommand)]
         action: CtlAction,
     },
@@ -249,25 +253,24 @@ fn main() -> ExitCode {
     };
 
     match command {
-        Command::Ctl { action } => {
-            // Answered before the tailscale check: which parts are installed
-            // is a fair question on a machine where the CLI is not.
+        Command::Ctl { provider, action } => {
+            // Answered before the provider check: which parts are installed is
+            // a fair question on a machine where no CLI is.
             if matches!(action, CtlAction::Version) {
                 println!("tailgauge-ctl {}", env!("CARGO_PKG_VERSION"));
                 return ExitCode::SUCCESS;
             }
-            if !tailscale::installed() {
-                eprintln!("tailgauge: the tailscale CLI is not on PATH");
+            let Some(provider) = resolve_provider(provider.as_deref()) else {
                 return ExitCode::FAILURE;
-            }
+            };
             match action {
-                CtlAction::Status => settle(ctl::status()),
-                CtlAction::Toggle => settle(ctl::toggle()),
-                CtlAction::Up => settle(ctl::up()),
-                CtlAction::Down => settle(ctl::down()),
-                CtlAction::ExitNode { name } => settle(ctl::exit_node(name.as_deref())),
-                CtlAction::ExitNodes => settle(ctl::exit_nodes()),
-                CtlAction::Version => unreachable!("answered before the CLI check"),
+                CtlAction::Status => settle(ctl::status(provider)),
+                CtlAction::Toggle => settle(ctl::toggle(provider)),
+                CtlAction::Up => settle(ctl::up(provider)),
+                CtlAction::Down => settle(ctl::down(provider)),
+                CtlAction::ExitNode { name } => settle(ctl::exit_node(provider, name.as_deref())),
+                CtlAction::ExitNodes => settle(ctl::exit_nodes(provider)),
+                CtlAction::Version => unreachable!("answered before the provider check"),
             }
         }
 
@@ -581,6 +584,45 @@ fn table<T: serde::de::DeserializeOwned>(
 ) -> serde_json::Result<String> {
     let cases: Vec<T> = serde_json::from_str(raw)?;
     serde_json::to_string(&cases.iter().map(&answer).collect::<Vec<String>>())
+}
+
+/// The provider to act on: the one named, or the one the panel would be
+/// showing. Complains on stderr rather than returning an error, because the
+/// two failures want different words.
+fn resolve_provider(
+    named: Option<&str>,
+) -> Option<&'static tailgauge_core::providers::ProviderDescriptor> {
+    use tailgauge_core::providers;
+    if let Some(named) = named {
+        let Some(provider) = providers::provider_by_id(named) else {
+            let ids: Vec<&str> = providers::PROVIDERS.iter().map(|p| p.id).collect();
+            eprintln!(
+                "tailgauge: no provider '{named}' (known: {})",
+                ids.join(", ")
+            );
+            return None;
+        };
+        if !launch::has(provider.cli) {
+            eprintln!("tailgauge: {} is not on PATH", provider.cli);
+            return None;
+        }
+        return Some(provider);
+    }
+
+    let installed: Vec<_> = providers::PROVIDERS
+        .iter()
+        .filter(|p| launch::has(p.cli))
+        .collect();
+    match installed.iter().find(|p| p.supported).or(installed.first()) {
+        Some(provider) => Some(provider),
+        None => {
+            eprintln!(
+                "tailgauge: no supported VPN CLI on PATH - looked for {}",
+                providers::provider_cli_names().join(", ")
+            );
+            None
+        }
+    }
 }
 
 fn run_panel(ui: &str) -> Result<()> {
