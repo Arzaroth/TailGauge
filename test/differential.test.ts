@@ -349,3 +349,60 @@ for (const {what, state: barState} of barCases) {
             JSON.parse(JSON.stringify(M.barState(barState as never))));
     });
 }
+
+// The formatters take a JSON array of cases and answer in order, so a whole
+// table crosses the process boundary in a single spawn. JSON rather than a
+// separator: every separator worth choosing turns up inside a shell argument
+// or a CLI's complaint sooner or later.
+const eachCase = (op: string, cases: unknown[]): string[] =>
+    rust(op, JSON.stringify(cases)) as string[];
+
+const NOW = Date.parse('2026-09-14T06:00:00Z');
+
+test('formatBytes agrees on every scale', () => {
+    const values = [0, -5, 1, 424, 1023, 1024, 1536, 1468006, 15728640,
+                    1073741824, 1099511627776, 9007199254740991];
+    assert.deepEqual(eachCase('format-bytes', values), values.map(v => M.formatBytes(v)));
+});
+
+test('formatSince agrees on every bracket', () => {
+    const times = [
+        '', '   ', 'not a date',
+        '2026-09-14T06:00:00Z', '2026-09-14T05:59:50Z', '2026-09-14T05:59:00Z',
+        '2026-09-14T05:30:00Z', '2026-09-14T05:00:00Z', '2026-09-14T03:00:00Z',
+        '2026-09-13T06:00:00Z', '2026-09-01T06:00:00Z',
+        '2026-09-14T07:00:00Z',
+        '2026-09-14T05:59:00+00:00', '2026-09-14T07:59:00+02:00',
+    ];
+    assert.deepEqual(eachCase('format-since', times.map(t => [t, NOW])),
+        times.map(t => M.formatSince(t, NOW)));
+});
+
+test('elideStatus agrees on what it keeps and what it cuts', () => {
+    const texts = ['', 'short', '  one   two \t three  ', 'x'.repeat(139),
+                   'x'.repeat(140), 'x'.repeat(200), 'é'.repeat(200)];
+    assert.deepEqual(eachCase('elide-status', texts), texts.map(t => M.elideStatus(t)));
+});
+
+test('firstUrl agrees on where a login link starts and stops', () => {
+    const cases: [string, string][] = [
+        ['To authenticate, visit:\n\n\thttps://login.tailscale.com/a/1 \n', ''],
+        ['visit https://login.tailscale.com/a/1 to log in', ''],
+        ['http://insecure.example/x', ''],
+        ['nothing here', 'fallback'],
+        ['', ''],
+    ];
+    assert.deepEqual(eachCase('first-url', cases),
+        cases.map(([text, fallback]) => M.firstUrl(text, fallback)));
+});
+
+test('shellCommand agrees on what survives a shell', () => {
+    const argvs = [
+        ['tailscale', 'status', '--json'],
+        ['tailscale', 'set', "--exit-node=it's"],
+        ['tailgauge', 'copy', 'a b\tc'],
+        [''],
+        [],
+    ];
+    assert.deepEqual(eachCase('shell-command', argvs), argvs.map(a => M.shellCommand(a)));
+});

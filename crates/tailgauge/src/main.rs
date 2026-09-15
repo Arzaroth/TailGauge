@@ -174,6 +174,13 @@ enum ModelOp {
     ParseProviderProbe,
     /// Takes a PanelState rather than raw CLI output.
     BarState,
+    /// Takes one value per line and prints one answer per line, so a whole
+    /// table of cases crosses in a single spawn.
+    FormatBytes,
+    FormatSince,
+    ElideStatus,
+    FirstUrl,
+    ShellCommand,
 }
 
 #[derive(Subcommand)]
@@ -455,9 +462,32 @@ fn run_model_op(op: ModelOp) -> Result<()> {
         ModelOp::BarState => {
             serde_json::to_string(&core::bar::bar_state(&serde_json::from_str(&raw)?))?
         }
+        // The table ops take a JSON array of cases and answer in order. JSON
+        // rather than a separator, because every separator worth choosing
+        // turns up inside a shell argument or a CLI's complaint sooner or
+        // later - which is exactly what the first attempt at this hit.
+        ModelOp::FormatBytes => table::<i64>(&raw, |v| core::fmt::format_bytes(*v))?,
+        ModelOp::FormatSince => {
+            table::<(String, i64)>(&raw, |(v, now)| core::fmt::format_since(v, *now))?
+        }
+        ModelOp::ElideStatus => table::<String>(&raw, |t| {
+            core::fmt::elide_status(t, core::fmt::STATUS_LIMIT)
+        })?,
+        ModelOp::FirstUrl => table::<(String, String)>(&raw, |(t, f)| core::fmt::first_url(t, f))?,
+        ModelOp::ShellCommand => table::<Vec<String>>(&raw, |a| core::fmt::shell_command(a))?,
     };
     println!("{answer}");
     Ok(())
+}
+
+/// One answer per case, so a whole table crosses the process boundary in a
+/// single spawn.
+fn table<T: serde::de::DeserializeOwned>(
+    raw: &str,
+    answer: impl Fn(&T) -> String,
+) -> serde_json::Result<String> {
+    let cases: Vec<T> = serde_json::from_str(raw)?;
+    serde_json::to_string(&cases.iter().map(&answer).collect::<Vec<String>>())
 }
 
 fn settle(outcome: ctl::Outcome) -> ExitCode {
