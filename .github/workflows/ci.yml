@@ -104,8 +104,7 @@ jobs:
       # rather than the source, because the compiler is what produces them.
       - name: Check the shipped QML model stays module-free
         run: |
-          for file in build/org.tailgauge.plasmoid/contents/code/model.js \
-                      build/arzaroth.tailgauge/Model.js; do
+          for file in build/org.tailgauge.plasmoid/contents/code/model.js; do
             if [[ ! -f $file ]]; then
               echo "::error::$file was not built"
               exit 1

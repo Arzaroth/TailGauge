@@ -117,7 +117,15 @@ enum Command {
     },
 
     /// Send files to a tailnet machine, picking them when none are named.
-    Send { machine: String, files: Vec<String> },
+    Send {
+        /// A row's payload instead of a name, so the address is the model's
+        /// answer rather than the caller's guess.
+        #[arg(long, conflicts_with = "machine")]
+        peer: Option<String>,
+        #[arg(required_unless_present = "peer")]
+        machine: Option<String>,
+        files: Vec<String>,
+    },
 
     /// Save incoming Taildrop files and announce each one.
     Receive {
@@ -223,9 +231,25 @@ enum CtlAction {
     /// Turn Tailscale off.
     Down,
     /// Print the current exit node, or route through NAME; "off" clears it.
-    ExitNode { name: Option<String> },
+    ExitNode {
+        name: Option<String>,
+        /// A row's payload, handed back rather than read: which address a peer
+        /// is reached at is the model's rule, not the caller's.
+        #[arg(long, conflicts_with = "name")]
+        peer: Option<String>,
+    },
+    /// Switch to another profile of the active provider.
+    SwitchAccount { id: String },
+    /// Join a network, or leave it with --leave.
+    SelectNetwork {
+        id: String,
+        #[arg(long)]
+        leave: bool,
+    },
     /// List the exit nodes this tailnet offers.
     ExitNodes,
+    /// Let this user operate the daemon's profile.
+    Authorize,
     /// Print the version of the binary, not of the widgets.
     Version,
 }
@@ -268,8 +292,23 @@ fn main() -> ExitCode {
                 CtlAction::Toggle => settle(ctl::toggle(provider)),
                 CtlAction::Up => settle(ctl::up(provider)),
                 CtlAction::Down => settle(ctl::down(provider)),
-                CtlAction::ExitNode { name } => settle(ctl::exit_node(provider, name.as_deref())),
+                CtlAction::ExitNode { name, peer } => {
+                    let resolved = match peer.as_deref().map(ctl::target_of) {
+                        Some(Err(why)) => {
+                            eprintln!("tailgauge: {why}");
+                            return ExitCode::FAILURE;
+                        }
+                        Some(Ok(target)) => Some(target),
+                        None => name,
+                    };
+                    settle(ctl::exit_node(provider, resolved.as_deref()))
+                }
+                CtlAction::SwitchAccount { id } => settle(ctl::switch_account(provider, &id)),
+                CtlAction::SelectNetwork { id, leave } => {
+                    settle(ctl::select_network(provider, &id, !leave))
+                }
                 CtlAction::ExitNodes => settle(ctl::exit_nodes(provider)),
+                CtlAction::Authorize => settle(ctl::authorize(provider)),
                 CtlAction::Version => unreachable!("answered before the provider check"),
             }
         }
@@ -278,9 +317,25 @@ fn main() -> ExitCode {
             ExitCode::from(watch::run(Duration::from_secs(timeout_seconds)).code())
         }
 
-        Command::Send { machine, files } => {
+        Command::Send {
+            peer,
+            machine,
+            files,
+        } => {
             if !tailscale::installed() {
                 eprintln!("tailgauge: the tailscale CLI is not on PATH");
+                return ExitCode::FAILURE;
+            }
+            let machine = match peer.as_deref().map(ctl::address_of) {
+                Some(Err(why)) => {
+                    eprintln!("tailgauge: {why}");
+                    return ExitCode::FAILURE;
+                }
+                Some(Ok(address)) => address,
+                None => machine.unwrap_or_default(),
+            };
+            if machine.is_empty() {
+                eprintln!("tailgauge: nothing to send to");
                 return ExitCode::FAILURE;
             }
             match send::run(&machine, &files) {

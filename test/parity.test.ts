@@ -23,6 +23,12 @@ const omarchySource = omarchy.map(read).join('\n');
 
 const frontends = [['plasma', plasmaSource], ['gnome', gnomeSource], ['omarchy', omarchySource]];
 
+// The frontends still resolving the panel for themselves. Omarchy has been
+// flipped onto `tailgauge panel --json`, so the rules about gathering a
+// snapshot and handing it to resolvePanel describe the two that have not been,
+// and will be empty by the end of the port.
+const resolving = [['plasma', plasmaSource], ['gnome', gnomeSource]];
+
 // Rows GNOME shows that Plasma puts in the applet context menu instead. Both
 // are desktop conventions, not panel content, so they are allowed to differ.
 // Everything else the panel shows is written in shared/model.ts and arrives
@@ -88,16 +94,30 @@ test('no frontend hands a panel string to a translator', () => {
             `${name} still passes resolvePanel a translator`);
 });
 
-test('every frontend reads the panel through resolvePanel', () => {
-    for (const [name, source] of frontends)
+test('every frontend still on the model reads the panel through resolvePanel', () => {
+    for (const [name, source] of resolving)
         assert.match(source, /Model\.resolvePanel\(/, `${name} does not resolve the panel`);
+});
+
+// A flipped frontend draws what the binary sent and nothing it worked out
+// itself. The panel arrives; it is not derived.
+test('a flipped frontend has no model left to call', () => {
+    const service = read('omarchy/arzaroth.tailgauge/Service.qml');
+    for (const [what, source] of [['the panel', omarchySource], ['the service', service]]) {
+        assert.equal(/\bModel\./.test(source), false, `omarchy's ${what} still calls the model`);
+        assert.equal(/Model\.js/.test(source), false, `omarchy's ${what} still imports it`);
+    }
+    assert.match(service, /"tailgauge", "panel", "--json"/,
+        'omarchy does not ask the binary for its panel');
+    // Nothing is parsed on this side any more: the answer arrives resolved.
+    assert.equal(/parseStatus|parseAccounts|parseExitNodeList/.test(service), false,
+        'omarchy still parses a CLI');
 });
 
 test('every service hands resolvePanel the same snapshot shape', () => {
     const services = {
         plasma: 'plasma/org.tailgauge.plasmoid/contents/ui/ProviderService.qml',
-        gnome: 'gnome/tailgauge@arzaroth.github.io/provider.ts',
-        omarchy: 'omarchy/arzaroth.tailgauge/Service.qml'
+        gnome: 'gnome/tailgauge@arzaroth.github.io/provider.ts'
     };
     // The object literal is flat, so its first closing brace ends the field
     // list whatever the file indents with.
@@ -117,10 +137,9 @@ test('every service hands resolvePanel the same snapshot shape', () => {
 // A service that hands resolvePanel a fresh array on every poll reports a
 // change that did not happen, and the panel rebuilds every row it holds -
 // which is how a search field loses focus mid-word several times a minute.
-test('neither QML service reports unchanged state as a change', () => {
+test('a QML service that still gathers does not report unchanged state as a change', () => {
     const services = {
-        plasma: 'plasma/org.tailgauge.plasmoid/contents/ui/ProviderService.qml',
-        omarchy: 'omarchy/arzaroth.tailgauge/Service.qml'
+        plasma: 'plasma/org.tailgauge.plasmoid/contents/ui/ProviderService.qml'
     };
     for (const [name, file] of Object.entries(services)) {
         const src = read(file);
@@ -135,10 +154,9 @@ test('neither QML service reports unchanged state as a change', () => {
 // disarmed, it instead kills whichever healthy poll is in flight when it fires,
 // which on Omarchy surfaced as the panel reporting a tailnet down that never
 // went anywhere.
-test('both QML services disarm the poll watchdog when the polls land', () => {
+test('a QML service that still gathers disarms its poll watchdog', () => {
     for (const [name, file] of Object.entries({
-        plasma: 'plasma/org.tailgauge.plasmoid/contents/ui/ProviderService.qml',
-        omarchy: 'omarchy/arzaroth.tailgauge/Service.qml'
+        plasma: 'plasma/org.tailgauge.plasmoid/contents/ui/ProviderService.qml'
     })) {
         const src = read(file);
         assert.match(src, /pollWatchdog\.stop\(\)/, `${name} never disarms the watchdog`);
@@ -210,13 +228,6 @@ test('no frontend feeds its search query back into resolvePanel', () => {
     }
 });
 
-// A reaped poll produced no answer, so it must not be reported as one.
-test('the Omarchy service does not report a poll it killed', () => {
-    const src = read('omarchy/arzaroth.tailgauge/Service.qml');
-    assert.match(src, /proc\.reaped = true/);
-    assert.match(src, /if \(proc\.reaped\)/);
-});
-
 test('no frontend gates a control on background work', () => {
     for (const [name, source] of frontends) {
         assert.equal(/enabled:\s*!.*busy|setSensitive\(.*busy/.test(source), false,
@@ -261,7 +272,7 @@ test('no service hardcodes a provider binary in its argv', () => {
 // while all three were missing the same fields, because an insertion landed in
 // a neighbouring object literal. The resolver's own input type is the
 // authority on what a snapshot owes it.
-test('every service hands resolvePanel every field the resolver reads', () => {
+test('every service still on the model hands resolvePanel every field it reads', () => {
     const model = read('shared/model.ts');
     const block = model.slice(model.indexOf('export interface PanelState {'));
     const declared = [...block.slice(0, block.indexOf('\n}')).matchAll(/^\s*(\w+)\??:/gm)]
@@ -270,8 +281,7 @@ test('every service hands resolvePanel every field the resolver reads', () => {
 
     for (const [name, file] of Object.entries({
         plasma: 'plasma/org.tailgauge.plasmoid/contents/ui/ProviderService.qml',
-        gnome: 'gnome/tailgauge@arzaroth.github.io/provider.ts',
-        omarchy: 'omarchy/arzaroth.tailgauge/Service.qml'
+        gnome: 'gnome/tailgauge@arzaroth.github.io/provider.ts'
     })) {
         const src = read(file);
         const body = src.split('snapshot()')[1] ?? '';

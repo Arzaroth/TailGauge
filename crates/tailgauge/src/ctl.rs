@@ -199,6 +199,28 @@ pub fn toggle(provider: &ProviderDescriptor) -> Outcome {
     }
 }
 
+/// The address a row's peer is reached at.
+///
+/// The frontend hands back the payload the model gave it rather than working
+/// the address out itself: a Mullvad node is set by address and a tailnet one
+/// by name, and that is the model's rule to keep.
+pub fn target_of(peer_json: &str) -> Result<String, String> {
+    let peer: core::Peer =
+        serde_json::from_str(peer_json).map_err(|e| format!("--peer is not a peer: {e}"))?;
+    Ok(if peer.exit_node {
+        // Already the exit node, so the click is a disconnection.
+        String::new()
+    } else {
+        core::panel::exit_node_target(&peer)
+    })
+}
+
+pub fn address_of(peer_json: &str) -> Result<String, String> {
+    let peer: core::Peer =
+        serde_json::from_str(peer_json).map_err(|e| format!("--peer is not a peer: {e}"))?;
+    Ok(core::panel::peer_address(&peer))
+}
+
 pub fn exit_node(provider: &ProviderDescriptor, target: Option<&str>) -> Outcome {
     if !provider.capabilities.has(Capability::ExitNodes) {
         return Outcome::Failed(format!("{} has no exit nodes", provider.label));
@@ -224,6 +246,52 @@ pub fn exit_node(provider: &ProviderDescriptor, target: Option<&str>) -> Outcome
     }
     announce("critical", "Could not set the exit node", target);
     Outcome::Failed(format!("could not set the exit node to {target}"))
+}
+
+pub fn switch_account(provider: &ProviderDescriptor, account_id: &str) -> Outcome {
+    let Some(argv) = provider.switch_account(account_id) else {
+        return Outcome::Failed(format!("{} has no profiles to switch", provider.label));
+    };
+    if launch::run_quiet(&argv[0], &argv[1..]) {
+        return Outcome::Ok;
+    }
+    announce("critical", "Could not switch profile", account_id);
+    Outcome::Failed(format!("could not switch to {account_id}"))
+}
+
+pub fn select_network(provider: &ProviderDescriptor, network_id: &str, join: bool) -> Outcome {
+    let Some(argv) = provider.select_network(network_id, join) else {
+        return Outcome::Failed(format!("{} has no networks", provider.label));
+    };
+    if launch::run_quiet(&argv[0], &argv[1..]) {
+        return Outcome::Ok;
+    }
+    let what = if join { "join" } else { "leave" };
+    announce("critical", &format!("Could not {what} {network_id}"), "");
+    Outcome::Failed(format!("could not {what} {network_id}"))
+}
+
+/// Let this user operate the daemon's profile.
+///
+/// `pkexec` because it needs root, and the user name is resolved by the shell
+/// that runs it rather than read here: a widget started without one in its
+/// environment would otherwise authorize nobody.
+pub fn authorize(provider: &ProviderDescriptor) -> Outcome {
+    if !provider.capabilities.has(Capability::Accounts) {
+        return Outcome::Failed(format!("{} has no profiles to operate", provider.label));
+    }
+    let command = format!(r#"pkexec {} set --operator="$(id -un)""#, provider.cli);
+    match Command::new("sh").arg("-c").arg(&command).status() {
+        Ok(status) if status.success() => Outcome::Ok,
+        _ => {
+            announce(
+                "critical",
+                &format!("Could not authorize the {} operator", provider.label),
+                "Run tailgauge ctl authorize for the reason",
+            );
+            Outcome::Failed("could not authorize the operator".into())
+        }
+    }
 }
 
 pub fn exit_nodes(provider: &ProviderDescriptor) -> Outcome {

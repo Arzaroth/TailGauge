@@ -5,7 +5,6 @@ import Quickshell
 import Quickshell.Io
 import qs.Commons
 import qs.Ui
-import "Model.js" as Model
 
 Panel {
   id: root
@@ -36,16 +35,12 @@ Panel {
   readonly property var recentMullvadRegions: settings.recentMullvadRegions instanceof Array
     ? settings.recentMullvadRegions : []
 
-  // Everything the panel shows is decided in the shared model: which sections
-  // exist, their order, their rows, every label, and the cursor's traversal
-  // order. This file only decides what a row looks like.
-  readonly property var panel: Model.resolvePanel(tailscale.snapshot(), {
-    recentRegions: root.recentMullvadRegions,
-    mullvadPickerOpen: root.mullvadPickerOpen,
-    expandedPeerId: root.expandedPeerId,
-    nowMs: Date.now(),
-    phraseIndex: root.phraseIndex
-  })
+  // Everything the panel shows is decided by the binary: which sections exist,
+  // their order, their rows, every label, and the cursor's traversal order.
+  // This file only decides what a row looks like, and does the substring test
+  // the search fields need - which is the one thing that cannot wait on a
+  // process.
+  readonly property var panel: tailscale.panel
 
   readonly property string cursorRowId: cursorIndex >= 0 && cursorIndex < panel.navigation.length
     ? String(panel.navigation[cursorIndex].rowId) : ""
@@ -108,9 +103,23 @@ Panel {
   onMachineQueryChanged: keepCursorVisible()
   onMullvadQueryChanged: keepCursorVisible()
 
+  // A search field is the binary's decision, so a query left behind when one
+  // goes would filter a list with nothing on screen to clear it.
+  function _drawn(rowId) {
+    for (var s = 0; s < panel.sections.length; s++) {
+      var rows = panel.sections[s].rows
+      for (var r = 0; r < rows.length; r++) {
+        if (rows[r].id === rowId) return true
+        for (var c = 0; c < rows[r].children.length; c++)
+          if (rows[r].children[c].id === rowId) return true
+      }
+    }
+    return false
+  }
+
   function dropOrphanedQueries() {
-    if (!Model.panelHasRow(panel, "machines:search")) machineQuery = ""
-    if (!Model.panelHasRow(panel, "mullvad:add")) mullvadQuery = ""
+    if (!_drawn("machines:search")) machineQuery = ""
+    if (!_drawn("mullvad:add")) mullvadQuery = ""
   }
 
   function keepCursorVisible() {
@@ -124,7 +133,19 @@ Panel {
   }
 
   function selectedRow() {
-    return Model.panelRowAt(panel, cursorIndex)
+    if (cursorIndex <= 0 || cursorIndex >= panel.navigation.length) return null
+    var entry = panel.navigation[cursorIndex]
+    for (var s = 0; s < panel.sections.length; s++) {
+      var section = panel.sections[s]
+      if (section.id !== entry.sectionId) continue
+      for (var r = 0; r < section.rows.length; r++) {
+        if (section.rows[r].id === entry.rowId) return section.rows[r]
+        var children = section.rows[r].children
+        for (var c = 0; c < children.length; c++)
+          if (children[c].id === entry.rowId) return children[c]
+      }
+    }
+    return null
   }
 
   // The cursor follows the row's identity, not its slot: a machine that drops
@@ -135,7 +156,7 @@ Panel {
   onPanelChanged: {
     dropOrphanedQueries()
     if (_pinnedRowId === "") return
-    var next = Model.panelNavIndexOf(panel, _pinnedRowId)
+    var next = navIndexOf(_pinnedRowId)
     if (next !== cursorIndex) cursorIndex = next
   }
 
@@ -161,7 +182,7 @@ Panel {
       tailscale.switchAccount(row.payload.id)
       break
     case "setExitNode":
-      if (row.payload.Mullvad === true) persistRecentMullvad(Model.mullvadRegionKey(row.payload))
+      if (row.payload.Mullvad === true) persistRecentMullvad(mullvadRegionKey(row.payload))
       tailscale.setExitNode(row.payload)
       mullvadPickerOpen = false
       break
@@ -204,13 +225,22 @@ Panel {
     close()
   }
 
+  // The switcher section is the drivable providers, in order, so the next one
+  // is the row after the current one.
   function cycleProvider() {
-    var next = Model.nextProvider(tailscale.snapshot())
-    if (next) tailscale.switchProvider(next)
+    for (var s = 0; s < panel.sections.length; s++) {
+      if (panel.sections[s].id !== "providers") continue
+      var rows = panel.sections[s].rows
+      if (rows.length < 2) return
+      for (var i = 0; i < rows.length; i++)
+        if (rows[i].current) return tailscale.switchProvider(rows[(i + 1) % rows.length].payload)
+      tailscale.switchProvider(rows[0].payload)
+      return
+    }
   }
 
   function headerAction(actionId) {
-    if (actionId === "refresh") tailscale.refresh(true)
+    if (actionId === "refresh") tailscale.refresh()
   }
 
   function rowAction(row, actionId) {
@@ -235,8 +265,24 @@ Panel {
     bar.shell.updateEntryInline(root.moduleName, entry)
   }
 
+  // The pair that names a region is already in the id the model minted for it,
+  // so this reads that rather than rebuilding it out of the peer's fields -
+  // which is the model's rule, not this file's.
+  function mullvadRegionKey(node) {
+    var id = String((node && node.id) || "")
+    var prefix = "mullvad-region:"
+    return id.indexOf(prefix) === 0 ? id.slice(prefix.length) : ""
+  }
+
   function persistRecentMullvad(region) {
-    persistSetting("recentMullvadRegions", Model.pushRecentMullvad(recentMullvadRegions, region, 5))
+    if (String(region || "") === "") return
+    var next = [String(region)]
+    for (var i = 0; i < recentMullvadRegions.length && next.length < 5; i++) {
+      var existing = String(recentMullvadRegions[i] || "")
+      if (existing !== "" && existing !== region && next.indexOf(existing) === -1)
+        next.push(existing)
+    }
+    persistSetting("recentMullvadRegions", next)
   }
 
   // ---- row registry ---------------------------------------------------------
@@ -263,9 +309,15 @@ Panel {
     if (item && item.openCopyMenu) item.openCopyMenu()
   }
 
+  function navIndexOf(id) {
+    for (var i = 0; i < panel.navigation.length; i++)
+      if (panel.navigation[i].rowId === id) return i
+    return 0
+  }
+
   function focusRow(id) {
     cursorActive = true
-    cursorIndex = Model.panelNavIndexOf(panel, id)
+    cursorIndex = navIndexOf(id)
   }
 
   function scrollCursorIntoView() {
@@ -313,6 +365,15 @@ Panel {
     onProviderChanged: function (id) { root.persistSetting("activeProvider", id) }
     // An open panel is worth polling for; a closed one rides the watcher.
     attentive: root.opened
+    // What the binary cannot read off the machine. Assigning it re-asks, so a
+    // click that changes what the panel shows redraws rather than waiting for
+    // the next tick.
+    ui: ({
+      recentRegions: root.recentMullvadRegions,
+      mullvadPickerOpen: root.mullvadPickerOpen,
+      expandedPeerId: root.expandedPeerId,
+      phraseIndex: root.phraseIndex
+    })
   }
 
   IpcHandler {
@@ -322,7 +383,7 @@ Panel {
     function show(): void { root.open() }
     function hide(): void { root.close() }
     function toggle(): void { root.toggle() }
-    function refresh(): string { tailscale.refresh(true); return "ok" }
+    function refresh(): string { tailscale.refresh(); return "ok" }
     function up(): string { tailscale.loginOrUp(); return "ok" }
     function down(): string { tailscale.down(); return "ok" }
     function toggleTailscale(): string { tailscale.toggleTailscale(); return "ok" }
@@ -333,11 +394,11 @@ Panel {
       return JSON.stringify({
         activeProviderId: tailscale.activeProviderId,
         installed: tailscale.installed,
-        providers: tailscale.providers,
-        summaries: tailscale.summaries,
-        pollProvider: tailscale._pollProvider,
-        networks: tailscale.networks,
-        tooltip: root.panel.bar.tooltip
+        header: root.panel.header,
+        tooltip: root.panel.bar.tooltip,
+        sections: root.panel.sections.map(function (s) {
+          return { id: s.id, visible: s.visible, rows: s.rows.length }
+        })
       })
     }
   }
@@ -366,7 +427,7 @@ Panel {
     // there is only one.
     onPressed: function (buttonCode) {
       if (buttonCode === Qt.RightButton) root.cycleProvider()
-      else if (buttonCode === Qt.MiddleButton) tailscale.refresh(true)
+      else if (buttonCode === Qt.MiddleButton) tailscale.refresh()
       else root.toggle()
     }
   }
@@ -435,13 +496,13 @@ Panel {
           return
         }
         if (letter === "r") {
-          tailscale.refresh(true)
+          tailscale.refresh()
           return
         }
         var row = root.selectedRow()
         if (!row) return
         if (letter === "s") {
-          if (Model.panelRowHasAction(row, "send")) root.sendPeerFile(row)
+          if (row.actions.some(function (a) { return a.id === "send" })) root.sendPeerFile(row)
           return
         }
         if (row.copyOptions.length === 0) return
