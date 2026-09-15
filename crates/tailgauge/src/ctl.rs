@@ -59,36 +59,41 @@ pub fn status(provider: &ProviderDescriptor) -> Outcome {
     };
 
     if !status.running {
-        println!(
-            "{}",
-            match status.daemon_state.as_str() {
-                "NeedsLogin" => "Needs login",
-                "" | "Unknown" => "Disconnected",
-                other => other,
-            }
-        );
+        println!("{}", idle_line(&status.daemon_state));
         return Outcome::Disconnected;
     }
 
-    println!(
-        "Connected as {} ({})",
-        if status.self_name.is_empty() {
-            "unknown"
-        } else {
-            &status.self_name
-        },
-        if status.self_ip.is_empty() {
-            "no address"
-        } else {
-            &status.self_ip
-        }
-    );
+    println!("{}", connected_line(&status.self_name, &status.self_ip));
     if provider.capabilities.has(Capability::ExitNodes)
         && let Some(node) = tailscale::current_exit_node()
     {
         println!("Exit node: {node}");
     }
     Outcome::Ok
+}
+
+/// What `status` says when the daemon is not carrying traffic. A script reads
+/// the exit code; a person reads this.
+fn idle_line(daemon_state: &str) -> &str {
+    match daemon_state {
+        "NeedsLogin" => "Needs login",
+        "" | "Unknown" => "Disconnected",
+        other => other,
+    }
+}
+
+fn connected_line(self_name: &str, self_ip: &str) -> String {
+    let name = if self_name.is_empty() {
+        "unknown"
+    } else {
+        self_name
+    };
+    let ip = if self_ip.is_empty() {
+        "no address"
+    } else {
+        self_ip
+    };
+    format!("Connected as {name} ({ip})")
 }
 
 pub fn up(provider: &ProviderDescriptor) -> Outcome {
@@ -233,12 +238,7 @@ pub fn exit_node(provider: &ProviderDescriptor, target: Option<&str>) -> Outcome
         return Outcome::Ok;
     };
 
-    let resolved = match target.to_lowercase().as_str() {
-        "off" | "none" | "clear" => "",
-        _ => target,
-    };
-
-    let Some(argv) = provider.set_exit_node(resolved) else {
+    let Some(argv) = provider.set_exit_node(requested_node(target)) else {
         return Outcome::Failed(format!("{} cannot set an exit node", provider.label));
     };
     if launch::run_quiet(&argv[0], &argv[1..]) {
@@ -246,6 +246,15 @@ pub fn exit_node(provider: &ProviderDescriptor, target: Option<&str>) -> Outcome
     }
     announce("critical", "Could not set the exit node", target);
     Outcome::Failed(format!("could not set the exit node to {target}"))
+}
+
+/// The empty target is how every provider is told to stop using an exit node,
+/// and the three words for it are what a person types at a prompt.
+fn requested_node(target: &str) -> &str {
+    match target.to_lowercase().as_str() {
+        "off" | "none" | "clear" => "",
+        _ => target,
+    }
 }
 
 pub fn switch_account(provider: &ProviderDescriptor, account_id: &str) -> Outcome {
@@ -280,8 +289,11 @@ pub fn authorize(provider: &ProviderDescriptor) -> Outcome {
     if !provider.capabilities.has(Capability::Accounts) {
         return Outcome::Failed(format!("{} has no profiles to operate", provider.label));
     }
-    let command = format!(r#"pkexec {} set --operator="$(id -un)""#, provider.cli);
-    match Command::new("sh").arg("-c").arg(&command).status() {
+    match Command::new("sh")
+        .arg("-c")
+        .arg(authorize_command(provider.cli))
+        .status()
+    {
         Ok(status) if status.success() => Outcome::Ok,
         _ => {
             announce(
@@ -292,6 +304,10 @@ pub fn authorize(provider: &ProviderDescriptor) -> Outcome {
             Outcome::Failed("could not authorize the operator".into())
         }
     }
+}
+
+fn authorize_command(cli: &str) -> String {
+    format!(r#"pkexec {cli} set --operator="$(id -un)""#)
 }
 
 pub fn exit_nodes(provider: &ProviderDescriptor) -> Outcome {

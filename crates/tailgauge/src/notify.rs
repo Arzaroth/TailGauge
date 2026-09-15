@@ -25,6 +25,47 @@ impl Notification<'_> {
         }
         args
     }
+
+    /// `--` before the summary, because a body that starts with a dash is a
+    /// message and not an option.
+    fn post_args(&self) -> Vec<String> {
+        let mut args = self.base_args();
+        args.push("--".into());
+        args.push(self.summary.into());
+        args.push(self.body.into());
+        args
+    }
+
+    fn wait_args(&self) -> Vec<String> {
+        let mut args = self.base_args();
+        args.push("--wait".into());
+        args.push("--action=default=Open".into());
+        args.push("--".into());
+        args.push(self.summary.into());
+        args.push(self.body.into());
+        args
+    }
+
+    /// The argv the detached copy is re-executed with. It has to parse back
+    /// into this same notification, so the two are written together.
+    fn relaunch_args(&self, path: &str) -> Vec<String> {
+        let mut args = vec![
+            "notify".to_string(),
+            "--await-action".into(),
+            "--urgency".into(),
+            self.urgency.into(),
+            "--open".into(),
+            path.into(),
+        ];
+        if let Some(image) = self.image {
+            args.push("--image".into());
+            args.push(image.into());
+        }
+        args.push("--".into());
+        args.push(self.summary.into());
+        args.push(self.body.into());
+        args
+    }
 }
 
 /// Post the notification. A machine with no `notify-send` is not a failure:
@@ -41,11 +82,7 @@ pub fn run(n: &Notification<'_>) -> Result<()> {
         return Ok(());
     }
 
-    let mut args = n.base_args();
-    args.push("--".into());
-    args.push(n.summary.into());
-    args.push(n.body.into());
-    let _ = launch::run_quiet("notify-send", &args);
+    let _ = launch::run_quiet("notify-send", n.post_args());
     Ok(())
 }
 
@@ -62,29 +99,13 @@ fn supports_actions() -> bool {
 fn spawn_actionable(n: &Notification<'_>, path: &str) -> std::io::Result<()> {
     let exe = std::env::current_exe()?;
     let mut cmd = Command::new(exe);
-    cmd.arg("notify")
-        .arg("--await-action")
-        .arg("--urgency")
-        .arg(n.urgency)
-        .arg("--open")
-        .arg(path);
-    if let Some(image) = n.image {
-        cmd.arg("--image").arg(image);
-    }
-    cmd.arg("--").arg(n.summary).arg(n.body);
+    cmd.args(n.relaunch_args(path));
     detached(&mut cmd).spawn().map(|_| ())
 }
 
 /// The blocking half of [`spawn_actionable`], running in the detached copy.
 pub fn await_action(n: &Notification<'_>, path: &str) -> Result<()> {
-    let mut args = n.base_args();
-    args.push("--wait".into());
-    args.push("--action=default=Open".into());
-    args.push("--".into());
-    args.push(n.summary.into());
-    args.push(n.body.into());
-
-    let chosen = launch::output("notify-send", &args).unwrap_or_default();
+    let chosen = launch::output("notify-send", n.wait_args()).unwrap_or_default();
     if chosen.trim() == "default" {
         let _ = detached(Command::new("xdg-open").arg(path)).spawn();
     }

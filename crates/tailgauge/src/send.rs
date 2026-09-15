@@ -40,28 +40,13 @@ pub fn run(machine: &str, files: &[String]) -> Outcome {
     }
 
     let what = describe(&files);
-    let mut args: Vec<String> = vec![
-        "file".into(),
-        "cp".into(),
-        "--update-interval=0".into(),
-        "--".into(),
-    ];
-    args.extend(files.iter().cloned());
-    args.push(format!("{machine}:"));
-
-    match launch::run("tailscale", &args) {
+    match launch::run("tailscale", taildrop_args(machine, &files)) {
         Ok(out) if out.status.success() => {
             announce("normal", &format!("Sent to {name}"), &what);
             Outcome::Sent
         }
         Ok(out) => {
-            let mut why = String::from_utf8_lossy(&out.stderr).trim().to_string();
-            if why.is_empty() {
-                why = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            }
-            if why.is_empty() {
-                why = "Taildrop transfer failed".into();
-            }
+            let why = why_failed(&out.stdout, &out.stderr);
             announce("critical", &format!("Could not send to {name}"), &why);
             Outcome::Failed
         }
@@ -74,6 +59,32 @@ pub fn run(machine: &str, files: &[String]) -> Outcome {
             Outcome::Failed
         }
     }
+}
+
+/// `--` before the files, or one named `-x` is read as an option. The trailing
+/// colon is what makes the last argument a destination rather than a file.
+fn taildrop_args(machine: &str, files: &[String]) -> Vec<String> {
+    let mut args: Vec<String> = vec![
+        "file".into(),
+        "cp".into(),
+        "--update-interval=0".into(),
+        "--".into(),
+    ];
+    args.extend(files.iter().cloned());
+    args.push(format!("{machine}:"));
+    args
+}
+
+/// The CLI explains itself on either stream depending on what went wrong, and
+/// a notification that says nothing is worse than one that guesses.
+fn why_failed(stdout: &[u8], stderr: &[u8]) -> String {
+    for stream in [stderr, stdout] {
+        let text = String::from_utf8_lossy(stream).trim().to_string();
+        if !text.is_empty() {
+            return text;
+        }
+    }
+    "Taildrop transfer failed".into()
 }
 
 fn describe(files: &[String]) -> String {

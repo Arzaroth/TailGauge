@@ -10,20 +10,9 @@ pub enum Picked {
 }
 
 pub fn run(title: &str, multiple: bool) -> Picked {
-    let kde = std::env::var("XDG_CURRENT_DESKTOP")
-        .map(|d| {
-            let d = d.to_lowercase();
-            d.contains("kde") || d.contains("plasma")
-        })
-        .unwrap_or(false);
+    let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
 
-    let order: [&str; 2] = if kde {
-        ["kdialog", "zenity"]
-    } else {
-        ["zenity", "kdialog"]
-    };
-
-    for chooser in order {
+    for chooser in order(&desktop) {
         if !launch::has(chooser) {
             continue;
         }
@@ -34,25 +23,40 @@ pub fn run(title: &str, multiple: bool) -> Picked {
         let Ok(out) = launch::run(chooser, &args) else {
             continue;
         };
-        // Both choosers exit non-zero on cancel, which is a decision rather
-        // than a fault.
-        if !out.status.success() {
-            return Picked::Cancelled;
-        }
-        let files: Vec<String> = String::from_utf8_lossy(&out.stdout)
-            .lines()
-            .map(str::trim)
-            .filter(|l| !l.is_empty())
-            .map(str::to_string)
-            .collect();
-        return if files.is_empty() {
-            Picked::Cancelled
-        } else {
-            Picked::Files(files)
-        };
+        return picked(out.status.success(), &out.stdout);
     }
 
     Picked::NoChooser
+}
+
+/// A Plasma session gets kdialog, because zenity there draws a GTK dialog over
+/// a Qt desktop. Anywhere else zenity is the one more likely to be installed.
+fn order(desktop: &str) -> [&'static str; 2] {
+    let desktop = desktop.to_lowercase();
+    if desktop.contains("kde") || desktop.contains("plasma") {
+        ["kdialog", "zenity"]
+    } else {
+        ["zenity", "kdialog"]
+    }
+}
+
+/// Both choosers exit non-zero on cancel, which is a decision rather than a
+/// fault.
+fn picked(ok: bool, stdout: &[u8]) -> Picked {
+    if !ok {
+        return Picked::Cancelled;
+    }
+    let files: Vec<String> = String::from_utf8_lossy(stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .map(str::to_string)
+        .collect();
+    if files.is_empty() {
+        Picked::Cancelled
+    } else {
+        Picked::Files(files)
+    }
 }
 
 fn home() -> String {

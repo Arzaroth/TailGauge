@@ -12,19 +12,8 @@ pub fn run(text: &str) -> Result<()> {
     }
 
     let on_wayland = std::env::var_os("WAYLAND_DISPLAY").is_some_and(|v| !v.is_empty());
-    // wl-copy first under Wayland and last everywhere else: on an X11 session
-    // with XWayland tooling installed it is the one that writes to a selection
-    // nothing on screen is reading.
-    let mut candidates: Vec<(&str, &[&str])> = vec![
-        ("xclip", &["-selection", "clipboard"]),
-        ("xsel", &["--clipboard", "--input"]),
-        ("wl-copy", &[]),
-    ];
-    if on_wayland {
-        candidates.rotate_right(1);
-    }
 
-    for (program, args) in candidates {
+    for (program, args) in candidates(on_wayland) {
         if !launch::has(program) {
             continue;
         }
@@ -34,6 +23,21 @@ pub fn run(text: &str) -> Result<()> {
     }
 
     bail!("install wl-clipboard, xclip, or xsel")
+}
+
+/// wl-copy first under Wayland and last everywhere else: on an X11 session
+/// with XWayland tooling installed it is the one that writes to a selection
+/// nothing on screen is reading.
+fn candidates(on_wayland: bool) -> Vec<(&'static str, &'static [&'static str])> {
+    let mut candidates: Vec<(&str, &[&str])> = vec![
+        ("xclip", &["-selection", "clipboard"]),
+        ("xsel", &["--clipboard", "--input"]),
+        ("wl-copy", &[]),
+    ];
+    if on_wayland {
+        candidates.rotate_right(1);
+    }
+    candidates
 }
 
 fn pipe_into(program: &str, args: &[&str], text: &str) -> Result<bool> {
