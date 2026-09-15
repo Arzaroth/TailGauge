@@ -38,7 +38,7 @@ PlasmoidItem {
 
     // The provider the panel is driving, so the tooltip never names the wrong one.
     readonly property string providerLabel: Model.providerLabel(service.snapshot())
-    readonly property var barState: Model.barState(service.snapshot(), function (text) { return text })
+    readonly property var barState: Model.barState(service.snapshot())
 
     toolTipMainText: service.installed ? (service.selfName || providerLabel) : providerLabel
     toolTipSubText: {

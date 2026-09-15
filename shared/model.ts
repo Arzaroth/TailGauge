@@ -13,7 +13,6 @@
 // value is coerced on the way in. Only what this model *produces* is precise.
 type Raw = any
 
-export type Translate = (text: string) => string
 
 export interface Peer {
   id: string
@@ -334,7 +333,6 @@ export interface PanelState {
 }
 
 export interface ResolveOptions {
-  t?: Translate
   phraseIndex?: number
   recentRegions?: string[]
   mullvadPickerOpen?: boolean
@@ -1272,8 +1270,6 @@ var ACTIVE_PHRASES = [
   "Watching machines"
 ]
 
-function identityText(text: string): string { return text }
-
 function formatText(template: Raw, value: Raw): string {
   return String(template).replace("%1", String(value === null || value === undefined ? "" : value))
 }
@@ -1319,10 +1315,10 @@ function peerSubtitle(peer: Raw): string {
 // An offline machine keeps its copy actions - a sleeping laptop's address is
 // exactly what someone needs to wake it - so the row has to say why it reads
 // differently from the ones above it.
-function peerRowSubtitle(peer: Raw, t: Translate): string {
+function peerRowSubtitle(peer: Raw): string {
   var subtitle = peerSubtitle(peer)
   if (!peer || peer.Online === true) return subtitle
-  return subtitle === "" ? t("Offline") : formatText(t("Offline · %1"), subtitle)
+  return subtitle === "" ? "Offline" : formatText("Offline · %1", subtitle)
 }
 
 function panelRow(row: PanelRowInput): PanelRow {
@@ -1381,19 +1377,19 @@ function summaryFor(state: PanelState, id: string): ProviderSummary | null {
   return null
 }
 
-function providerStateWord(t: Translate, summary: ProviderSummary | null): string {
-  if (!summary) return t("checking\u2026")
-  if (summary.needsLogin) return t("needs login")
-  if (summary.running) return t("connected")
-  return summary.state !== "" ? summary.state : t("disconnected")
+function providerStateWord(summary: ProviderSummary | null): string {
+  if (!summary) return "checking\u2026"
+  if (summary.needsLogin) return "needs login"
+  if (summary.running) return "connected"
+  return summary.state !== "" ? summary.state : "disconnected"
 }
 
 // One line per installed provider, the active one first, so hovering the bar
 // answers "what is up" without opening the panel.
-function barTooltip(state: PanelState, t: Translate): string[] {
+function barTooltip(state: PanelState): string[] {
   var installed = installedProviders(state)
   if (installed.length === 0) {
-    return [formatText(t("No supported VPN CLI on PATH. Looked for %1."), providerLabelList())]
+    return [formatText("No supported VPN CLI on PATH. Looked for %1.", providerLabelList())]
   }
   var current = activeProvider(state)
   var ordered: ProviderDescriptor[] = []
@@ -1413,7 +1409,7 @@ function barTooltip(state: PanelState, t: Translate): string[] {
   for (var j = 0; j < ordered.length; j++) {
     var provider = ordered[j]
     var summary = summaryFor(state, provider.id)
-    var parts = [providerStateWord(t, summary)]
+    var parts = [providerStateWord(summary)]
     if (summary && summary.running) {
       if (summary.selfName !== "") parts.push(summary.selfName)
       if (summary.selfIp !== "") parts.push(summary.selfIp)
@@ -1440,7 +1436,7 @@ function barTooltip(state: PanelState, t: Translate): string[] {
 
 // Aggregate, deliberately: switching which provider the panel shows must not
 // change an icon that describes the machine's connections.
-function barState(state: PanelState, t: Translate): BarState {
+function barState(state: PanelState): BarState {
   var summaries = state.summaries
   var connected = false
   var warning = false
@@ -1459,7 +1455,7 @@ function barState(state: PanelState, t: Translate): BarState {
     connected: connected,
     warning: warning,
     crossed: !connected && !warning,
-    tooltip: barTooltip(state, t)
+    tooltip: barTooltip(state)
   }
 }
 
@@ -1477,8 +1473,7 @@ function formatBytes(value: Raw): string {
   return shown + " " + units[i]
 }
 
-function formatSince(value: Raw, nowMs: Raw, t?: Translate): string {
-  var tr = typeof t === "function" ? t : identityText
+function formatSince(value: Raw, nowMs: Raw): string {
   var text = String(value || "").trim()
   if (text === "") return ""
   var then = Date.parse(text)
@@ -1486,34 +1481,34 @@ function formatSince(value: Raw, nowMs: Raw, t?: Translate): string {
   var now = typeof nowMs === "number" ? nowMs : Date.now()
   var seconds = Math.floor((now - then) / 1000)
   if (seconds < 0) return ""
-  if (seconds < 60) return tr("just now")
+  if (seconds < 60) return "just now"
   var minutes = Math.floor(seconds / 60)
   if (minutes < 60) {
-    return formatText(minutes === 1 ? tr("%1 minute ago") : tr("%1 minutes ago"), minutes)
+    return formatText(minutes === 1 ? "%1 minute ago" : "%1 minutes ago", minutes)
   }
   var hours = Math.floor(minutes / 60)
   if (hours < 24) {
-    return formatText(hours === 1 ? tr("%1 hour ago") : tr("%1 hours ago"), hours)
+    return formatText(hours === 1 ? "%1 hour ago" : "%1 hours ago", hours)
   }
   var days = Math.floor(hours / 24)
-  return formatText(days === 1 ? tr("%1 day ago") : tr("%1 days ago"), days)
+  return formatText(days === 1 ? "%1 day ago" : "%1 days ago", days)
 }
 
 // How the tunnel is carried, in words rather than a provider's shorthand.
-function connectionSummary(peer: Raw, t: Translate): string {
+function connectionSummary(peer: Raw): string {
   if (!peer) return ""
   var kind = String(peer.ConnectionType || "")
   var relay = String(peer.Relay || "")
-  if (kind === "P2P" || kind === "Direct") return t("Direct peer-to-peer")
+  if (kind === "P2P" || kind === "Direct") return "Direct peer-to-peer"
   if (kind === "Relayed" || relay !== "") {
-    return relay !== "" ? formatText(t("Relayed via %1"), relay) : t("Relayed")
+    return relay !== "" ? formatText("Relayed via %1", relay) : "Relayed"
   }
   return ""
 }
 
 // The rows behind a machine's disclosure arrow. Only what the provider
 // actually reported: an absent reading is a row that is not there.
-function peerDetailRows(peer: Raw, t: Translate, nowMs?: number): PanelRow[] {
+function peerDetailRows(peer: Raw, nowMs?: number): PanelRow[] {
   var rows: PanelRow[] = []
   if (!peer) return rows
 
@@ -1528,57 +1523,56 @@ function peerDetailRows(peer: Raw, t: Translate, nowMs?: number): PanelRow[] {
     }))
   }
 
-  var connection = connectionSummary(peer, t)
+  var connection = connectionSummary(peer)
   var latency = typeof peer.LatencyMs === "number" && peer.LatencyMs >= 0
-    ? formatText(t("%1 ms"), Math.round(peer.LatencyMs)) : ""
+    ? formatText("%1 ms", Math.round(peer.LatencyMs)) : ""
   if (connection !== "" && latency !== "") connection = connection + " \u00b7 " + latency
   else if (connection === "") connection = latency
 
-  detail("connection", t("Connection"), connection)
-  detail("endpoint", t("Endpoint"), String(peer.Endpoint || ""))
-  var handshake = formatSince(peer.LastHandshake, nowMs, t)
-  detail("handshake", t("Last handshake"), handshake)
+  detail("connection", "Connection", connection)
+  detail("endpoint", "Endpoint", String(peer.Endpoint || ""))
+  var handshake = formatSince(peer.LastHandshake, nowMs)
+  detail("handshake", "Last handshake", handshake)
   // Tailscale fills the handshake and byte counters only once a session is up.
   // For an idle peer, when the control plane last saw it is all there is.
-  if (handshake === "") detail("seen", t("Last seen"), formatSince(peer.LastSeen, nowMs, t))
+  if (handshake === "") detail("seen", "Last seen", formatSince(peer.LastSeen, nowMs))
 
   var rx = Number(peer.RxBytes || 0)
   var tx = Number(peer.TxBytes || 0)
   if (rx > 0 || tx > 0) {
-    detail("transfer", t("Transfer"), "\u2193 " + formatBytes(rx) + "   \u2191 " + formatBytes(tx))
+    detail("transfer", "Transfer", "\u2193 " + formatBytes(rx) + "   \u2191 " + formatBytes(tx))
   }
 
   var routes = peer.Routes || []
-  if (routes.length > 0) detail("routes", t("Routes"), routes.join(", "))
+  if (routes.length > 0) detail("routes", "Routes", routes.join(", "))
 
   // An idle peer reports nothing about a session it does not have, so the one
   // thing always known about it keeps the row from opening onto almost
   // nothing.
-  if (rows.length < 3) detail("added", t("Added"), formatSince(peer.Created, nowMs, t))
+  if (rows.length < 3) detail("added", "Added", formatSince(peer.Created, nowMs))
 
   return rows
 }
 
 // What the switch will do, named after the provider it will do it to. Shared
 // so a desktop's own menu cannot drift from the panel's switch.
-function toggleHint(state: PanelState | null | undefined, t?: Translate): string {
-  var tr = typeof t === "function" ? t : identityText
+function toggleHint(state: PanelState | null | undefined): string {
   var source = state || {}
   var label = providerLabel(source)
-  if (source.active) return formatText(tr("Turn %1 off"), label)
-  if (source.needsLogin) return tr("Authorize this device")
-  return formatText(tr("Turn %1 on"), label)
+  if (source.active) return formatText("Turn %1 off", label)
+  if (source.needsLogin) return "Authorize this device"
+  return formatText("Turn %1 on", label)
 }
 
-function panelHeader(state: PanelState, t: Translate, phraseIndex?: number): PanelHeader {
+function panelHeader(state: PanelState, phraseIndex?: number): PanelHeader {
   var index = typeof phraseIndex === "number" ? phraseIndex : 0
   var label = providerLabel(state)
   var provider = activeProvider(state)
   // A provider we cannot drive yet is named, but its switch would do nothing.
   var present = providerReady(state)
   var meta = state.active
-    ? t(ACTIVE_PHRASES[((index % ACTIVE_PHRASES.length) + ACTIVE_PHRASES.length) % ACTIVE_PHRASES.length])
-    : formatText(t("%1 is disconnected"), label)
+    ? ACTIVE_PHRASES[((index % ACTIVE_PHRASES.length) + ACTIVE_PHRASES.length) % ACTIVE_PHRASES.length]
+    : formatText("%1 is disconnected", label)
   return {
     id: "header",
     title: present ? (state.selfName || label) : label,
@@ -1594,28 +1588,28 @@ function panelHeader(state: PanelState, t: Translate, phraseIndex?: number): Pan
     toggleEnabled: present,
     toggleChecked: state.active === true,
     busy: state.busy === true,
-    toggleHint: toggleHint(state, t),
+    toggleHint: toggleHint(state),
     crossed: !state.active && !state.needsLogin,
     warning: state.needsLogin === true,
     dimmed: !state.active,
     actions: present
-      ? [{ id: "refresh", label: t("Refresh"), icon: "view-refresh-symbolic", glyph: "\udb81\udc50" }]
+      ? [{ id: "refresh", label: "Refresh", icon: "view-refresh-symbolic", glyph: "\udb81\udc50" }]
       : []
   }
 }
 
 // Precedence, in one place: a command's own progress beats a stale error, and
 // both beat the idle line.
-function panelStatus(state: PanelState, t: Translate): PanelStatus {
+function panelStatus(state: PanelState): PanelStatus {
   var provider = activeProvider(state)
   if (provider === null) {
     return {
-      text: formatText(t("No supported VPN CLI on PATH. Looked for %1."), providerLabelList()),
+      text: formatText("No supported VPN CLI on PATH. Looked for %1.", providerLabelList()),
       tone: "dim"
     }
   }
   if (!provider.supported) {
-    return { text: formatText(t("%1 is installed, but TailGauge cannot drive it yet."), provider.label), tone: "dim" }
+    return { text: formatText("%1 is installed, but TailGauge cannot drive it yet.", provider.label), tone: "dim" }
   }
   if (state.actionStatus) return { text: String(state.actionStatus), tone: "dim" }
   if (state.lastError) return { text: String(state.lastError), tone: "error" }
@@ -1624,18 +1618,18 @@ function panelStatus(state: PanelState, t: Translate): PanelStatus {
 
 // The version of the widget you are looking at, in the quietest line the panel
 // has. Each frontend passes its own, read from the manifest it shipped with.
-function panelFooter(state: PanelState, t: Translate): string {
+function panelFooter(state: PanelState): string {
   var version = String(state.version || "")
   if (version === "") return ""
 
-  var text = formatText(t("TailGauge v%1"), version)
+  var text = formatText("TailGauge v%1", version)
 
   // The widget and the binary install separately, so an update that only half
   // applied leaves them on different versions with nothing else on screen
   // saying which half is behind.
   var binary = binaryVersion(state)
   if (binary !== "" && binary !== version)
-    text += " · " + formatText(t("binary v%1"), binary)
+    text += " · " + formatText("binary v%1", binary)
 
   return text
 }
@@ -1644,7 +1638,7 @@ function binaryVersion(state: PanelState): string {
   return String((state.update || {}).current || "")
 }
 
-function updateSection(state: PanelState, t: Translate): PanelSection {
+function updateSection(state: PanelState): PanelSection {
   var update = state.update || {}
   var available = update.available === true
   var rows: PanelRow[] = []
@@ -1653,10 +1647,10 @@ function updateSection(state: PanelState, t: Translate): PanelSection {
     rows.push(panelRow({
       id: "update",
       kind: "update",
-      label: formatText(t("TailGauge %1 is available"), update.latest),
+      label: formatText("TailGauge %1 is available", update.latest),
       // No store owns any part of TailGauge, so there is never a copy the
       // binary may not replace.
-      sublabel: t("Install it now"),
+      sublabel: "Install it now",
       icon: "software-update-available-symbolic",
       glyph: "󰚰",
       action: "update",
@@ -1679,7 +1673,7 @@ function updateSection(state: PanelState, t: Translate): PanelSection {
 // The local machine, rendered as a machine row: `tailscale status` already
 // describes it exactly the way it describes a peer, and copying your own
 // address is the one thing the header's name alone cannot do.
-function providersSection(state: PanelState, t: Translate): PanelSection {
+function providersSection(state: PanelState): PanelSection {
   var drivable = drivableProviders(state)
   var current = activeProvider(state)
   var rows: PanelRow[] = []
@@ -1700,7 +1694,7 @@ function providersSection(state: PanelState, t: Translate): PanelSection {
   }
   return {
     id: "providers",
-    title: t("VPN"),
+    title: "VPN",
     // One provider is not a choice, and nought is not a list.
     visible: rows.length > 1,
     empty: "",
@@ -1708,7 +1702,7 @@ function providersSection(state: PanelState, t: Translate): PanelSection {
   }
 }
 
-function selfSection(state: PanelState, t: Translate): PanelSection {
+function selfSection(state: PanelState): PanelSection {
   var peer = state.selfPeer || null
   var copyOptions = peerCopyOptions(peer)
   var rows: PanelRow[] = []
@@ -1717,12 +1711,12 @@ function selfSection(state: PanelState, t: Translate): PanelSection {
     rows.push(panelRow({
       id: "self",
       kind: "self",
-      label: String(peer.DisplayName || peer.HostName || t("Unknown")),
+      label: String(peer.DisplayName || peer.HostName || "Unknown"),
       sublabel: peerSubtitle(peer),
       icon: osIconName(peer.OS),
       glyph: osIcon(peer.OS),
       action: "copy",
-      actions: [{ id: "copy", label: t("Copy"), icon: "edit-copy-symbolic", glyph: "󰆏" }],
+      actions: [{ id: "copy", label: "Copy", icon: "edit-copy-symbolic", glyph: "󰆏" }],
       copyOptions: copyOptions,
       payload: peer
     }))
@@ -1730,21 +1724,21 @@ function selfSection(state: PanelState, t: Translate): PanelSection {
 
   return {
     id: "self",
-    title: t("This device"),
+    title: "This device",
     visible: providerReady(state) && state.active === true && rows.length > 0,
     empty: "",
     rows: rows
   }
 }
 
-function connectionsSection(state: PanelState, t: Translate): PanelSection {
+function connectionsSection(state: PanelState): PanelSection {
   var rows: PanelRow[] = []
   if (state.accountsAccessDenied) {
     rows.push(panelRow({
       id: "auth",
       kind: "auth",
-      label: t("Authorize Tailscale operator"),
-      sublabel: t("Allow this user to operate this Tailscale profile"),
+      label: "Authorize Tailscale operator",
+      sublabel: "Allow this user to operate this Tailscale profile",
       icon: "security-medium-symbolic",
       glyph: "󰒃",
       action: "authorize",
@@ -1771,7 +1765,7 @@ function connectionsSection(state: PanelState, t: Translate): PanelSection {
   }
   return {
     id: "connections",
-    title: t("Connections"),
+    title: "Connections",
     visible: providerSupports(state, "accounts")
       && (accounts.length > 1 || state.accountsAccessDenied === true),
     empty: "",
@@ -1779,22 +1773,22 @@ function connectionsSection(state: PanelState, t: Translate): PanelSection {
   }
 }
 
-function exitNodeRows(state: PanelState, t: Translate, recentRegions: string[], pickerOpen: boolean): PanelRow[] {
+function exitNodeRows(state: PanelState, recentRegions: string[], pickerOpen: boolean): PanelRow[] {
   var rows: PanelRow[] = []
   var tailnet = state.ownExitNodes || []
   var regions = providerSupports(state, "mullvad") ? (state.mullvadRegions || []) : []
   var i
 
-  for (i = 0; i < tailnet.length; i++) rows.push(exitNodeRow(state, tailnet[i], t))
+  for (i = 0; i < tailnet.length; i++) rows.push(exitNodeRow(state, tailnet[i]))
 
   var recent = recentMullvadNodes(regions, recentRegions, 5)
-  for (i = 0; i < recent.length; i++) rows.push(exitNodeRow(state, recent[i], t))
+  for (i = 0; i < recent.length; i++) rows.push(exitNodeRow(state, recent[i]))
 
   if (regions.length > 0) {
     var children: PanelRow[] = [panelRow({
       id: "mullvad:empty",
       kind: "empty",
-      label: t("No Mullvad regions found."),
+      label: "No Mullvad regions found.",
       navigable: false,
       searchScope: "mullvad"
     })]
@@ -1811,7 +1805,7 @@ function exitNodeRows(state: PanelState, t: Translate, recentRegions: string[], 
         current: region.ExitNode === true,
         bold: region.ExitNode === true,
         busy: String(state.settingExitNodeId || "") === String(region.id || ""),
-        hint: region.ExitNode === true ? t("Disconnect") : t("Connect"),
+        hint: region.ExitNode === true ? "Disconnect" : "Connect",
         searchScope: "mullvad",
         searchKey: mullvadRegionSearchKey(region),
         payload: region
@@ -1820,44 +1814,44 @@ function exitNodeRows(state: PanelState, t: Translate, recentRegions: string[], 
     rows.push(panelRow({
       id: "mullvad:add",
       kind: "mullvadPicker",
-      label: t("Choose Mullvad region"),
+      label: "Choose Mullvad region",
       icon: "list-add-symbolic",
       glyph: "+",
       action: "togglePicker",
       current: pickerOpen === true,
       expanded: pickerOpen === true,
-      searchPlaceholder: t("Search regions"),
+      searchPlaceholder: "Search regions",
       children: children
     }))
   }
   return rows
 }
 
-function exitNodeRow(state: PanelState, node: Peer, t: Translate): PanelRow {
+function exitNodeRow(state: PanelState, node: Peer): PanelRow {
   var active = node.ExitNode === true
   return panelRow({
     id: "exit:" + String(node.id || ""),
     kind: "exitNode",
-    label: String(node.DisplayName || node.HostName || t("Unknown")),
+    label: String(node.DisplayName || node.HostName || "Unknown"),
     icon: node.Mullvad === true ? "network-vpn-symbolic" : "network-connect-symbolic",
     glyph: node.Mullvad === true ? "󰖂" : "󱇢",
     action: "setExitNode",
     current: active,
     bold: active,
     busy: String(state.settingExitNodeId || "") === String(node.id || ""),
-    hint: active ? t("Disconnect") : t("Connect"),
+    hint: active ? "Disconnect" : "Connect",
     payload: node
   })
 }
 
-function exitNodesSection(state: PanelState, t: Translate, recentRegions: string[], pickerOpen: boolean): PanelSection {
+function exitNodesSection(state: PanelState, recentRegions: string[], pickerOpen: boolean): PanelSection {
   var supported = providerSupports(state, "exitNodes")
   var rows = supported && state.active
-    ? exitNodeRows(state, t, recentRegions, pickerOpen)
+    ? exitNodeRows(state, recentRegions, pickerOpen)
     : []
   return {
     id: "exitNodes",
-    title: t("Exit nodes"),
+    title: "Exit nodes",
     visible: supported && state.active === true && rows.length > 0,
     empty: "",
     rows: rows
@@ -1866,7 +1860,7 @@ function exitNodesSection(state: PanelState, t: Translate, recentRegions: string
 
 var MACHINE_SEARCH_MIN = 8
 
-function networksSection(state: PanelState, t: Translate): PanelSection {
+function networksSection(state: PanelState): PanelSection {
   var supported = providerSupports(state, "networks")
   var networks = supported ? (state.networks || []) : []
   var rows: PanelRow[] = []
@@ -1885,21 +1879,20 @@ function networksSection(state: PanelState, t: Translate): PanelSection {
       current: selected,
       bold: selected,
       busy: String(state.selectingNetworkId || "") === id,
-      hint: selected ? t("Leave") : t("Join"),
+      hint: selected ? "Leave" : "Join",
       payload: network
     }))
   }
   return {
     id: "networks",
-    title: t("Networks"),
+    title: "Networks",
     visible: supported && state.active === true && rows.length > 0,
     empty: "",
     rows: rows
   }
 }
 
-function machinesSection(state: PanelState, t: Translate,
-                         expandedPeerId: string, nowMs?: number): PanelSection {
+function machinesSection(state: PanelState, expandedPeerId: string, nowMs?: number): PanelSection {
   var peers = state.active ? (state.peers || []) : []
   var rows: PanelRow[] = []
 
@@ -1909,7 +1902,7 @@ function machinesSection(state: PanelState, t: Translate,
     rows.push(panelRow({
       id: "machines:search",
       kind: "machineSearch",
-      searchPlaceholder: t("Search machines"),
+      searchPlaceholder: "Search machines",
       navigable: false
     }))
   }
@@ -1918,7 +1911,7 @@ function machinesSection(state: PanelState, t: Translate,
     rows.push(panelRow({
       id: "machines:empty",
       kind: "empty",
-      label: t("No machines match."),
+      label: "No machines match.",
       navigable: false,
       searchScope: "machines"
     }))
@@ -1927,26 +1920,26 @@ function machinesSection(state: PanelState, t: Translate,
   for (var i = 0; i < peers.length; i++) {
     var peer = peers[i]
     var copyOptions = peerCopyOptions(peer)
-    var details = peerDetailRows(peer, t, nowMs)
+    var details = peerDetailRows(peer, nowMs)
     var expanded = details.length > 0 && String(expandedPeerId) === String(peer.id || "")
     var actions: RowAction[] = []
     if (details.length > 0) {
       actions.push({
         id: "detail",
-        label: expanded ? t("Hide details") : t("Show details"),
+        label: expanded ? "Hide details" : "Show details",
         icon: expanded ? "pan-up-symbolic" : "pan-down-symbolic",
         glyph: expanded ? "\udb80\udd43" : "\udb80\udd40"
       })
     }
     if (canSendFiles(state, peer))
-      actions.push({ id: "send", label: t("Send files"), icon: "document-send-symbolic", glyph: "󰒊" })
+      actions.push({ id: "send", label: "Send files", icon: "document-send-symbolic", glyph: "󰒊" })
     if (copyOptions.length > 0)
-      actions.push({ id: "copy", label: t("Copy"), icon: "edit-copy-symbolic", glyph: "󰆏" })
+      actions.push({ id: "copy", label: "Copy", icon: "edit-copy-symbolic", glyph: "󰆏" })
     rows.push(panelRow({
       id: "peer:" + String(peer.id || ""),
       kind: "peer",
-      label: String(peer.DisplayName || peer.HostName || t("Unknown")),
-      sublabel: peerRowSubtitle(peer, t),
+      label: String(peer.DisplayName || peer.HostName || "Unknown"),
+      sublabel: peerRowSubtitle(peer),
       icon: osIconName(peer.OS),
       glyph: osIcon(peer.OS),
       action: copyOptions.length > 0 ? "copy" : "",
@@ -1961,9 +1954,9 @@ function machinesSection(state: PanelState, t: Translate,
   }
   return {
     id: "machines",
-    title: t("Machines"),
+    title: "Machines",
     visible: providerReady(state) && state.active === true,
-    empty: t("No machines found on this tailnet."),
+    empty: "No machines found on this tailnet.",
     rows: rows
   }
 }
@@ -2005,26 +1998,25 @@ function panelNavigation(header: PanelHeader, sections: PanelSection[]): NavEntr
 
 function resolvePanel(state: PanelState | null | undefined, options?: ResolveOptions | null): Panel {
   var opts = options || {}
-  var t = typeof opts.t === "function" ? opts.t : identityText
   var source = state || {}
 
-  var header = panelHeader(source, t, opts.phraseIndex)
+  var header = panelHeader(source, opts.phraseIndex)
   var sections = [
-    updateSection(source, t),
-    providersSection(source, t),
-    selfSection(source, t),
-    connectionsSection(source, t),
-    exitNodesSection(source, t, opts.recentRegions || [], opts.mullvadPickerOpen === true),
-    networksSection(source, t),
-    machinesSection(source, t, String(opts.expandedPeerId || ""), opts.nowMs)
+    updateSection(source),
+    providersSection(source),
+    selfSection(source),
+    connectionsSection(source),
+    exitNodesSection(source, opts.recentRegions || [], opts.mullvadPickerOpen === true),
+    networksSection(source),
+    machinesSection(source, String(opts.expandedPeerId || ""), opts.nowMs)
   ]
 
   return {
-    bar: barState(source, t),
+    bar: barState(source),
     header: header,
-    status: panelStatus(source, t),
+    status: panelStatus(source),
     sections: sections,
-    footer: panelFooter(source, t),
+    footer: panelFooter(source),
     navigation: panelNavigation(header, sections)
   }
 }
