@@ -293,9 +293,13 @@ mod tests {
                 .unwrap_or_else(|| panic!("stop {i} resolves to nothing"));
             assert_eq!(row.id, panel.navigation[i].row_id);
         }
-        assert_eq!(
-            panel.footer, "TailGauge v0.0.0-test",
-            "the frontend's own version"
+        // Starts with, rather than equals: the footer adds the binary's own
+        // version when it disagrees with the widget's, and on a machine that
+        // has checked for an update once, it does.
+        assert!(
+            panel.footer.starts_with("TailGauge v0.0.0-test"),
+            "the frontend's own version leads the footer: {}",
+            panel.footer
         );
         assert_eq!(
             panel

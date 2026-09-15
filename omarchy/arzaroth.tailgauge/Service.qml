@@ -149,6 +149,25 @@ Item {
     detachProc.running = true
   }
 
+  // The click shows on the frame it was clicked rather than a round trip
+  // later: the local copy of the panel is patched, and the next answer
+  // replaces it wholesale. Only the header moves - the bar icon describes the
+  // machine's connections, which a click on one provider has not changed yet.
+  function _showOptimistically(on) {
+    if (!panel || !panel.header) return
+    var header = {}
+    for (var key in panel.header) header[key] = panel.header[key]
+    header.toggleChecked = on
+    header.dimmed = !on
+    header.crossed = !on && !header.warning
+    var next = {}
+    // Shallow: `sections` stays the same array, so the counted repeaters keep
+    // the delegates they hold rather than rebuilding every row.
+    for (var field in panel) next[field] = panel[field]
+    next.header = header
+    panel = next
+  }
+
   function toggleTailscale() {
     if (!installed) return
     if (active) down()
@@ -159,6 +178,7 @@ Item {
     // No progress status here: the greyed icon and hero line already convey the
     // optimistic off, so only a failure is worth a message.
     _desired = 0
+    _showOptimistically(false)
     refresh()
     _ctl(actionProc, "down")
   }
@@ -169,6 +189,7 @@ Item {
   function loginOrUp() {
     if (!installed) return
     _desired = 1
+    _showOptimistically(true)
     refresh()
     if (_ctl(actionProc, "up")) actionStatus = "Turning it on…"
   }

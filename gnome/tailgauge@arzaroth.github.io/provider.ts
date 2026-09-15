@@ -243,6 +243,19 @@ export const ProviderService = GObject.registerClass({
         });
     }
 
+    /// The click shows on the frame it was clicked rather than a round trip
+    /// later: the local copy of the panel is patched, and the next answer
+    /// replaces it wholesale. Only the header moves - the bar icon describes
+    /// the machine's connections, which a click on one provider has not
+    /// changed yet.
+    _showOptimistically(on: boolean): void {
+        const header = {...this.panel.header, toggleChecked: on, dimmed: !on};
+        header.crossed = !on && !header.warning;
+        // Shallow: `sections` stays the same array, so a menu that rebuilds on
+        // its signature does not rebuild for a click.
+        this.panel = {...this.panel, header};
+    }
+
     toggleTailscale(): void {
         if (!this.installed)
             return;
@@ -256,6 +269,7 @@ export const ProviderService = GObject.registerClass({
         // No progress status here: the greyed icon and hero line already
         // convey the optimistic off, so only a failure is worth a message.
         this._desired = 0;
+        this._showOptimistically(false);
         this.refresh();
         this._ctl('action', 'down');
     }
@@ -266,6 +280,7 @@ export const ProviderService = GObject.registerClass({
         if (!this.installed)
             return;
         this._desired = 1;
+        this._showOptimistically(true);
         this.refresh();
         if (this._ctl('action', 'up'))
             this.actionStatus = 'Turning it on…';

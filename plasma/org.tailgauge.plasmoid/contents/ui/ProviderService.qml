@@ -11,6 +11,11 @@ import org.kde.plasma.plasma5support as Plasma5Support
 // Plasma's executable engine takes a command line rather than an argv and has
 // no stdin, so everything here goes out shell-quoted through `sh -c`. That is
 // the one thing this frontend does that the others do not.
+//
+// The few strings it writes are bare rather than wrapped in `i18n`, the way
+// the other two frontends write theirs: they say what a command is doing or
+// why one failed, there is no catalogue behind them, and `i18n` is a global
+// the surrounding shell injects - which this file otherwise needs nothing of.
 Item {
     id: root
 
@@ -25,7 +30,7 @@ Item {
                   meta: "", action: "toggle", toggleVisible: false, toggleEnabled: false,
                   toggleChecked: false, busy: false, toggleHint: "", crossed: true,
                   warning: false, dimmed: true, actions: [] },
-        status: { text: i18n("Checking…"), tone: "dim" },
+        status: { text: "Checking…", tone: "dim" },
         sections: [],
         footer: "",
         navigation: []
@@ -141,14 +146,14 @@ Item {
     function _handle(kind, exitCode, stdout, stderr) {
         if (kind === "panel") {
             if (exitCode !== 0) {
-                root.lastError = stderr.trim() || i18n("The panel could not be read")
+                root.lastError = stderr.trim() || "The panel could not be read"
                 return
             }
             var next = null
             try {
                 next = JSON.parse(stdout)
             } catch (e) {
-                root.lastError = i18n("The panel could not be read")
+                root.lastError = "The panel could not be read"
                 return
             }
             if (!next || !next.header) return
@@ -176,7 +181,7 @@ Item {
         if (kind === "applyUpdate") {
             root.updating = false
             root.actionStatus = ""
-            if (exitCode !== 0) root.lastError = stderr.trim() || i18n("The update failed")
+            if (exitCode !== 0) root.lastError = stderr.trim() || "The update failed"
             root.checkUpdate(true)
             return
         }
@@ -186,7 +191,7 @@ Item {
         else if (kind === "exitNode") root.settingExitNodeId = ""
         else if (kind === "network") root.selectingNetworkId = ""
         root.actionStatus = ""
-        root.lastError = exitCode === 0 ? "" : (stderr.trim() || i18n("The command failed"))
+        root.lastError = exitCode === 0 ? "" : (stderr.trim() || "The command failed")
         delayedRefresh.restart()
     }
 
@@ -232,6 +237,25 @@ Item {
         return _run(kind, argv)
     }
 
+    // The click shows on the frame it was clicked rather than a round trip
+    // later: the local copy of the panel is patched, and the next answer
+    // replaces it wholesale. Only the header moves - the bar icon describes the
+    // machine's connections, which a click on one provider has not changed yet.
+    function _showOptimistically(on) {
+        if (!panel || !panel.header) return
+        var header = {}
+        for (var key in panel.header) header[key] = panel.header[key]
+        header.toggleChecked = on
+        header.dimmed = !on
+        header.crossed = !on && !header.warning
+        var next = {}
+        // Shallow: `sections` stays the same array, so the counted repeaters
+        // keep the delegates they hold rather than rebuilding every row.
+        for (var field in panel) next[field] = panel[field]
+        next.header = header
+        panel = next
+    }
+
     function toggleTailscale() {
         if (!installed) return
         if (active) down()
@@ -242,6 +266,7 @@ Item {
         // No progress status here: the greyed icon and hero line already
         // convey the optimistic off, so only a failure is worth a message.
         _desired = 0
+        _showOptimistically(false)
         refresh()
         _ctl("action", "down")
     }
@@ -251,8 +276,9 @@ Item {
     function loginOrUp() {
         if (!installed) return
         _desired = 1
+        _showOptimistically(true)
         refresh()
-        if (_ctl("action", "up")) actionStatus = i18n("Turning it on…")
+        if (_ctl("action", "up")) actionStatus = "Turning it on…"
     }
 
     function switchAccount(id) {
@@ -281,7 +307,7 @@ Item {
 
     function authorizeTailscaleOperator() {
         if (!installed) return
-        if (_ctl("operator", "authorize")) actionStatus = i18n("Authorizing the operator…")
+        if (_ctl("operator", "authorize")) actionStatus = "Authorizing the operator…"
     }
 
     function switchProvider(provider) {
@@ -324,7 +350,7 @@ Item {
     function applyUpdate() {
         if (updating) return
         updating = true
-        actionStatus = i18n("Updating TailGauge…")
+        actionStatus = "Updating TailGauge…"
         refresh()
         _run("applyUpdate", ["tailgauge", "--update"])
     }
