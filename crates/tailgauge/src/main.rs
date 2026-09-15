@@ -122,6 +122,15 @@ enum Command {
         directory: Option<PathBuf>,
     },
 
+    /// Internal: feed a fixture to the Rust model and print what it made of
+    /// it, so `test/differential.test.ts` can hold the answer against the
+    /// TypeScript's. Reads the fixture on stdin.
+    #[command(hide = true)]
+    InternalModel {
+        #[arg(value_enum)]
+        op: ModelOp,
+    },
+
     /// Copy text to the clipboard.
     Copy { text: Option<String> },
 
@@ -150,6 +159,13 @@ enum Command {
         #[arg(long)]
         multiple: bool,
     },
+}
+
+/// What the differential harness can ask the model for. One per ported
+/// function, added as each one lands.
+#[derive(clap::ValueEnum, Clone, Copy, Debug)]
+enum ModelOp {
+    ParseStatus,
 }
 
 #[derive(Subcommand)]
@@ -240,6 +256,8 @@ fn main() -> ExitCode {
             let dir = directory.unwrap_or_else(receive::default_dir);
             report(receive::run(&dir, once))
         }
+
+        Command::InternalModel { op } => report(run_model_op(op)),
 
         Command::Copy { text } => report(copy::run(text.as_deref().unwrap_or(""))),
 
@@ -404,6 +422,18 @@ fn report_frontend_skew(binary: &str) {
             );
         }
     }
+}
+
+/// The harness prints compact JSON on one line, because the test parses it
+/// rather than reads it.
+fn run_model_op(op: ModelOp) -> Result<()> {
+    let mut raw = String::new();
+    std::io::Read::read_to_string(&mut std::io::stdin(), &mut raw)?;
+    let answer = match op {
+        ModelOp::ParseStatus => serde_json::to_string(&tailgauge_core::parse_status(&raw))?,
+    };
+    println!("{answer}");
+    Ok(())
 }
 
 fn settle(outcome: ctl::Outcome) -> ExitCode {
