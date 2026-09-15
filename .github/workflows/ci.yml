@@ -68,6 +68,11 @@ jobs:
       - name: Build
         run: scripts/build.sh
 
+      # The differential tests hold the Rust port against the TypeScript that
+      # is still driving all three frontends, so they need both halves built.
+      - name: Build the binary
+        run: cargo build --locked
+
       - name: Typecheck
         run: pnpm typecheck
 
