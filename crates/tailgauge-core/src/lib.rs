@@ -1,14 +1,12 @@
 //! Everything TailGauge knows, so that no frontend has to.
 //!
-//! This is the Rust half of a port in progress. `shared/model.ts` is still the
-//! copy the three frontends run on; nothing here drives a panel yet. What keeps
-//! the two honest is the differential harness: `tailgauge internal-model` feeds
-//! a fixture to the code below and prints the result as JSON, and
-//! `test/differential.test.ts` feeds the same fixture to the TypeScript and
-//! fails if the two answers differ.
+//! The parsers read what a VPN CLI printed, and `panel` turns what they made
+//! of it into the panel a frontend draws: the bar, the header, every section
+//! and the cursor's traversal order. A frontend picks it up from
+//! `tailgauge panel --json` and draws it.
 //!
-//! Ported in dependency order - the parsers first, then the panel they feed -
-//! so the harness has something to compare at every step.
+//! `tests/specification.rs` is where the behaviour is pinned, case by case,
+//! against the daemon output in `tests/fixtures`.
 
 pub mod accounts;
 pub mod bar;
