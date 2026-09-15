@@ -40,6 +40,14 @@ All notable changes to this project are documented here.
 
 ### Changed
 
+- **The panel's strings are English, written once in the model.** There were
+  never any translations - no `.po` files have ever been in this repository -
+  so `_()` on GNOME and `i18n()` on Plasma were resolving to their own
+  arguments while Omarchy, which passes no translator at all, rendered the
+  same strings raw. The translator leaves `resolvePanel` entirely; each
+  frontend keeps its own settings-dialog strings under its desktop's own
+  translation, which is the only place they ever differed.
+
 - **Typing in a search field no longer rebuilds the panel.** The model now
   hands each searchable row a `searchKey` and says which field filters it, and
   the three frontends do nothing but test the substring. `resolvePanel` no
