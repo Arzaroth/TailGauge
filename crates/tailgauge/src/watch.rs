@@ -164,4 +164,35 @@ mod tests {
         assert!(wakes(r#"{"LoginFinished":{}}"#));
         assert!(!wakes(r#"{"NetMap":{"Peers":[]}}"#));
     }
+
+    #[test]
+    fn the_fingerprint_moves_with_the_connection_and_the_exit_node() {
+        let state = |json: &str| fingerprint_of(&serde_json::from_str(json).expect("json"));
+
+        let running = state(r#"{"BackendState":"Running"}"#);
+        assert_ne!(running, state(r#"{"BackendState":"Stopped"}"#));
+
+        // Routing through an exit node is a change the panel draws, and the
+        // backend state does not move when one is picked.
+        assert_ne!(
+            running,
+            state(r#"{"BackendState":"Running","ExitNodeStatus":{"ID":"n1"}}"#)
+        );
+        assert_ne!(
+            state(r#"{"BackendState":"Running","ExitNodeStatus":{"ID":"n1"}}"#),
+            state(r#"{"BackendState":"Running","ExitNodeStatus":{"ID":"n2"}}"#)
+        );
+    }
+
+    #[test]
+    fn netmap_churn_is_not_a_change() {
+        // The peers move constantly. Fingerprinting them would turn the
+        // fallback into a busy loop that refreshes the panel every two seconds.
+        let with_peers = r#"{"BackendState":"Running","Peer":{"a":{"Online":true}}}"#;
+        let without = r#"{"BackendState":"Running"}"#;
+        assert_eq!(
+            fingerprint_of(&serde_json::from_str(with_peers).expect("json")),
+            fingerprint_of(&serde_json::from_str(without).expect("json"))
+        );
+    }
 }

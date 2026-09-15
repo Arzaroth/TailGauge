@@ -116,4 +116,32 @@ mod tests {
         assert_eq!(describe(&["/home/me/notes.md".into()]), "notes.md");
         assert_eq!(describe(&["a".into(), "b".into(), "c".into()]), "3 files");
     }
+
+    #[test]
+    fn a_file_named_like_a_flag_is_still_a_file() {
+        let args = taildrop_args("box", &["-n".into(), "notes.md".into()]);
+        let sep = args.iter().position(|a| a == "--").expect("a separator");
+        assert_eq!(&args[sep + 1..], ["-n", "notes.md", "box:"]);
+    }
+
+    #[test]
+    fn the_destination_is_the_machine_it_was_addressed_by() {
+        // The trailing colon is what makes the last argument a destination and
+        // not one more file, and the full name is what reaches the machine.
+        let args = taildrop_args("box.tail.ts.net", &["notes.md".into()]);
+        assert_eq!(args.last().unwrap(), "box.tail.ts.net:");
+        assert!(args.contains(&"--update-interval=0".to_string()));
+    }
+
+    #[test]
+    fn a_failure_is_explained_from_whichever_stream_said_something() {
+        assert_eq!(why_failed(b"", b"refused by peer\n"), "refused by peer");
+        assert_eq!(why_failed(b"no such file\n", b""), "no such file");
+        assert_eq!(
+            why_failed(b"progress\n", b"refused\n"),
+            "refused",
+            "the complaint wins over the transcript"
+        );
+        assert_eq!(why_failed(b"", b"  \n"), "Taildrop transfer failed");
+    }
 }

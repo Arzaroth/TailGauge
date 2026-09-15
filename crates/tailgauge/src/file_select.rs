@@ -119,4 +119,36 @@ mod tests {
         assert!(args.iter().position(|a| a == "--title").unwrap() < mode);
         assert_eq!(args.last().unwrap(), &home());
     }
+
+    #[test]
+    fn a_plasma_session_gets_the_qt_chooser_and_everything_else_gets_zenity() {
+        assert_eq!(order("KDE"), ["kdialog", "zenity"]);
+        assert_eq!(order("plasma"), ["kdialog", "zenity"]);
+        assert_eq!(order("KDE:plasmawayland"), ["kdialog", "zenity"]);
+        assert_eq!(order("GNOME"), ["zenity", "kdialog"]);
+        assert_eq!(order(""), ["zenity", "kdialog"]);
+    }
+
+    #[test]
+    fn cancelling_is_an_answer_rather_than_a_fault() {
+        // Both choosers exit non-zero on cancel. Reading that as a fault would
+        // put "the file chooser did not open" on screen every time somebody
+        // changed their mind.
+        assert!(matches!(
+            picked(false, b"/home/me/notes.md\n"),
+            Picked::Cancelled
+        ));
+        assert!(matches!(picked(true, b""), Picked::Cancelled));
+        assert!(matches!(picked(true, b"\n  \n"), Picked::Cancelled));
+    }
+
+    #[test]
+    fn one_path_per_line_and_nothing_else() {
+        let Picked::Files(files) = picked(true, b"/home/me/a b.md\n/home/me/c.png\n") else {
+            panic!("nothing was picked")
+        };
+        // A path with a space in it is one file: this is why both choosers are
+        // asked for a newline separator rather than their defaults.
+        assert_eq!(files, ["/home/me/a b.md", "/home/me/c.png"]);
+    }
 }

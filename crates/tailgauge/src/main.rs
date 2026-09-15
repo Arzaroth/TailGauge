@@ -572,3 +572,160 @@ fn splice_alias(mut args: Vec<OsString>) -> Vec<OsString> {
     }
     args
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    fn parse(args: &[&str]) -> Cli {
+        Cli::parse_from(splice_alias(args.iter().map(OsString::from).collect()))
+    }
+
+    fn spliced(args: &[&str]) -> Vec<String> {
+        splice_alias(args.iter().map(OsString::from).collect())
+            .iter()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    #[test]
+    fn a_symlink_names_the_subcommand_it_stands_for() {
+        assert_eq!(
+            spliced(&["/home/me/.local/bin/tailgauge-ctl", "toggle"]),
+            ["/home/me/.local/bin/tailgauge-ctl", "ctl", "toggle"]
+        );
+        // Spliced rather than replaced: the parser still wants a program name
+        // in the first slot, and what follows keeps its order.
+        assert_eq!(
+            spliced(&["tailgauge-watch", "5"]),
+            ["tailgauge-watch", "watch", "5"]
+        );
+        assert_eq!(
+            spliced(&["tailgauge-file-select", "--multiple"]),
+            ["tailgauge-file-select", "file-select", "--multiple"]
+        );
+    }
+
+    #[test]
+    fn the_binary_under_its_own_name_is_left_alone() {
+        assert_eq!(
+            spliced(&["tailgauge", "ctl", "up"]),
+            ["tailgauge", "ctl", "up"]
+        );
+        // A trailing dash names no subcommand, and splicing the empty string
+        // in would make every invocation through it a parse error.
+        assert_eq!(spliced(&["tailgauge-"]), ["tailgauge-"]);
+        assert_eq!(spliced(&[]), [] as [&str; 0]);
+    }
+
+    /// The installer writes one symlink per alias, and a symlink whose name is
+    /// not a subcommand is a command that exits 2 however it is invoked.
+    #[test]
+    fn every_alias_the_installer_writes_is_a_subcommand() {
+        let installer = std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/install.sh"),
+        )
+        .expect("the installer");
+        let line = installer
+            .lines()
+            .find(|l| l.contains("for alias in"))
+            .expect("the alias loop");
+        let aliases: Vec<&str> = line
+            .trim()
+            .trim_start_matches("for alias in ")
+            .trim_end_matches("; do")
+            .split_whitespace()
+            .collect();
+        assert!(aliases.len() >= 7, "found {aliases:?}");
+
+        for alias in aliases {
+            let name = format!("tailgauge-{alias}");
+            let argv = splice_alias(vec![OsString::from(&name)]);
+            // `tailgauge-ctl` alone is a usage error rather than a parse
+            // failure, so what is checked is that the name was recognised: an
+            // alias with no subcommand behind it reads as garbage instead.
+            if let Err(e) = Cli::try_parse_from(&argv) {
+                assert!(
+                    !matches!(
+                        e.kind(),
+                        clap::error::ErrorKind::InvalidSubcommand
+                            | clap::error::ErrorKind::UnknownArgument
+                    ),
+                    "the {name} symlink names no subcommand: {e}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_update_flags_do_one_thing_each() {
+        assert!(resolve(Cli::parse_from(["tailgauge", "--update", "--check-update"])).is_err());
+        assert!(
+            resolve(Cli::parse_from(["tailgauge", "--update", "watch"])).is_err(),
+            "an update flag and a subcommand do different jobs"
+        );
+
+        assert!(matches!(
+            resolve(Cli::parse_from(["tailgauge", "--check-update", "--force"])),
+            Ok(Action::CheckUpdate)
+        ));
+        assert!(matches!(
+            resolve(Cli::parse_from(["tailgauge", "--install-frontend", "gnome"])),
+            Ok(Action::InstallFrontend(spec)) if spec == "gnome"
+        ));
+        assert!(matches!(
+            resolve(Cli::parse_from(["tailgauge"])),
+            Ok(Action::Nothing)
+        ));
+    }
+
+    #[test]
+    fn a_peer_payload_and_a_name_are_two_ways_to_say_the_same_thing() {
+        // Both set an exit node, and a caller passing each of them at once
+        // means something this cannot resolve.
+        assert!(
+            Cli::try_parse_from(["tailgauge", "ctl", "exit-node", "berlin", "--peer", "{}"])
+                .is_err()
+        );
+        let cli = parse(&["tailgauge-ctl", "exit-node", "--peer", r#"{"id":"n1"}"#]);
+        let Some(Command::Ctl {
+            action: CtlAction::ExitNode { name, peer },
+            ..
+        }) = cli.command
+        else {
+            panic!("not an exit-node command")
+        };
+        assert_eq!(name, None);
+        assert_eq!(peer.as_deref(), Some(r#"{"id":"n1"}"#));
+    }
+
+    #[test]
+    fn the_panel_answers_a_frontend_that_names_no_state() {
+        // Every frontend's first call is made before it knows anything, and a
+        // required --ui would make that call an error.
+        let cli = parse(&["tailgauge", "panel", "--json"]);
+        let Some(Command::Panel { ui, .. }) = cli.command else {
+            panic!("not a panel command")
+        };
+        assert_eq!(ui, "{}");
+        assert!(serde_json::from_str::<gather::Ui>(&ui).is_ok());
+    }
+
+    #[test]
+    fn a_notification_says_who_it_is_from_when_nothing_else_is_given() {
+        let cli = parse(&["tailgauge-notify"]);
+        let Some(Command::Notify {
+            summary,
+            body,
+            urgency,
+            ..
+        }) = cli.command
+        else {
+            panic!("not a notify command")
+        };
+        assert_eq!(summary, "TailGauge");
+        assert_eq!(body, "");
+        assert_eq!(urgency, "normal");
+    }
+}
