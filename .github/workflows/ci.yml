@@ -107,6 +107,13 @@ jobs:
       - name: Typecheck the GNOME extension
         run: pnpm typecheck
 
+      # Loads each QML frontend's service in a plain QML runtime, with the
+      # desktop imports stubbed, and drives it with a recorded panel. qmllint
+      # cannot reach this: it exits silently when an import will not resolve,
+      # which is every Plasma and Quickshell import on a runner.
+      - name: Drive the QML frontends against a recorded panel
+        run: tests/qml/run.sh
+
       - name: Check the GNOME extension
         run: |
           shopt -s globstar nullglob
