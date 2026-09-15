@@ -9,6 +9,9 @@ use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::thread;
 
+use tailgauge_core as core;
+use tailgauge_core::providers::{Capability, ProviderDescriptor};
+
 use crate::launch;
 use crate::notify::{self, Notification};
 use crate::tailscale;
@@ -38,19 +41,29 @@ fn announce(urgency: &str, summary: &str, body: &str) {
     });
 }
 
-pub fn status() -> Outcome {
-    let Some(status) = tailscale::status() else {
-        println!("Tailscale is not answering");
+/// The provider's own status, through whichever parser it needs.
+fn read(provider: &ProviderDescriptor) -> core::StatusResult {
+    let argv = provider.status();
+    let raw = launch::output(&argv[0], &argv[1..]).unwrap_or_default();
+    if provider.id == "netbird" {
+        core::parse_netbird_status(&raw)
+    } else {
+        core::parse_status(&raw)
+    }
+}
+
+pub fn status(provider: &ProviderDescriptor) -> Outcome {
+    let core::StatusResult::Ok(status) = read(provider) else {
+        println!("{} is not answering", provider.label);
         return Outcome::Disconnected;
     };
 
-    let state = tailscale::backend_state(&status);
-    if state != "Running" {
+    if !status.running {
         println!(
             "{}",
-            match state {
+            match status.daemon_state.as_str() {
                 "NeedsLogin" => "Needs login",
-                "" => "Disconnected",
+                "" | "Unknown" => "Disconnected",
                 other => other,
             }
         );
@@ -59,26 +72,37 @@ pub fn status() -> Outcome {
 
     println!(
         "Connected as {} ({})",
-        tailscale::self_host_name(&status).unwrap_or("unknown"),
-        tailscale::self_ip(&status).unwrap_or("no address")
+        if status.self_name.is_empty() {
+            "unknown"
+        } else {
+            &status.self_name
+        },
+        if status.self_ip.is_empty() {
+            "no address"
+        } else {
+            &status.self_ip
+        }
     );
-    if let Some(node) = tailscale::current_exit_node() {
+    if provider.capabilities.has(Capability::ExitNodes)
+        && let Some(node) = tailscale::current_exit_node()
+    {
         println!("Exit node: {node}");
     }
     Outcome::Ok
 }
 
-pub fn up() -> Outcome {
+pub fn up(provider: &ProviderDescriptor) -> Outcome {
+    let argv = provider.up();
     if std::io::stdout().is_terminal() {
-        return match Command::new("tailscale").arg("up").status() {
+        return match Command::new(&argv[0]).args(&argv[1..]).status() {
             Ok(s) if s.success() => Outcome::Ok,
-            _ => Outcome::Failed("tailscale up failed".into()),
+            _ => Outcome::Failed(format!("{} failed", argv.join(" "))),
         };
     }
 
     // Bound to a key there is no terminal for `tailscale up` to print its
     // login URL on, so it is scraped out of the stream the way the panels do.
-    if let Some(url) = first_login_url() {
+    if let Some(url) = first_login_url(&argv) {
         announce(
             "normal",
             "Authorize this device",
@@ -92,22 +116,22 @@ pub fn up() -> Outcome {
             .spawn();
     }
 
-    if tailscale::status().is_some_and(|s| tailscale::running(&s)) {
+    if matches!(read(provider), core::StatusResult::Ok(status) if status.running) {
         return Outcome::Ok;
     }
     announce(
         "critical",
-        "Could not turn Tailscale on",
-        "Run tailgauge-ctl up for the reason",
+        &format!("Could not turn {} on", provider.label),
+        "Run tailgauge ctl up for the reason",
     );
-    Outcome::Failed("could not turn Tailscale on".into())
+    Outcome::Failed(format!("could not turn {} on", provider.label))
 }
 
 /// Run `tailscale up` to completion, returning the first login URL it printed
 /// on either stream.
-fn first_login_url() -> Option<String> {
-    let mut child = Command::new("tailscale")
-        .arg("up")
+fn first_login_url(argv: &[String]) -> Option<String> {
+    let mut child = Command::new(&argv[0])
+        .args(&argv[1..])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -149,32 +173,36 @@ fn login_url(line: &str) -> Option<String> {
     Some(rest[..end].to_string())
 }
 
-pub fn down() -> Outcome {
-    if launch::run_quiet("tailscale", ["down"]) {
+pub fn down(provider: &ProviderDescriptor) -> Outcome {
+    let argv = provider.down();
+    if launch::run_quiet(&argv[0], &argv[1..]) {
         return Outcome::Ok;
     }
     announce(
         "critical",
-        "Could not turn Tailscale off",
-        "Run tailgauge-ctl down for the reason",
+        &format!("Could not turn {} off", provider.label),
+        "Run tailgauge ctl down for the reason",
     );
-    Outcome::Failed("could not turn Tailscale off".into())
+    Outcome::Failed(format!("could not turn {} off", provider.label))
 }
 
-pub fn toggle() -> Outcome {
-    let Some(status) = tailscale::status() else {
-        return Outcome::Failed("tailscale is not answering".into());
+pub fn toggle(provider: &ProviderDescriptor) -> Outcome {
+    let core::StatusResult::Ok(status) = read(provider) else {
+        return Outcome::Failed(format!("{} is not answering", provider.label));
     };
     // Not `on && down || up`: a failed `down` would fall through and turn it
     // back on again.
-    if tailscale::running(&status) {
-        down()
+    if status.running {
+        down(provider)
     } else {
-        up()
+        up(provider)
     }
 }
 
-pub fn exit_node(target: Option<&str>) -> Outcome {
+pub fn exit_node(provider: &ProviderDescriptor, target: Option<&str>) -> Outcome {
+    if !provider.capabilities.has(Capability::ExitNodes) {
+        return Outcome::Failed(format!("{} has no exit nodes", provider.label));
+    }
     let Some(target) = target else {
         println!(
             "{}",
@@ -188,21 +216,27 @@ pub fn exit_node(target: Option<&str>) -> Outcome {
         _ => target,
     };
 
-    if launch::run_quiet("tailscale", ["set", &format!("--exit-node={resolved}")]) {
+    let Some(argv) = provider.set_exit_node(resolved) else {
+        return Outcome::Failed(format!("{} cannot set an exit node", provider.label));
+    };
+    if launch::run_quiet(&argv[0], &argv[1..]) {
         return Outcome::Ok;
     }
     announce("critical", "Could not set the exit node", target);
     Outcome::Failed(format!("could not set the exit node to {target}"))
 }
 
-pub fn exit_nodes() -> Outcome {
-    match launch::run("tailscale", ["exit-node", "list"]) {
+pub fn exit_nodes(provider: &ProviderDescriptor) -> Outcome {
+    let Some(argv) = provider.exit_node_list() else {
+        return Outcome::Failed(format!("{} has no exit nodes", provider.label));
+    };
+    match launch::run(&argv[0], &argv[1..]) {
         Ok(out) => {
             print!("{}", String::from_utf8_lossy(&out.stdout));
             if out.status.success() {
                 Outcome::Ok
             } else {
-                Outcome::Failed("tailscale exit-node list failed".into())
+                Outcome::Failed(format!("{} failed", argv.join(" ")))
             }
         }
         Err(e) => Outcome::Failed(e.to_string()),
