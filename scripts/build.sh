@@ -63,7 +63,6 @@ sed '$d' "$model_esm" >"$model_plain"
 # ---- Plasma ---------------------------------------------------------------
 cp -r "$root/plasma/$PLASMOID_ID" "$build/$PLASMOID_ID"
 mkdir -p "$build/$PLASMOID_ID/contents/code"
-cp "$model_plain" "$build/$PLASMOID_ID/contents/code/model.js"
 
 # ---- GNOME ----------------------------------------------------------------
 cp -r "$root/gnome/$EXTENSION_UUID" "$build/$EXTENSION_UUID"

@@ -23,12 +23,6 @@ const omarchySource = omarchy.map(read).join('\n');
 
 const frontends = [['plasma', plasmaSource], ['gnome', gnomeSource], ['omarchy', omarchySource]];
 
-// The frontends still resolving the panel for themselves. Omarchy and GNOME
-// have been flipped onto `tailgauge panel --json`, so the rules about
-// gathering a snapshot and handing it to resolvePanel describe the one that
-// has not been, and will be empty by the end of the port.
-const resolving = [['plasma', plasmaSource]];
-
 // Rows GNOME shows that Plasma puts in the applet context menu instead. Both
 // are desktop conventions, not panel content, so they are allowed to differ.
 // Everything else the panel shows is written in shared/model.ts and arrives
@@ -94,11 +88,6 @@ test('no frontend hands a panel string to a translator', () => {
             `${name} still passes resolvePanel a translator`);
 });
 
-test('every frontend still on the model reads the panel through resolvePanel', () => {
-    for (const [name, source] of resolving)
-        assert.match(source, /Model\.resolvePanel\(/, `${name} does not resolve the panel`);
-});
-
 // A flipped frontend draws what the binary sent and nothing it worked out
 // itself. The panel arrives; it is not derived.
 // A flipped frontend draws what the binary sent and nothing it worked out
@@ -107,9 +96,12 @@ const flipped = {
     omarchy: ['omarchy/arzaroth.tailgauge/Panel.qml', 'omarchy/arzaroth.tailgauge/Service.qml'],
     gnome: ['gnome/tailgauge@arzaroth.github.io/extension.ts',
             'gnome/tailgauge@arzaroth.github.io/provider.ts'],
+    plasma: ['plasma/org.tailgauge.plasmoid/contents/ui/FullRep.qml',
+             'plasma/org.tailgauge.plasmoid/contents/ui/ProviderService.qml',
+             'plasma/org.tailgauge.plasmoid/contents/ui/main.qml'],
 };
 
-test('a flipped frontend has no model left to call', () => {
+test('every frontend has been flipped, and none has a model left to call', () => {
     for (const [name, files] of Object.entries(flipped)) {
         const source = files.map(read).join('\n');
         // GNOME's `Model.` is its own panel.ts, aliased: the types the binary
@@ -121,56 +113,9 @@ test('a flipped frontend has no model left to call', () => {
         assert.match(source, /'tailgauge', 'panel', '--json'|"tailgauge", "panel", "--json"/,
             `${name} does not ask the binary for its panel`);
     }
-});
-
-test('every service hands resolvePanel the same snapshot shape', () => {
-    const services = {
-        plasma: 'plasma/org.tailgauge.plasmoid/contents/ui/ProviderService.qml'
-    };
-    // The object literal is flat, so its first closing brace ends the field
-    // list whatever the file indents with.
-    const fields = (src: string): string[] => {
-        const body = src.split('snapshot()')[1] ?? '';
-        const start = body.indexOf('return {');
-        const block = body.slice(start, body.indexOf('}', start));
-        return [...block.matchAll(/^\s*(\w+):/gm)].map(m => m[1]).sort();
-    };
-    const plasmaFields = fields(read(services.plasma));
-    assert.ok(plasmaFields.length > 15, 'the Plasma snapshot was not found');
-    for (const [name, file] of Object.entries(services))
-        assert.deepEqual(fields(read(file)), plasmaFields,
-            `the ${name} snapshot disagrees, so its panel can disagree`);
-});
-
-// A service that hands resolvePanel a fresh array on every poll reports a
-// change that did not happen, and the panel rebuilds every row it holds -
-// which is how a search field loses focus mid-word several times a minute.
-test('a QML service that still gathers does not report unchanged state as a change', () => {
-    const services = {
-        plasma: 'plasma/org.tailgauge.plasmoid/contents/ui/ProviderService.qml'
-    };
-    for (const [name, file] of Object.entries(services)) {
-        const src = read(file);
-        assert.match(src, /function _stable\(/, `${name} never compares before it assigns`);
-        for (const field of ['selfPeer', 'peers', 'ownExitNodes', 'mullvadRegions', 'accounts'])
-            assert.match(src, new RegExp(`\\b${field} = _stable\\(`),
-                `${name} reassigns ${field} unconditionally, rebuilding the panel on every poll`);
-    }
-});
-
-// The poll watchdog exists for a status call that hangs. Armed and never
-// disarmed, it instead kills whichever healthy poll is in flight when it fires,
-// which on Omarchy surfaced as the panel reporting a tailnet down that never
-// went anywhere.
-test('a QML service that still gathers disarms its poll watchdog', () => {
-    for (const [name, file] of Object.entries({
-        plasma: 'plasma/org.tailgauge.plasmoid/contents/ui/ProviderService.qml'
-    })) {
-        const src = read(file);
-        assert.match(src, /pollWatchdog\.stop\(\)/, `${name} never disarms the watchdog`);
-        // One per poll: status, mullvad, accounts, networks.
-        assert.equal((src.match(/root\._pollSettled\(kind\)/g) || []).length, 4,
-            `${name} does not check every poll in`);
+    assert.deepEqual(Object.keys(flipped).sort(), ['gnome', 'omarchy', 'plasma'],
+        'a frontend is missing from the set that has been flipped');
+    {
     }
 });
 
@@ -273,30 +218,6 @@ test('no service hardcodes a provider binary in its argv', () => {
             assert.doesNotMatch(line, /['"](tailscale|netbird)['"]\s*,/,
                 `${name} names a provider binary directly: ${line.trim()}`);
         }
-    }
-});
-
-// The three snapshots agreeing with each other is not enough: they agreed
-// while all three were missing the same fields, because an insertion landed in
-// a neighbouring object literal. The resolver's own input type is the
-// authority on what a snapshot owes it.
-test('every service still on the model hands resolvePanel every field it reads', () => {
-    const model = read('shared/model.ts');
-    const block = model.slice(model.indexOf('export interface PanelState {'));
-    const declared = [...block.slice(0, block.indexOf('\n}')).matchAll(/^\s*(\w+)\??:/gm)]
-        .map(m => m[1]);
-    assert.ok(declared.length > 20, 'PanelState was not found');
-
-    for (const [name, file] of Object.entries({
-        plasma: 'plasma/org.tailgauge.plasmoid/contents/ui/ProviderService.qml'
-    })) {
-        const src = read(file);
-        const body = src.split('snapshot()')[1] ?? '';
-        const start = body.indexOf('return {');
-        const fields = new Set([...body.slice(start, body.indexOf('}', start))
-            .matchAll(/^\s*(\w+):/gm)].map(m => m[1]));
-        const missing = declared.filter(f => !fields.has(f));
-        assert.deepEqual(missing, [], `${name} never sends ${missing.join(', ')}`);
     }
 });
 

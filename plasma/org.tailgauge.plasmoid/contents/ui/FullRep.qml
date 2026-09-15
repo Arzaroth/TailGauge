@@ -5,7 +5,6 @@ import org.kde.plasma.plasmoid
 import org.kde.plasma.components as PlasmaComponents3
 import org.kde.plasma.extras as PlasmaExtras
 import org.kde.kirigami as Kirigami
-import "../code/model.js" as Model
 
 Item {
     id: full
@@ -25,16 +24,25 @@ Item {
     property string expandedPeerId: ""
     property int phraseIndex: 0
 
-    // Everything the panel shows is decided in the shared model: which sections
+    // Everything the panel shows is decided by the binary: which sections
     // exist, their order, their rows, every label, and the cursor's traversal
-    // order. This file only decides what a row looks like.
-    readonly property var panel: Model.resolvePanel(service.snapshot(), {
-        recentRegions: root.recentMullvadRegions,
-        mullvadPickerOpen: full.mullvadPickerOpen,
-        expandedPeerId: full.expandedPeerId,
-        nowMs: Date.now(),
-        phraseIndex: full.phraseIndex
-    })
+    // order. This file only decides what a row looks like, and does the
+    // substring test the search fields need - which is the one thing that
+    // cannot wait on a process.
+    readonly property var panel: service.panel
+
+    // What only this side decides. Assigning it makes the service re-ask, so a
+    // click that changes what the panel shows redraws rather than waiting.
+    Binding {
+        target: service
+        property: "ui"
+        value: ({
+            recentRegions: root.recentMullvadRegions,
+            mullvadPickerOpen: full.mullvadPickerOpen,
+            expandedPeerId: full.expandedPeerId,
+            phraseIndex: full.phraseIndex
+        })
+    }
 
     readonly property color dimColor: Qt.darker(Kirigami.Theme.textColor, 1.55)
 
@@ -96,9 +104,23 @@ Item {
     onMachineQueryChanged: keepCursorVisible()
     onMullvadQueryChanged: keepCursorVisible()
 
+    // A search field is the binary's decision, so a query left behind when one
+    // goes would filter a list with nothing on screen to clear it.
+    function _drawn(rowId) {
+        for (var s = 0; s < panel.sections.length; s++) {
+            var rows = panel.sections[s].rows
+            for (var r = 0; r < rows.length; r++) {
+                if (rows[r].id === rowId) return true
+                for (var c = 0; c < rows[r].children.length; c++)
+                    if (rows[r].children[c].id === rowId) return true
+            }
+        }
+        return false
+    }
+
     function dropOrphanedQueries() {
-        if (!Model.panelHasRow(panel, "machines:search")) machineQuery = ""
-        if (!Model.panelHasRow(panel, "mullvad:add")) mullvadQuery = ""
+        if (!_drawn("machines:search")) machineQuery = ""
+        if (!_drawn("mullvad:add")) mullvadQuery = ""
     }
 
     function keepCursorVisible() {
@@ -117,7 +139,40 @@ Item {
     }
 
     function selectedRow() {
-        return Model.panelRowAt(panel, cursorIndex)
+        if (cursorIndex <= 0 || cursorIndex >= panel.navigation.length) return null
+        var entry = panel.navigation[cursorIndex]
+        for (var s = 0; s < panel.sections.length; s++) {
+            var section = panel.sections[s]
+            if (section.id !== entry.sectionId) continue
+            for (var r = 0; r < section.rows.length; r++) {
+                if (section.rows[r].id === entry.rowId) return section.rows[r]
+                var children = section.rows[r].children
+                for (var c = 0; c < children.length; c++)
+                    if (children[c].id === entry.rowId) return children[c]
+            }
+        }
+        return null
+    }
+
+    // The pair that names a region is already in the id the binary minted for
+    // it, so this reads that rather than rebuilding it from the peer's fields.
+    function mullvadRegionKey(node) {
+        var id = String((node && node.id) || "")
+        var prefix = "mullvad-region:"
+        return id.indexOf(prefix) === 0 ? id.slice(prefix.length) : ""
+    }
+
+    function rowHasAction(row, actionId) {
+        var actions = (row && row.actions) || []
+        for (var i = 0; i < actions.length; i++)
+            if (actions[i].id === actionId) return true
+        return false
+    }
+
+    function navIndexOf(id) {
+        for (var i = 0; i < panel.navigation.length; i++)
+            if (panel.navigation[i].rowId === id) return i
+        return 0
     }
 
     // The cursor follows the row's identity, not its slot: a machine that drops
@@ -128,7 +183,7 @@ Item {
     onPanelChanged: {
         dropOrphanedQueries()
         if (_pinnedRowId === "") return
-        var next = Model.panelNavIndexOf(panel, _pinnedRowId)
+        var next = navIndexOf(_pinnedRowId)
         if (next !== cursorIndex) cursorIndex = next
     }
 
@@ -155,7 +210,7 @@ Item {
             break
         case "setExitNode":
             if (row.payload.Mullvad === true)
-                root.persistRecentMullvad(Model.mullvadRegionKey(row.payload))
+                root.persistRecentMullvad(mullvadRegionKey(row.payload))
             service.setExitNode(row.payload)
             mullvadPickerOpen = false
             break
@@ -240,7 +295,7 @@ Item {
 
     function focusRow(id) {
         cursorActive = true
-        cursorIndex = Model.panelNavIndexOf(panel, id)
+        cursorIndex = navIndexOf(id)
     }
 
     function scrollCursorIntoView() {
@@ -304,7 +359,7 @@ Item {
             var row = full.selectedRow()
             if (!row) return
             if (event.key === Qt.Key_S) {
-                if (!Model.panelRowHasAction(row, "send")) return
+                if (!rowHasAction(row, "send")) return
                 full.sendPeerFile(row)
             } else {
                 if (row.copyOptions.length === 0) return

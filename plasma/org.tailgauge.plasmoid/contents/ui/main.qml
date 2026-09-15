@@ -1,7 +1,6 @@
 import QtQuick
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
-import "../code/model.js" as Model
 
 PlasmoidItem {
     id: root
@@ -14,8 +13,16 @@ PlasmoidItem {
         return stored instanceof Array ? stored : []
     }
 
+    // The chosen region to the front, the rest in the order they were, capped.
     function persistRecentMullvad(region) {
-        var next = Model.pushRecentMullvad(root.recentMullvadRegions, region, 5)
+        if (String(region || "") === "") return
+        var next = [String(region)]
+        var recent = root.recentMullvadRegions
+        for (var i = 0; i < recent.length && next.length < 5; i++) {
+            var existing = String(recent[i] || "")
+            if (existing !== "" && existing !== region && next.indexOf(existing) === -1)
+                next.push(existing)
+        }
         Plasmoid.configuration.recentMullvadRegions = next
         Plasmoid.configuration.writeConfig()
     }
@@ -36,11 +43,11 @@ PlasmoidItem {
     Plasmoid.icon: "network-vpn"
     Plasmoid.status: service.active ? PlasmaCore.Types.ActiveStatus : PlasmaCore.Types.PassiveStatus
 
-    // The provider the panel is driving, so the tooltip never names the wrong one.
-    readonly property string providerLabel: Model.providerLabel(service.snapshot())
-    readonly property var barState: Model.barState(service.snapshot())
+    // The header already names what is being driven, and falls back to the
+    // provider's own name when there is no machine to name instead.
+    readonly property var barState: service.panel.bar
 
-    toolTipMainText: service.installed ? (service.selfName || providerLabel) : providerLabel
+    toolTipMainText: service.panel.header.title
     toolTipSubText: {
         // Every installed provider's state, not just the one being shown.
         var lines = root.barState.tooltip.slice()
@@ -51,24 +58,40 @@ PlasmoidItem {
         return lines.join("\n")
     }
 
+    // The switcher section is the drivable providers, in order, so the next one
+    // is the row after the current one.
     function cycleProvider() {
-        var next = Model.nextProvider(service.snapshot())
-        if (next) service.switchProvider(next)
+        var sections = service.panel.sections
+        for (var s = 0; s < sections.length; s++) {
+            if (sections[s].id !== "providers") continue
+            var rows = sections[s].rows
+            if (rows.length < 2) return
+            for (var i = 0; i < rows.length; i++)
+                if (rows[i].current) return service.switchProvider(rows[(i + 1) % rows.length].payload)
+            service.switchProvider(rows[0].payload)
+            return
+        }
     }
 
+    // The node in use is the current row of the exit-node section, which the
+    // binary already worked out.
     function activeExitNodeName() {
-        var nodes = service.exitNodes || []
-        for (var i = 0; i < nodes.length; i++)
-            if (nodes[i].ExitNode === true)
-                return String(nodes[i].DisplayName || nodes[i].HostName || "")
+        var sections = service.panel.sections
+        for (var s = 0; s < sections.length; s++) {
+            if (sections[s].id !== "exitNodes") continue
+            var rows = sections[s].rows
+            for (var i = 0; i < rows.length; i++)
+                if (rows[i].kind === "exitNode" && rows[i].current) return String(rows[i].label)
+            return ""
+        }
         return ""
     }
 
     Plasmoid.contextualActions: [
         PlasmaCore.Action {
-            // Named by the model, so this cannot say Tailscale while the panel
-            // is driving something else.
-            text: Model.toggleHint(service.snapshot())
+            // Named by the binary, so this cannot say Tailscale while the
+            // panel is driving something else.
+            text: service.panel.header.toggleHint
             icon.name: "network-vpn"
             enabled: service.installed
             onTriggered: service.toggleTailscale()
@@ -77,7 +100,7 @@ PlasmoidItem {
             text: i18n("Refresh")
             icon.name: "view-refresh"
             enabled: service.installed
-            onTriggered: service.refresh(true)
+            onTriggered: service.refresh()
         }
     ]
 
