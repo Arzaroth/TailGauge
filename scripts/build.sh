@@ -1,10 +1,9 @@
 #!/bin/bash
 # Assembles the installable packages under build/.
 #
-# shared/model.ts is the only copy of the Tailscale data model. It compiles once
-# and ships twice: as the ES module the GNOME extension imports, and with the
-# trailing export statement removed as the plain shared script both QML engines
-# load, which cannot carry module syntax.
+# Every frontend reads its panel from the tailgauge binary, so nothing shared
+# is compiled here: this assembles three payloads out of the sources, and the
+# GNOME extension's TypeScript is the only thing that needs a compiler.
 
 set -euo pipefail
 
@@ -44,25 +43,12 @@ rm -rf "$build"
 mkdir -p "$build"
 
 # ---- TypeScript -----------------------------------------------------------
-"$tsc" -p "$root/tsconfig.model.json"
+# Only the GNOME extension is compiled now. The panel itself is resolved by the
+# tailgauge binary, so there is no shared model to emit twice.
 "$tsc" -p "$root/tsconfig.gnome.json"
-"$tsc" -p "$root/test/tsconfig.json"
-
-model_esm="$build/.ts/model/model.js"
-model_plain="$build/.ts/model/model.plain.js"
-
-# The compiler emits the export statement as the file's last line, which is the
-# one thing the QML engines cannot parse. Dropping it is what separates the two
-# shipped copies, so it has to have actually been there.
-if [[ $(tail -n 1 "$model_esm") != export\ * ]]; then
-  echo "build: the compiled model does not end in its export statement" >&2
-  exit 1
-fi
-sed '$d' "$model_esm" >"$model_plain"
 
 # ---- Plasma ---------------------------------------------------------------
 cp -r "$root/plasma/$PLASMOID_ID" "$build/$PLASMOID_ID"
-mkdir -p "$build/$PLASMOID_ID/contents/code"
 
 # ---- GNOME ----------------------------------------------------------------
 cp -r "$root/gnome/$EXTENSION_UUID" "$build/$EXTENSION_UUID"

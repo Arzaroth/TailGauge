@@ -86,7 +86,7 @@ jobs:
           scripts/build.sh
 
       - name: Test
-        run: node --test 'build/.ts/tests/test/**/*.test.js'
+        run: cargo test --locked
 
       # A tag that disagrees with the manifests would publish assets whose
       # in-app version does not match the release they came from.
