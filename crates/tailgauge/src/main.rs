@@ -171,6 +171,9 @@ enum ModelOp {
     MullvadRegionOptions,
     ParseNetbirdStatus,
     ParseNetbirdNetworks,
+    ParseProviderProbe,
+    /// Takes a PanelState rather than raw CLI output.
+    BarState,
 }
 
 #[derive(Subcommand)]
@@ -445,6 +448,12 @@ fn run_model_op(op: ModelOp) -> Result<()> {
         ModelOp::ParseNetbirdStatus => serde_json::to_string(&core::parse_netbird_status(&raw))?,
         ModelOp::ParseNetbirdNetworks => {
             serde_json::to_string(&core::parse_netbird_networks(&raw))?
+        }
+        ModelOp::ParseProviderProbe => {
+            serde_json::to_string(&core::providers::parse_provider_probe(&raw))?
+        }
+        ModelOp::BarState => {
+            serde_json::to_string(&core::bar::bar_state(&serde_json::from_str(&raw)?))?
         }
     };
     println!("{answer}");

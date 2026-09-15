@@ -11,9 +11,12 @@
 //! so the harness has something to compare at every step.
 
 pub mod accounts;
+pub mod bar;
 pub mod exit_nodes;
 pub mod netbird;
+pub mod panel_state;
 pub mod peer;
+pub mod providers;
 pub mod status;
 
 pub use accounts::{Account, AccountsResult, account_label, parse_accounts};

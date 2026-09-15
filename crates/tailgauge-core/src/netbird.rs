@@ -1,6 +1,6 @@
 //! NetBird: `netbird status --json`, and `netbird networks list`.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::peer::{self, Peer};
@@ -175,7 +175,8 @@ pub fn parse_netbird_status(raw: &str) -> StatusResult {
 // networks
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Network {
     pub id: String,
     pub range: String,
@@ -184,7 +185,8 @@ pub struct Network {
     pub status: String,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct NetworksResult {
     pub ok: bool,
     pub networks: Vec<Network>,

@@ -259,3 +259,93 @@ for (const {what, input} of netbirdNetworkCases) {
             JSON.parse(JSON.stringify(M.parseNetbirdNetworks(input))));
     });
 }
+
+const probeCases: Case[] = [
+    {what: 'both CLIs resolved', input: '/usr/bin/tailscale\n/usr/bin/netbird\n'},
+    {what: 'one resolved and one missed', input:
+        '/usr/bin/tailscale\nwhich: no netbird in (/usr/bin:/bin)\n'},
+    {what: 'nothing resolved', input: 'which: no tailscale in (/usr/bin)\n'},
+    {what: 'nothing at all', input: ''},
+    {what: 'a path with surrounding space', input: '  /opt/bin/netbird  \n'},
+    {what: 'a relative path, which which never prints', input: 'bin/tailscale\n'},
+    {what: 'the same binary twice', input: '/usr/bin/tailscale\n/usr/local/bin/tailscale\n'},
+];
+
+for (const {what, input} of probeCases) {
+    test(`parseProviderProbe agrees on ${what}`, () => {
+        assert.deepEqual(rust('parse-provider-probe', input),
+            JSON.parse(JSON.stringify(M.parseProviderProbe(input))));
+    });
+}
+
+// The bar is the first thing resolvePanel builds, and the first piece of the
+// panel to cross into Rust. It takes a whole PanelState rather than raw output.
+const detected = (...ids: string[]) =>
+    [{id: 'tailscale', installed: ids.includes('tailscale')},
+     {id: 'netbird', installed: ids.includes('netbird')}];
+
+// Every summary a frontend puts in a PanelState comes out of
+// Model.summarizeProvider, which sets all seven fields. A fixture that leaves
+// one out is not an input the model can receive, and comparing on it would
+// pin the two languages' readings of `undefined` rather than any behaviour.
+const summary = (id: string, over: Record<string, unknown> = {}) => ({
+    id,
+    label: id === 'netbird' ? 'NetBird' : 'Tailscale',
+    running: false, needsLogin: false, selfName: '', selfIp: '', state: '',
+    ...over,
+});
+
+const barCases: {what: string; state: Record<string, unknown>}[] = [
+    {what: 'a machine with no VPN CLI', state: {}},
+    {what: 'a frontend that probes nothing but reports installed', state: {installed: true}},
+    {what: 'one provider, nothing reported yet', state: {providers: detected('tailscale')}},
+    {what: 'one provider up', state: {
+        providers: detected('tailscale'),
+        summaries: [summary('tailscale', {
+            running: true, selfName: 'workstation', selfIp: '100.64.0.1', state: 'Running',
+        })],
+    }},
+    {what: 'a provider up with no address to show', state: {
+        providers: detected('tailscale'),
+        summaries: [summary('tailscale', {running: true, selfName: 'workstation', state: 'Running'})],
+    }},
+    // The icon describes the machine, not the view: NetBird is up while the
+    // panel is showing Tailscale.
+    {what: 'the provider that is up is not the one being shown', state: {
+        providers: detected('tailscale', 'netbird'),
+        summaries: [summary('tailscale'), summary('netbird', {running: true, selfName: 'me'})],
+    }},
+    {what: 'a provider wanting a login', state: {
+        providers: detected('tailscale'),
+        summaries: [summary('tailscale', {needsLogin: true, state: 'NeedsLogin'})],
+    }},
+    {what: 'a daemon in some other state', state: {
+        providers: detected('tailscale'),
+        summaries: [summary('tailscale', {state: 'Starting'})],
+    }},
+    {what: 'the shown provider leading the tooltip', state: {
+        providers: detected('tailscale', 'netbird'),
+        activeProviderId: 'netbird',
+        summaries: [
+            summary('tailscale', {running: true, state: 'Running'}),
+            summary('netbird', {running: true, selfIp: '100.92.0.3', state: 'Connected'}),
+        ],
+    }},
+    {what: 'no summaries, falling back to the active flag', state: {
+        providers: detected('tailscale'), active: true,
+    }},
+    {what: 'no summaries, falling back to needsLogin', state: {
+        providers: detected('tailscale'), needsLogin: true,
+    }},
+    {what: 'a summary for a provider that is not installed', state: {
+        providers: detected('tailscale'),
+        summaries: [summary('netbird', {running: true})],
+    }},
+];
+
+for (const {what, state: barState} of barCases) {
+    test(`barState agrees on ${what}`, () => {
+        assert.deepEqual(rust('bar-state', JSON.stringify(barState)),
+            JSON.parse(JSON.stringify(M.barState(barState as never))));
+    });
+}
