@@ -66,7 +66,7 @@ pub const PROVIDERS: &[ProviderDescriptor] = &[
         cli: "tailscale",
         supported: true,
         icon: "network-vpn-symbolic",
-        glyph: "\u{f0aa0}",
+        glyph: "\u{f0ea0}",
         capabilities: Capabilities {
             exit_nodes: true,
             mullvad: true,

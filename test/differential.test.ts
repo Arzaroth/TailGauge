@@ -406,3 +406,89 @@ test('shellCommand agrees on what survives a shell', () => {
     ];
     assert.deepEqual(eachCase('shell-command', argvs), argvs.map(a => M.shellCommand(a)));
 });
+
+// What a machine row shows. The Peer comes back out of parseStatus, so these
+// cases are built from a status document rather than hand-written: a Peer the
+// parser would never produce is not an input the panel can receive.
+const peersFrom = (status: Record<string, unknown>): ModelTypes.Peer[] => {
+    const parsed = M.parseStatus(JSON.stringify(status));
+    assert.ok(parsed.ok && !parsed.unavailable, 'the fixture should parse');
+    return [(parsed as ModelTypes.StatusOk).selfPeer, ...(parsed as ModelTypes.StatusOk).peers];
+};
+
+const peerCases: ModelTypes.Peer[] = [
+    ...peersFrom(JSON.parse(fixture('status.json'))),
+    ...peersFrom({
+        BackendState: 'Running',
+        User: {'1': {DisplayName: 'Alice'}},
+        Peer: {
+            direct: {
+                HostName: 'direct', DNSName: 'direct.example.ts.net.', Online: true, OS: 'linux',
+                UserID: '1', TailscaleIPs: ['100.64.0.2', 'fd7a:115c:a1e0::2'],
+                CurAddr: '[2001:db8::1]:51820', Relay: 'ams',
+                RxBytes: 424, TxBytes: 472, LastHandshake: '2026-09-14T05:59:00Z',
+                PrimaryRoutes: ['192.168.42.0/24'], PublicKey: 'nodekey:abc',
+                TaildropTarget: 1,
+            },
+            relayed: {HostName: 'relayed', Online: true, OS: 'windows', Relay: 'fra'},
+            idle: {
+                HostName: 'idle', Online: false, OS: 'android',
+                LastSeen: '2026-09-13T06:00:00Z', Created: '2026-01-01T00:00:00Z',
+            },
+            bare: {HostName: 'bare', Online: true},
+            macos: {HostName: 'mac', Online: true, OS: 'macos'},
+            ios: {HostName: 'phone', Online: true, OS: 'ios'},
+            unknown: {HostName: 'thing', Online: true, OS: 'plan9'},
+        },
+    }),
+    // A Mullvad node, which comes out of the exit-node table rather than the
+    // status document and carries a different set of fields.
+    ...M.parseExitNodeList(fixture('exit-nodes.txt')),
+];
+
+test('a machine row agrees on everything it shows', () => {
+    assert.deepEqual(
+        rust('peer-row', JSON.stringify(peerCases.map(p => [p, NOW]))),
+        peerCases.map(peer => JSON.parse(JSON.stringify({
+            address: M.peerAddress(peer),
+            exitNodeTarget: M.exitNodeTarget(peer),
+            copyOptions: M.peerCopyOptions(peer),
+            subtitle: M.peerSubtitle(peer),
+            rowSubtitle: M.peerRowSubtitle(peer),
+            connection: M.connectionSummary(peer),
+            osIcon: M.osIcon(peer.OS),
+            osIconName: M.osIconName(peer.OS),
+            details: M.peerDetailRows(peer, NOW),
+        }))));
+});
+
+const chromeCases: [Record<string, unknown>, number][] = [
+    [{}, 0],
+    [{installed: true}, 0],
+    [{providers: detected('tailscale'), version: '1.2.3'}, 0],
+    [{providers: detected('tailscale'), active: true, selfName: 'workstation'}, 0],
+    // Every phrase, and the wrap at both ends.
+    ...[0, 1, 9, 10, 11, -1, -10, -11].map((i): [Record<string, unknown>, number] =>
+        [{providers: detected('tailscale'), active: true, selfName: 'box'}, i]),
+    [{providers: detected('tailscale'), needsLogin: true}, 0],
+    [{providers: detected('tailscale'), busy: true, active: true}, 0],
+    // Precedence: progress beats a stale error, and both beat the idle line.
+    [{providers: detected('tailscale'), actionStatus: 'Connecting…', lastError: 'old'}, 0],
+    [{providers: detected('tailscale'), lastError: 'Something broke'}, 0],
+    [{providers: detected('netbird'), activeProviderId: 'netbird', active: true}, 0],
+    // The footer's skew line.
+    [{providers: detected('tailscale'), version: '1.2.3', update: {current: '1.2.2'}}, 0],
+    [{providers: detected('tailscale'), version: '1.2.3', update: {current: '1.2.3'}}, 0],
+    [{providers: detected('tailscale'), update: {current: '1.2.2'}}, 0],
+];
+
+test('the header, status and footer agree', () => {
+    assert.deepEqual(
+        rust('panel-chrome', JSON.stringify(chromeCases)),
+        chromeCases.map(([s, phrase]) => JSON.parse(JSON.stringify({
+            header: M.resolvePanel(s as never, {phraseIndex: phrase}).header,
+            status: M.resolvePanel(s as never, {}).status,
+            footer: M.resolvePanel(s as never, {}).footer,
+            toggleHint: M.toggleHint(s as never),
+        }))));
+});

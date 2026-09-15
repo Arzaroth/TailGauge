@@ -181,6 +181,10 @@ enum ModelOp {
     ElideStatus,
     FirstUrl,
     ShellCommand,
+    /// Take a Peer per case and answer with what its row shows.
+    PeerRow,
+    /// Take a PanelState and answer with the header, status and footer.
+    PanelChrome,
 }
 
 #[derive(Subcommand)]
@@ -475,6 +479,41 @@ fn run_model_op(op: ModelOp) -> Result<()> {
         })?,
         ModelOp::FirstUrl => table::<(String, String)>(&raw, |(t, f)| core::fmt::first_url(t, f))?,
         ModelOp::ShellCommand => table::<Vec<String>>(&raw, |a| core::fmt::shell_command(a))?,
+        ModelOp::PeerRow => {
+            let cases: Vec<(core::Peer, i64)> = serde_json::from_str(&raw)?;
+            let rows: Vec<_> = cases
+                .iter()
+                .map(|(peer, now)| {
+                    serde_json::json!({
+                        "address": core::panel::peer_address(peer),
+                        "exitNodeTarget": core::panel::exit_node_target(peer),
+                        "copyOptions": core::panel::peer_copy_options(peer),
+                        "subtitle": core::panel::peer_subtitle(peer),
+                        "rowSubtitle": core::panel::peer_row_subtitle(peer),
+                        "connection": core::panel::connection_summary(peer),
+                        "osIcon": core::panel::os_icon(&peer.os),
+                        "osIconName": core::panel::os_icon_name(&peer.os),
+                        "details": core::panel::peer_detail_rows(peer, *now),
+                    })
+                })
+                .collect();
+            serde_json::to_string(&rows)?
+        }
+        ModelOp::PanelChrome => {
+            let cases: Vec<(core::panel_state::PanelState, i64)> = serde_json::from_str(&raw)?;
+            let out: Vec<_> = cases
+                .iter()
+                .map(|(state, phrase)| {
+                    serde_json::json!({
+                        "header": core::panel::panel_header(state, *phrase),
+                        "status": core::panel::panel_status(state),
+                        "footer": core::panel::panel_footer(state),
+                        "toggleHint": core::panel::toggle_hint(state),
+                    })
+                })
+                .collect();
+            serde_json::to_string(&out)?
+        }
     };
     println!("{answer}");
     Ok(())
