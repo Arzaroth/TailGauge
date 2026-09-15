@@ -9,6 +9,7 @@ mod copy;
 mod ctl;
 mod file_select;
 mod frontend;
+mod gather;
 mod launch;
 mod notify;
 mod receive;
@@ -23,7 +24,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 
 /// Nothing to pick with, which is a different answer from picking nothing.
@@ -129,6 +130,22 @@ enum Command {
     InternalModel {
         #[arg(value_enum)]
         op: ModelOp,
+    },
+
+    /// Read the machine and print the panel every frontend draws.
+    ///
+    /// This is the call a panel makes on its own tick: one spawn, every
+    /// provider polled at once, and the whole panel resolved.
+    Panel {
+        /// What only the frontend knows, as one JSON object: which provider is
+        /// being shown, what it is optimistically showing, and what it has in
+        /// flight. See `gather::Ui`.
+        #[arg(long, default_value = "{}")]
+        ui: String,
+        /// Accepted and ignored: the output is JSON either way, and a frontend
+        /// that spells it out reads more clearly at the call site.
+        #[arg(long)]
+        json: bool,
     },
 
     /// Copy text to the clipboard.
@@ -279,6 +296,8 @@ fn main() -> ExitCode {
         }
 
         Command::InternalModel { op } => report(run_model_op(op)),
+
+        Command::Panel { ui, json: _ } => report(run_panel(&ui)),
 
         Command::Copy { text } => report(copy::run(text.as_deref().unwrap_or(""))),
 
@@ -562,6 +581,15 @@ fn table<T: serde::de::DeserializeOwned>(
 ) -> serde_json::Result<String> {
     let cases: Vec<T> = serde_json::from_str(raw)?;
     serde_json::to_string(&cases.iter().map(&answer).collect::<Vec<String>>())
+}
+
+fn run_panel(ui: &str) -> Result<()> {
+    let ui: gather::Ui =
+        serde_json::from_str(ui).with_context(|| format!("--ui is not a JSON object: {ui}"))?;
+    let state = gather::panel_state(&ui);
+    let panel = tailgauge_core::panel::panel_spec(&state, &gather::resolve_options(&ui));
+    println!("{}", serde_json::to_string(&panel)?);
+    Ok(())
 }
 
 fn settle(outcome: ctl::Outcome) -> ExitCode {
