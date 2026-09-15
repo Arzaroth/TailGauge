@@ -131,22 +131,16 @@ export interface RowAction {
   glyph: string
 }
 
+// What `tailgauge --check-update` writes and prints, verbatim. The binary owns
+// the question, so the panel reads the answer rather than re-deriving it.
 export interface UpdateInfo {
-  available?: boolean
-  updatable?: boolean
-  latest?: string
-  url?: string
-  error?: string
-  targets?: UpdateTarget[]
-}
-
-// One installed part, as `tailgauge update` reports it. The panel reads only the
-// helpers: the widget already knows its own version.
-export interface UpdateTarget {
-  kind?: string
+  /// The running binary's version.
   current?: string
-  managed?: string
-  outdated?: boolean
+  /// The newest release on GitHub, if a check has succeeded.
+  latest?: string
+  available?: boolean
+  checked_ms?: number
+  notified?: string | null
 }
 
 export interface PanelRow {
@@ -1636,24 +1630,18 @@ function panelFooter(state: PanelState, t: Translate): string {
 
   var text = formatText(t("TailGauge v%1"), version)
 
-  // The widget and the helpers install separately, so an update that only
-  // half applied leaves them on different versions with nothing else on
-  // screen saying which half is behind.
-  var helpers = helpersVersion(state)
-  if (helpers !== "" && helpers !== version)
-    text += " · " + formatText(t("helpers v%1"), helpers)
+  // The widget and the binary install separately, so an update that only half
+  // applied leaves them on different versions with nothing else on screen
+  // saying which half is behind.
+  var binary = binaryVersion(state)
+  if (binary !== "" && binary !== version)
+    text += " · " + formatText(t("binary v%1"), binary)
 
   return text
 }
 
-function helpersVersion(state: PanelState): string {
-  var targets = (state.update || {}).targets
-  if (!targets || typeof targets.length !== "number") return ""
-  for (var i = 0; i < targets.length; i++) {
-    var target = targets[i]
-    if (target && String(target.kind) === "helpers") return String(target.current || "")
-  }
-  return ""
+function binaryVersion(state: PanelState): string {
+  return String((state.update || {}).current || "")
 }
 
 function updateSection(state: PanelState, t: Translate): PanelSection {
@@ -1662,17 +1650,16 @@ function updateSection(state: PanelState, t: Translate): PanelSection {
   var rows: PanelRow[] = []
 
   if (available) {
-    var updatable = update.updatable === true
     rows.push(panelRow({
       id: "update",
       kind: "update",
       label: formatText(t("TailGauge %1 is available"), update.latest),
-      sublabel: updatable
-        ? t("Install it now")
-        : t("Update it where you installed it from"),
+      // No store owns any part of TailGauge, so there is never a copy the
+      // binary may not replace.
+      sublabel: t("Install it now"),
       icon: "software-update-available-symbolic",
       glyph: "󰚰",
-      action: updatable ? "update" : "openUrl",
+      action: "update",
       busy: state.updating === true,
       current: true,
       payload: update

@@ -23,6 +23,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
+use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 /// Nothing to pick with, which is a different answer from picking nothing.
@@ -33,7 +34,64 @@ const EXIT_NO_CHOOSER: u8 = 2;
 #[command(about = "Tailscale in the panel: the binary every TailGauge frontend drives")]
 struct Cli {
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
+
+    /// Download the latest matching release from GitHub and replace the
+    /// installed binary. Used by the panel's Install it now row too.
+    #[arg(long)]
+    update: bool,
+
+    /// Query GitHub for the latest release, cache the result, and print it as
+    /// JSON. Does not install anything.
+    #[arg(long)]
+    check_update: bool,
+
+    /// Ignore the cached answer `--check-update` would otherwise serve.
+    #[arg(long)]
+    force: bool,
+
+    /// Install a desktop frontend from the release this binary belongs to:
+    /// `plasma`, `gnome`, `omarchy`, or `all`. Use it after switching desktops;
+    /// `--update` already refreshes whichever are present.
+    #[arg(long, value_name = "NAME")]
+    install_frontend: Option<String>,
+}
+
+/// What one invocation does. The update flags are mutually exclusive and clap
+/// cannot say so across a subcommand, so resolving them here makes the
+/// precedence a list you can read, and turns a combination nobody meant into
+/// an error rather than a silently dropped flag.
+enum Action {
+    CheckUpdate,
+    Update,
+    InstallFrontend(String),
+    Sub(Command),
+    /// No subcommand and no flag: there is no default job to fall back on.
+    Nothing,
+}
+
+fn resolve(cli: Cli) -> Result<Action, String> {
+    let flags = [cli.check_update, cli.update, cli.install_frontend.is_some()];
+    let asked = flags.iter().filter(|set| **set).count();
+    if asked > 1 {
+        return Err("--check-update, --update and --install-frontend do one thing each".into());
+    }
+    if let Some(command) = cli.command {
+        if asked > 0 {
+            return Err("an update flag and a subcommand do different jobs".into());
+        }
+        return Ok(Action::Sub(command));
+    }
+    if cli.check_update {
+        return Ok(Action::CheckUpdate);
+    }
+    if cli.update {
+        return Ok(Action::Update);
+    }
+    if let Some(spec) = cli.install_frontend {
+        return Ok(Action::InstallFrontend(spec));
+    }
+    Ok(Action::Nothing)
 }
 
 #[derive(Subcommand)]
@@ -62,27 +120,6 @@ enum Command {
         #[arg(long)]
         once: bool,
         directory: Option<PathBuf>,
-    },
-
-    /// Report or install a newer TailGauge.
-    ///
-    /// Exits 0 when up to date or updated, 1 on error, 2 when an update is
-    /// available and only being reported.
-    Update {
-        /// Report whether a newer release exists. The default.
-        #[arg(long)]
-        check: bool,
-        /// Machine-readable output, which is what the panels read.
-        #[arg(long)]
-        json: bool,
-        /// Download and install the newer release.
-        #[arg(long)]
-        apply: bool,
-        /// Ignore the cached answer.
-        #[arg(long)]
-        force: bool,
-        #[arg(long)]
-        quiet: bool,
     },
 
     /// Copy text to the clipboard.
@@ -136,7 +173,28 @@ enum CtlAction {
 }
 
 fn main() -> ExitCode {
-    match Cli::parse_from(argv()).command {
+    let cli = Cli::parse_from(argv());
+    let force = cli.force;
+    let action = match resolve(cli) {
+        Ok(action) => action,
+        Err(why) => {
+            eprintln!("tailgauge: {why}");
+            return ExitCode::from(2);
+        }
+    };
+
+    let command = match action {
+        Action::Nothing => {
+            let _ = <Cli as clap::CommandFactory>::command().print_help();
+            return ExitCode::from(2);
+        }
+        Action::CheckUpdate => return report(handle_check_update(force)),
+        Action::Update => return report(handle_update()),
+        Action::InstallFrontend(spec) => return report(handle_install_frontend(&spec)),
+        Action::Sub(command) => command,
+    };
+
+    match command {
         Command::Ctl { action } => {
             // Answered before the tailscale check: which parts are installed
             // is a fair question on a machine where the CLI is not.
@@ -183,19 +241,6 @@ fn main() -> ExitCode {
             report(receive::run(&dir, once))
         }
 
-        Command::Update {
-            check: _,
-            json,
-            apply,
-            force,
-            quiet,
-        } => {
-            if apply {
-                return apply_update(quiet);
-            }
-            report_update(json, force, quiet)
-        }
-
         Command::Copy { text } => report(copy::run(text.as_deref().unwrap_or(""))),
 
         Command::Notify {
@@ -235,65 +280,128 @@ fn main() -> ExitCode {
     }
 }
 
-/// Exit 2 says an update is there and was only reported, which is what makes
-/// `tailgauge update` usable from a script.
-const EXIT_UPDATE_AVAILABLE: u8 = 2;
+// ---------------------------------------------------------------------------
+// updating
+// ---------------------------------------------------------------------------
 
-fn report_update(json: bool, force: bool, quiet: bool) -> ExitCode {
-    let report = update::report(force);
+/// `--check-update`: cached where it can be, live otherwise, and the status as
+/// JSON either way. This is what the three panels poll.
+fn handle_check_update(force: bool) -> Result<()> {
+    let status = update::check_cached(&state::update_cache_file(), force)?;
+    println!("{}", serde_json::to_string(&status)?);
+    Ok(())
+}
 
-    if json {
-        println!("{}", serde_json::to_string(&report).unwrap_or_default());
-    } else if !report.error.is_empty() {
-        eprintln!("{}", report.error);
-    } else if report.available {
-        if !quiet {
-            println!("TailGauge {} is available.", report.latest);
-            for target in report.targets.iter().filter(|t| t.outdated) {
-                println!("  {} {}", target.kind, target.current);
-            }
-        }
-    } else if !quiet {
-        println!("TailGauge is up to date ({}).", report.latest);
+/// `--update`: download the latest release, swap the binary, and refresh
+/// whichever frontends are installed.
+fn handle_update() -> Result<()> {
+    let current = update::current_version();
+    println!("Current version: {current}");
+    println!("Checking for updates...");
+    let applied = update::apply(&state::update_cache_file())?;
+    if !update::version_gt(&applied.version, current) {
+        println!("Already up to date ({current}).");
+        report_frontend_skew(current);
+        return Ok(());
     }
 
-    if report.available {
-        return ExitCode::from(EXIT_UPDATE_AVAILABLE);
-    }
-    if report.error.is_empty() {
-        ExitCode::SUCCESS
+    println!("Updated to {}.", applied.version);
+    report_frontends(&applied.frontends);
+    Ok(())
+}
+
+/// `--install-frontend`: put one on a machine that does not have it yet.
+fn handle_install_frontend(spec: &str) -> Result<()> {
+    let spec = spec.trim().to_lowercase();
+    let wanted: Vec<&'static frontend::Frontend> = if spec == "all" {
+        frontend::FRONTENDS.iter().collect()
     } else {
-        ExitCode::FAILURE
+        vec![frontend::find(&spec).ok_or_else(|| {
+            let ids: Vec<&str> = frontend::FRONTENDS.iter().map(|f| f.id).collect();
+            anyhow::anyhow!("unknown frontend '{spec}' (known: {}, all)", ids.join(", "))
+        })?]
+    };
+
+    let version = update::current_version();
+    for target in &wanted {
+        println!("Installing the {} from v{version}...", target.label);
+    }
+
+    let outcomes = update::install_frontends(&wanted, version)?;
+    report_frontends(&outcomes);
+
+    let failed: Vec<&str> = outcomes
+        .iter()
+        .filter(|o| o.error.is_some())
+        .map(|o| o.id)
+        .collect();
+    if failed.is_empty() {
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!(
+            "{} frontend(s) failed to install: {}",
+            failed.len(),
+            failed.join(", ")
+        ))
     }
 }
 
-fn apply_update(quiet: bool) -> ExitCode {
-    match update::apply() {
-        Ok(applied) if applied.version == update::current_version() => {
-            if !quiet {
-                println!("TailGauge is already up to date ({}).", applied.version);
-            }
-            ExitCode::SUCCESS
+/// The desktop frontends are QML and JavaScript installed outside the binary
+/// directory, so an update that only swapped the binary would leave them
+/// behind - silently, because a panel reports the version it was built with.
+fn report_frontends(outcomes: &[update::FrontendOutcome]) {
+    if outcomes.is_empty() {
+        return;
+    }
+    println!();
+    for f in outcomes {
+        match &f.error {
+            Some(e) => eprintln!("{}: NOT updated - {e}", f.label),
+            None => match &f.version {
+                Some(v) => println!("{} updated to {v}.", f.label),
+                None => println!("{} updated.", f.label),
+            },
         }
-        Ok(applied) => {
-            update::announce(&applied);
-            if !quiet {
-                println!("Updated to {}.", applied.version);
-                for f in &applied.frontends {
-                    match &f.error {
-                        Some(why) => println!("  {}: {why}", f.label),
-                        None => println!("  {} - {}", f.label, f.restart_hint),
-                    }
-                }
-                if applied.frontends.iter().any(|f| f.needs_session_restart) {
-                    println!("One of these needs the session restarted, not the shell.");
-                }
-            }
-            ExitCode::SUCCESS
+    }
+
+    let hints: Vec<&update::FrontendOutcome> =
+        outcomes.iter().filter(|f| f.error.is_none()).collect();
+    if hints.is_empty() {
+        return;
+    }
+    println!();
+    for f in hints {
+        let urgency = if f.needs_session_restart {
+            "required"
+        } else {
+            "to load it"
+        };
+        println!("  {} ({urgency}): {}", f.label, f.restart_hint);
+    }
+}
+
+/// An installed frontend that disagrees with the binary is the failure this all
+/// exists to catch, so say so even on the path where nothing was updated.
+fn report_frontend_skew(binary: &str) {
+    for f in frontend::installed() {
+        match f.installed_version() {
+            Some(v) if v == binary => {}
+            Some(v) => println!(
+                "{} is still v{v} - update it: tailgauge --install-frontend {}",
+                f.label, f.id
+            ),
+            None => println!(
+                "{} has no readable version - reinstall it: tailgauge --install-frontend {}",
+                f.label, f.id
+            ),
         }
-        Err(e) => {
-            eprintln!("tailgauge: {e:#}");
-            ExitCode::FAILURE
+    }
+    for f in frontend::installed() {
+        if !f.schemas_ready() {
+            println!(
+                "{} has no compiled GSettings schemas - reinstall it: tailgauge --install-frontend {}",
+                f.label, f.id
+            );
         }
     }
 }

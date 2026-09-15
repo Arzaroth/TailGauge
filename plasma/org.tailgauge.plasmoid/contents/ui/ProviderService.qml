@@ -68,7 +68,7 @@ Item {
     // Assume the helpers are there until the probe says otherwise, so the send
     // button does not flicker away on a slow first poll.
     property bool helpers: true
-    property var update: ({ available: false, updatable: false, latest: "", url: "", error: "" })
+    property var update: ({ available: false, current: "", latest: "" })
     property bool updating: false
 
     // The applet's own version, handed down from the metadata it shipped with.
@@ -369,7 +369,7 @@ Item {
                 try {
                     root.update = root._stable(root.update, JSON.parse(stdout))
                 } catch (e) {
-                    root.update = { available: false, updatable: false, latest: "", url: "", error: "" }
+                    root.update = { available: false, current: "", latest: "" }
                 }
             }
         } else if (kind === "applyUpdate") {
@@ -444,16 +444,16 @@ Item {
     }
 
     function checkUpdate(force) {
-        var argv = ["tailgauge", "update", "--check", "--json"]
+        var argv = ["tailgauge", "--check-update"]
         if (force === true) argv.push("--force")
         _run("update", argv)
     }
 
     function applyUpdate() {
-        if (updating || !update || update.updatable !== true) return
+        if (updating || !update || update.available !== true) return
         updating = true
         actionStatus = "Updating TailGauge…"
-        _run("applyUpdate", ["tailgauge", "update", "--apply", "--quiet"])
+        _run("applyUpdate", ["tailgauge", "--update"])
     }
 
     function openUrl(url) {

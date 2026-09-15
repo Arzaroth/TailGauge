@@ -21,6 +21,10 @@ pub struct UpdateStatus {
     /// Unix ms of the last successful check.
     #[serde(default)]
     pub checked_ms: i64,
+    /// Version a desktop notification was last fired for, so an available
+    /// update is announced once rather than on every check.
+    #[serde(default)]
+    pub notified: Option<String>,
 }
 
 pub fn cache_dir() -> PathBuf {
@@ -77,6 +81,7 @@ mod tests {
             latest: Some("0.6.0".into()),
             available: true,
             checked_ms: 1_700_000_000_000,
+            notified: None,
         };
         write_update_status(&path, &status).unwrap();
 

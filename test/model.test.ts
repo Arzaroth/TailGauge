@@ -595,8 +595,8 @@ test('the update section is hidden until there is an update', () => {
     assert.equal(panel.navigation.some(n => n.rowId === 'update'), false);
 });
 
-test('an installable update offers to install itself', () => {
-    const panel = M.resolvePanel(state({update: {available: true, updatable: true, latest: '1.1.0'}}), {});
+test('an available update offers to install itself', () => {
+    const panel = M.resolvePanel(state({update: {available: true, latest: '1.1.0'}}), {});
     const row = section(panel, 'update').rows[0];
     assert.equal(section(panel, 'update').visible, true);
     assert.equal(row.kind, 'update');
@@ -606,21 +606,15 @@ test('an installable update offers to install itself', () => {
     assert.equal(panel.navigation[1].rowId, 'update', 'the banner leads the traversal');
 });
 
-test('a store-managed update points at the store instead', () => {
-    const row = section(M.resolvePanel(state({update: {available: true, updatable: false, latest: '1.1.0'}}), {}), 'update').rows[0];
-    assert.equal(row.sublabel, 'Update it where you installed it from');
-    assert.equal(row.action, 'openUrl');
-});
-
 test('an update in flight marks the row busy', () => {
     const row = section(M.resolvePanel(state({
-        update: {available: true, updatable: true, latest: '1.1.0'}, updating: true,
+        update: {available: true, latest: '1.1.0'}, updating: true,
     }), {}), 'update').rows[0];
     assert.equal(row.busy, true);
 });
 
 test('the version substitutes into the translated template', () => {
-    const row = section(M.resolvePanel(state({update: {available: true, updatable: true, latest: '2.3.4'}}),
+    const row = section(M.resolvePanel(state({update: {available: true, latest: '2.3.4'}}),
         {t: s => `«${s}»`}), 'update').rows[0];
     assert.equal(row.label, '«TailGauge %1 is available»'.replace('%1', '2.3.4'));
     assert.equal(M.formatText('a %1 b', 'X'), 'a X b');
@@ -639,23 +633,23 @@ test('a frontend that knows no version gets no footer', () => {
     assert.equal(M.resolvePanel(state({version: ''}), {}).footer, '');
 });
 
-test('helpers left behind by a half-applied update show next to the widget', () => {
-    const targets = [{kind: 'plugin', current: '1.2.3'}, {kind: 'helpers', current: '1.2.2'}];
-    assert.equal(M.resolvePanel(state({version: '1.2.3', update: {targets}}), {}).footer,
-        'TailGauge v1.2.3 · helpers v1.2.2');
+// The binary is the one part that replaces itself, so it is the one that can
+// be ahead of the widget the user is looking at.
+test('a binary left behind by a half-applied update shows next to the widget', () => {
+    assert.equal(M.resolvePanel(state({version: '1.2.3', update: {current: '1.2.2'}}), {}).footer,
+        'TailGauge v1.2.3 · binary v1.2.2');
 });
 
-test('helpers on the widget version are not worth a second number', () => {
-    const targets = [{kind: 'helpers', current: '1.2.3'}];
-    assert.equal(M.resolvePanel(state({version: '1.2.3', update: {targets}}), {}).footer,
+test('a binary on the widget version is not worth a second number', () => {
+    assert.equal(M.resolvePanel(state({version: '1.2.3', update: {current: '1.2.3'}}), {}).footer,
         'TailGauge v1.2.3');
-    assert.equal(M.resolvePanel(state({version: '1.2.3', update: {targets: []}}), {}).footer,
+    assert.equal(M.resolvePanel(state({version: '1.2.3', update: {}}), {}).footer,
         'TailGauge v1.2.3');
 });
 
-// ---- Taildrop needs the helpers, not just the capability -------------------
+// ---- Taildrop needs the binary, not just the capability --------------------
 
-test('the send action disappears when the helpers are not installed', () => {
+test('the send action disappears when the binary is not installed', () => {
     const withHelpers = peerRows(M.resolvePanel(state(), {}));
     assert.equal(withHelpers.some(r => r.actions.some(a => a.id === 'send')), true);
 

@@ -11,18 +11,17 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
 use self_update::backends::github::ReleaseList;
-use serde::Serialize;
 
 use crate::frontend::{self, Frontend};
-use crate::notify::{self, Notification};
 use crate::state::{self, UpdateStatus};
 
-/// The binary in the release archive, and the names it answers to.
+/// The binary in the release archive, and the name every alias points at.
 const BINARY: &str = "tailgauge";
 
 /// One symlink per subcommand, under the name the shell helper had. A key
 /// binding on `tailgauge-ctl toggle` and the Taildrop systemd unit both keep
-/// working, and `main` reads the name it was invoked as.
+/// working, and `main` reads the name it was invoked as. Updating is a flag
+/// rather than a subcommand, so `tailgauge-update` has nothing to point at.
 pub const ALIASES: &[&str] = &[
     "tailgauge-ctl",
     "tailgauge-watch",
@@ -31,13 +30,14 @@ pub const ALIASES: &[&str] = &[
     "tailgauge-receive",
     "tailgauge-file-select",
     "tailgauge-copy",
-    "tailgauge-update",
 ];
 
-/// Six hours: long enough that opening the panel is free, short enough that a
-/// release lands the same day.
-const CACHE_TTL_MS: i64 = 6 * 60 * 60 * 1000;
+/// Six hours: long enough that a panel polling this costs nothing, short
+/// enough that a release lands the same day. The check itself is always live;
+/// this is the caller's answer to how stale a banner may be.
+pub const CACHE_TTL_MS: i64 = 6 * 60 * 60 * 1000;
 
+/// Distinguishes the binary archive from the other assets a release carries.
 const ARCHIVE_SUFFIX: &str = ".tar.gz";
 
 pub fn current_version() -> &'static str {
@@ -45,111 +45,37 @@ pub fn current_version() -> &'static str {
 }
 
 // ---------------------------------------------------------------------------
-// what the panel reads
+// checking
 // ---------------------------------------------------------------------------
 
-/// One installed part, in the shape `shared/model.ts` already parses.
-#[derive(Debug, Clone, Serialize)]
-pub struct Target {
-    pub kind: &'static str,
-    pub current: String,
-    /// Always `manual` now that neither store is used. The panel still reads
-    /// it, so it is reported rather than dropped.
-    pub managed: &'static str,
-    pub outdated: bool,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct Report {
-    pub available: bool,
-    pub updatable: bool,
-    pub latest: String,
-    pub url: String,
-    pub error: String,
-    pub targets: Vec<Target>,
-}
-
-/// The panel's name for each frontend, which predates the binary and is what
-/// `helpersVersion` in the shared model still looks for.
-fn target_kind(frontend: &Frontend) -> &'static str {
-    match frontend.id {
-        "plasma" => "plasmoid",
-        "gnome" => "extension",
-        _ => "plugin",
-    }
-}
-
-pub fn report(force: bool) -> Report {
-    let cache = state::update_cache_file();
-    let (latest, error) = match latest_version(&cache, force) {
-        Ok(v) => (v, String::new()),
-        Err(e) => (String::new(), format!("{e:#}")),
-    };
-
-    let mut targets: Vec<Target> = frontend::installed()
-        .into_iter()
-        .map(|f| {
-            let current = f.installed_version().unwrap_or_default();
-            Target {
-                kind: target_kind(f),
-                outdated: outdated(&latest, &current),
-                current,
-                managed: "manual",
-            }
-        })
-        .collect();
-
-    // Named `helpers` because that is what it replaced: the shared model reads
-    // this entry to report the binary's version beside the widget's.
-    targets.push(Target {
-        kind: "helpers",
-        current: current_version().to_string(),
-        managed: "manual",
-        outdated: outdated(&latest, current_version()),
-    });
-
-    let available = targets.iter().any(|t| t.outdated);
-    Report {
-        available,
-        // Nothing is managed by a store any more, so anything outdated is ours
-        // to replace.
-        updatable: available || force,
-        latest: latest.clone(),
-        url: format!("https://github.com/{}/releases/latest", repo_slug()),
-        error,
-        targets,
-    }
-}
-
-fn outdated(latest: &str, current: &str) -> bool {
-    !latest.is_empty() && !current.is_empty() && version_gt(latest, current)
-}
-
-/// The newest release, from the cache when it is fresh enough.
-fn latest_version(cache: &Path, force: bool) -> Result<String> {
-    if !force
-        && let Some(cached) = state::read_update_status(cache)
-        && let Some(latest) = cached.latest.filter(|v| !v.is_empty())
-        && state::now_ms() - cached.checked_ms < CACHE_TTL_MS
-    {
-        return Ok(latest);
-    }
-    Ok(check(cache)?.latest.unwrap_or_default())
-}
-
-/// Query GitHub, recompute availability, and persist the cached status.
+/// Query GitHub, recompute availability, and persist the cached status. The
+/// `notified` guard is preserved across calls.
 pub fn check(cache_file: &Path) -> Result<UpdateStatus> {
     let current = current_version().to_string();
+    let mut status = state::read_update_status(cache_file).unwrap_or_default();
+    status.current = current.clone();
+    status.checked_ms = state::now_ms();
+
     let release = latest_release()?;
     let latest = release.version.clone();
-    let status = UpdateStatus {
-        available: version_gt(&latest, &current),
-        current,
-        latest: Some(latest),
-        checked_ms: state::now_ms(),
-    };
-    let _ = state::write_update_status(cache_file, &status);
+    status.available = version_gt(&latest, &current);
+    status.latest = Some(latest);
+
+    state::write_update_status(cache_file, &status)?;
     Ok(status)
+}
+
+/// The cached answer while it is fresh, and a live [`check`] otherwise. A panel
+/// polls this, so the round trip to GitHub is meant to be the exception.
+pub fn check_cached(cache_file: &Path, force: bool) -> Result<UpdateStatus> {
+    if !force
+        && let Some(cached) = state::read_update_status(cache_file)
+        && cached.latest.as_deref().is_some_and(|v| !v.is_empty())
+        && state::now_ms().saturating_sub(cached.checked_ms) < CACHE_TTL_MS
+    {
+        return Ok(cached);
+    }
+    check(cache_file)
 }
 
 // ---------------------------------------------------------------------------
@@ -194,6 +120,7 @@ pub fn version_gt(a: &str, b: &str) -> bool {
     parts(a) > parts(b)
 }
 
+/// The newest release carrying an asset for the running platform.
 fn latest_release() -> Result<self_update::update::Release> {
     let (owner, name) = repo();
     let target = arch_target()?;
@@ -207,6 +134,21 @@ fn latest_release() -> Result<self_update::update::Release> {
         .into_iter()
         .find(|r| r.asset_for(target, Some(ARCHIVE_SUFFIX)).is_some())
         .ok_or_else(|| anyhow!("no release with a {target} asset found"))
+}
+
+fn release_named(version: &str) -> Result<self_update::update::Release> {
+    let (owner, name) = repo();
+    let releases = ReleaseList::configure()
+        .repo_owner(&owner)
+        .repo_name(&name)
+        .build()?
+        .fetch()
+        .context("could not reach GitHub to fetch releases")?;
+    let wanted = version.trim_start_matches('v');
+    releases
+        .into_iter()
+        .find(|r| r.version.trim_start_matches('v') == wanted)
+        .ok_or_else(|| anyhow!("no release v{wanted} to install frontends from"))
 }
 
 // ---------------------------------------------------------------------------
@@ -244,7 +186,11 @@ impl Drop for UpdateLock {
 /// What an update did to a non-binary frontend, for the caller to report.
 #[derive(Debug, Clone)]
 pub struct FrontendOutcome {
+    pub id: &'static str,
     pub label: &'static str,
+    /// The version now on disk, read back from the installed copy rather than
+    /// assumed from the release.
+    pub version: Option<String>,
     pub restart_hint: &'static str,
     pub needs_session_restart: bool,
     /// Set when the install failed; the binary is already replaced by then, so
@@ -252,12 +198,17 @@ pub struct FrontendOutcome {
     pub error: Option<String>,
 }
 
+/// Result of a successful [`apply`]: the version installed, plus what happened
+/// to each non-binary frontend that was already present.
 pub struct Applied {
     pub version: String,
     pub frontends: Vec<FrontendOutcome>,
 }
 
-pub fn apply() -> Result<Applied> {
+/// Download the platform archive and replace the installed binary. Returns the
+/// version installed - unchanged when already current, so a same-version run
+/// never clobbers.
+pub fn apply(cache_file: &Path) -> Result<Applied> {
     let target = arch_target()?;
     let release = latest_release()?;
     let current = current_version();
@@ -272,11 +223,7 @@ pub fn apply() -> Result<Applied> {
         .asset_for(target, Some(ARCHIVE_SUFFIX))
         .ok_or_else(|| anyhow!("release {} has no {target} asset", release.version))?;
 
-    let exe = std::env::current_exe().context("cannot resolve current executable")?;
-    let install_dir = exe
-        .parent()
-        .ok_or_else(|| anyhow!("cannot resolve install directory"))?
-        .to_path_buf();
+    let install_dir = install_dir()?;
 
     // Held for the whole download/extract/replace, so a second invocation
     // fails fast instead of corrupting the staging directory.
@@ -294,26 +241,7 @@ pub fn apply() -> Result<Applied> {
     let present = frontend::installed();
 
     let result = (|| -> Result<Vec<FrontendOutcome>> {
-        let archive = tmp.join(&asset.name);
-        let file = std::fs::File::create(&archive)
-            .with_context(|| format!("cannot create {}", archive.display()))?;
-        // GitHub's asset `url` is the API endpoint, which streams the binary
-        // only when `Accept: application/octet-stream` is set - otherwise it
-        // returns the asset's JSON metadata.
-        self_update::Download::from_url(&asset.download_url)
-            .set_header(
-                http::header::ACCEPT,
-                http::HeaderValue::from_static("application/octet-stream"),
-            )
-            .download_to(file)
-            .context("download failed")?;
-
-        self_update::Extract::from_source(&archive)
-            .archive(self_update::ArchiveKind::Tar(Some(
-                self_update::Compression::Gz,
-            )))
-            .extract_into(&tmp)
-            .context("extract failed")?;
+        fetch_into(&tmp, &asset.name, &asset.download_url)?;
 
         // `is_file`, not `exists`: `Move::to_dest` renames without checking
         // what it is moving, so a directory of that name in the archive would
@@ -339,29 +267,104 @@ pub fn apply() -> Result<Applied> {
 
         refresh_aliases(&install_dir);
 
-        Ok(install_frontends_from(&tmp, &present))
+        // An archive predating the frontend payloads carries none, and every
+        // install would fail with the same "payload not found". Say nothing
+        // rather than reporting a failure per frontend for an old release.
+        Ok(if present.iter().any(|f| f.payload_in(&tmp).is_some()) {
+            install_frontends_from(&tmp, &present)
+        } else {
+            Vec::new()
+        })
     })();
 
     let _ = std::fs::remove_dir_all(&tmp);
     let frontends = result?;
 
-    // The panel drops the update prompt on the next check rather than after
-    // the next TTL.
-    let cache = state::update_cache_file();
-    let _ = state::write_update_status(
-        &cache,
-        &UpdateStatus {
-            current: release.version.clone(),
-            latest: Some(release.version.clone()),
-            available: false,
-            checked_ms: state::now_ms(),
-        },
-    );
+    // Refresh the cached status so the panel drops the update banner.
+    let mut status = state::read_update_status(cache_file).unwrap_or_default();
+    status.current = release.version.clone();
+    status.latest = Some(release.version.clone());
+    status.available = false;
+    status.notified = None;
+    status.checked_ms = state::now_ms();
+    let _ = state::write_update_status(cache_file, &status);
 
     Ok(Applied {
         version: release.version,
         frontends,
     })
+}
+
+/// Download the release matching `version` and install one frontend from it,
+/// whether or not it is already present. This is the "switched desktops" path:
+/// the payload always comes from the release the running binary belongs to, so
+/// the frontend cannot land out of step with it.
+pub fn install_frontends(
+    targets: &[&'static Frontend],
+    version: &str,
+) -> Result<Vec<FrontendOutcome>> {
+    let release = release_named(version)?;
+    let asset = release
+        .asset_for(arch_target()?, Some(ARCHIVE_SUFFIX))
+        .ok_or_else(|| anyhow!("release {} has no asset for this platform", release.version))?;
+
+    let install_dir = install_dir()?;
+    // One lock, one download, one extraction for the whole set: installing
+    // three frontends must not fetch the archive three times.
+    let _lock = UpdateLock::acquire(&install_dir)?;
+
+    let tmp = install_dir.join(".tg-frontend.tmp");
+    let _ = std::fs::remove_dir_all(&tmp);
+    std::fs::create_dir_all(&tmp)
+        .with_context(|| format!("cannot create staging dir {}", tmp.display()))?;
+
+    let result = (|| -> Result<Vec<FrontendOutcome>> {
+        fetch_into(&tmp, &asset.name, &asset.download_url)?;
+        if !targets.iter().any(|t| t.payload_in(&tmp).is_some()) {
+            bail!(
+                "release v{} ships no frontend payloads",
+                version.trim_start_matches('v')
+            );
+        }
+        // Per-frontend failures are collected rather than propagated, so one
+        // unwritable destination does not skip the rest of the set.
+        Ok(install_frontends_from(&tmp, targets))
+    })();
+
+    let _ = std::fs::remove_dir_all(&tmp);
+    result
+}
+
+fn install_dir() -> Result<PathBuf> {
+    let exe = std::env::current_exe().context("cannot resolve current executable")?;
+    Ok(exe
+        .parent()
+        .ok_or_else(|| anyhow!("cannot resolve install directory"))?
+        .to_path_buf())
+}
+
+fn fetch_into(tmp: &Path, name: &str, url: &str) -> Result<()> {
+    let archive = tmp.join(name);
+    let file = std::fs::File::create(&archive)
+        .with_context(|| format!("cannot create {}", archive.display()))?;
+    // GitHub's asset `url` is the API endpoint, which streams the binary only
+    // when `Accept: application/octet-stream` is set - otherwise it returns the
+    // asset's JSON metadata.
+    self_update::Download::from_url(url)
+        .set_header(
+            http::header::ACCEPT,
+            http::HeaderValue::from_static("application/octet-stream"),
+        )
+        .show_progress(true)
+        .download_to(file)
+        .context("download failed")?;
+
+    self_update::Extract::from_source(&archive)
+        .archive(self_update::ArchiveKind::Tar(Some(
+            self_update::Compression::Gz,
+        )))
+        .extract_into(tmp)
+        .context("extract failed")
 }
 
 fn install_frontends_from(
@@ -370,11 +373,23 @@ fn install_frontends_from(
 ) -> Vec<FrontendOutcome> {
     targets
         .iter()
-        .map(|f| FrontendOutcome {
-            label: f.label,
-            restart_hint: f.restart.hint(),
-            needs_session_restart: f.restart.needs_session_restart(),
-            error: f.install_from(source_root).err().map(|e| format!("{e:#}")),
+        .map(|f| match f.install_from(source_root) {
+            Ok(_) => FrontendOutcome {
+                id: f.id,
+                label: f.label,
+                version: f.installed_version(),
+                restart_hint: f.restart.hint(),
+                needs_session_restart: f.restart.needs_session_restart(),
+                error: None,
+            },
+            Err(e) => FrontendOutcome {
+                id: f.id,
+                label: f.label,
+                version: None,
+                restart_hint: f.restart.hint(),
+                needs_session_restart: f.restart.needs_session_restart(),
+                error: Some(format!("{e:#}")),
+            },
         })
         .collect()
 }
@@ -397,31 +412,6 @@ pub fn refresh_aliases(install_dir: &Path) {
         let _ = std::fs::remove_file(&path);
         let _ = std::os::unix::fs::symlink(BINARY, &path);
     }
-}
-
-pub fn announce(applied: &Applied) {
-    let failed: Vec<&str> = applied
-        .frontends
-        .iter()
-        .filter(|f| f.error.is_some())
-        .map(|f| f.label)
-        .collect();
-    let body = if failed.is_empty() {
-        "Restart the shell to load it".to_string()
-    } else {
-        format!("{} could not be replaced", failed.join(", "))
-    };
-    let _ = notify::run(&Notification {
-        summary: &format!("TailGauge updated to {}", applied.version),
-        body: &body,
-        urgency: if failed.is_empty() {
-            "normal"
-        } else {
-            "critical"
-        },
-        image: None,
-        open: None,
-    });
 }
 
 #[cfg(test)]
@@ -468,8 +458,8 @@ mod tests {
 
     #[test]
     fn an_upgrade_from_the_shell_helpers_replaces_the_scripts() {
-        // What 0.4.0 leaves behind: eight real bash scripts. Left in place
-        // they would answer for their names forever.
+        // What 0.4.0 leaves behind: real bash scripts. Left in place they would
+        // answer for their names forever.
         let dir = scratch("stale");
         std::fs::write(dir.join(BINARY), b"new").unwrap();
         std::fs::write(dir.join("tailgauge-ctl"), b"#!/bin/bash\n").unwrap();
@@ -521,6 +511,7 @@ mod tests {
     #[test]
     fn every_alias_names_a_subcommand_the_binary_has() {
         // An alias the parser does not answer to is a helper that vanished.
+        // Updating is a flag, so it is deliberately absent from the set.
         let known = [
             "ctl",
             "watch",
@@ -529,13 +520,16 @@ mod tests {
             "receive",
             "file-select",
             "copy",
-            "update",
         ];
         for alias in ALIASES {
             let sub = alias.strip_prefix("tailgauge-").unwrap();
             assert!(known.contains(&sub), "{alias} has no subcommand");
         }
         assert_eq!(ALIASES.len(), known.len(), "a subcommand has no alias");
+        assert!(
+            !ALIASES.contains(&"tailgauge-update"),
+            "updating is --update, so this alias would resolve to nothing"
+        );
     }
 
     #[test]
@@ -553,47 +547,72 @@ mod tests {
     }
 
     #[test]
-    fn a_target_is_only_outdated_against_a_version_we_know() {
-        assert!(outdated("0.5.0", "0.4.0"));
-        assert!(
-            !outdated("", "0.4.0"),
-            "GitHub unreachable is not an update"
-        );
-        assert!(
-            !outdated("0.5.0", ""),
-            "an unreadable manifest is not outdated"
-        );
+    fn a_fresh_cache_answers_without_reaching_github() {
+        // The panel polls this. A check that always went out would hit the
+        // unauthenticated rate limit on a machine that restarts its shell.
+        let dir = scratch("cache");
+        let cache = dir.join("update.json");
+        state::write_update_status(
+            &cache,
+            &UpdateStatus {
+                current: current_version().into(),
+                latest: Some("9.9.9".into()),
+                available: true,
+                checked_ms: state::now_ms(),
+                notified: None,
+            },
+        )
+        .unwrap();
+
+        let status = check_cached(&cache, false).expect("served from cache");
+        assert_eq!(status.latest.as_deref(), Some("9.9.9"));
+        assert!(status.available);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
-    fn the_panel_still_finds_the_version_it_reads_beside_the_widget() {
-        // `helpersVersion` in shared/model.ts looks for exactly this kind, and
-        // the footer goes quiet if it is renamed.
-        let report = Report {
-            available: false,
-            updatable: false,
-            latest: String::new(),
-            url: String::new(),
-            error: String::new(),
-            targets: vec![Target {
-                kind: "helpers",
-                current: current_version().into(),
-                managed: "manual",
-                outdated: false,
-            }],
-        };
-        let json = serde_json::to_value(&report).unwrap();
-        assert_eq!(json["targets"][0]["kind"], "helpers");
-        for field in [
-            "available",
-            "updatable",
-            "latest",
-            "url",
-            "error",
-            "targets",
-        ] {
-            assert!(json.get(field).is_some(), "the panel reads {field}");
-        }
+    fn a_stale_or_empty_cache_is_not_served() {
+        let dir = scratch("stale-cache");
+        let cache = dir.join("update.json");
+
+        // Older than the TTL.
+        state::write_update_status(
+            &cache,
+            &UpdateStatus {
+                latest: Some("9.9.9".into()),
+                checked_ms: state::now_ms() - CACHE_TTL_MS - 1,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(
+            !cache_is_fresh(&cache),
+            "a cache past the TTL must be refetched"
+        );
+
+        // Checked just now, but carrying no answer.
+        state::write_update_status(
+            &cache,
+            &UpdateStatus {
+                latest: None,
+                checked_ms: state::now_ms(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(
+            !cache_is_fresh(&cache),
+            "a check that failed is not an answer"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The guard `check_cached` applies, without the network call behind it.
+    fn cache_is_fresh(cache: &Path) -> bool {
+        state::read_update_status(cache).is_some_and(|c| {
+            c.latest.as_deref().is_some_and(|v| !v.is_empty())
+                && state::now_ms().saturating_sub(c.checked_ms) < CACHE_TTL_MS
+        })
     }
 }
 
