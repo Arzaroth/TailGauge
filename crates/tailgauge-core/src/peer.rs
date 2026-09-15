@@ -50,8 +50,10 @@ pub struct Peer {
     /// rather than "instant"; only NetBird reports a latency.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub connection_type: Option<String>,
+    /// Fractional, because NetBird reports nanoseconds and the panel shows
+    /// milliseconds.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub latency_ms: Option<i64>,
+    pub latency_ms: Option<f64>,
     /// What the expanded row shows. Absent where the provider does not say.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub endpoint: Option<String>,
@@ -208,6 +210,28 @@ pub fn peer_owner(raw: &Value, users: &BTreeMap<String, String>) -> String {
     users.get(&id).cloned().unwrap_or_default()
 }
 
+/// Go's zero time is what a daemon writes for "never", and printing it as a
+/// date would put 1 January year 1 on a machine that simply has not talked yet.
+pub fn non_zero_time(raw: &Value, key: &str) -> String {
+    let value = field(raw, key);
+    if value.trim().is_empty() || value.trim_start().starts_with("0001-01-01") {
+        String::new()
+    } else {
+        value
+    }
+}
+
+/// An address the CLI printed with its prefix length, which is not part of the
+/// address anybody reads out loud.
+pub fn strip_cidr(value: Option<&Value>) -> String {
+    let text = text(value);
+    let text = text.trim();
+    match text.split_once('/') {
+        Some((addr, _)) => addr.to_string(),
+        None => text.to_string(),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // ordering
 // ---------------------------------------------------------------------------
@@ -314,6 +338,13 @@ mod tests {
         // opposite of what comparing bytes gives.
         assert_eq!(collate("a", "A"), Ordering::Less);
         assert_eq!(collate("a", "a"), Ordering::Equal);
+    }
+
+    #[test]
+    fn a_prefix_length_is_not_part_of_the_address() {
+        assert_eq!(strip_cidr(Some(&json!("100.92.0.3/16"))), "100.92.0.3");
+        assert_eq!(strip_cidr(Some(&json!("100.92.0.3"))), "100.92.0.3");
+        assert_eq!(strip_cidr(None), "");
     }
 
     #[test]
