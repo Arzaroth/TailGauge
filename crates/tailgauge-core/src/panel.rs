@@ -511,3 +511,559 @@ pub fn binary_version(state: &PanelState) -> String {
         .map(|u| u.current.clone())
         .unwrap_or_default()
 }
+
+// ---------------------------------------------------------------------------
+// the sections
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PanelSection {
+    pub id: String,
+    pub title: String,
+    pub visible: bool,
+    pub empty: String,
+    pub rows: Vec<PanelRow>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct NavEntry {
+    #[serde(rename = "sectionId")]
+    pub section_id: String,
+    #[serde(rename = "rowId")]
+    pub row_id: String,
+    pub action: String,
+    #[serde(rename = "searchScope")]
+    pub search_scope: String,
+    #[serde(rename = "searchKey")]
+    pub search_key: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Panel {
+    pub bar: crate::bar::BarState,
+    pub header: PanelHeader,
+    pub status: PanelStatus,
+    pub sections: Vec<PanelSection>,
+    pub footer: String,
+    pub navigation: Vec<NavEntry>,
+}
+
+/// What a frontend adds to the state: the things it, not the daemon, knows.
+#[derive(Debug, Clone, Default)]
+pub struct ResolveOptions {
+    pub phrase_index: i64,
+    pub recent_regions: Vec<String>,
+    pub mullvad_picker_open: bool,
+    pub expanded_peer_id: String,
+    pub now_ms: i64,
+}
+
+fn payload<T: Serialize>(value: &T) -> Value {
+    serde_json::to_value(value).unwrap_or(Value::Null)
+}
+
+fn update_section(state: &PanelState) -> PanelSection {
+    let update = state.update.clone().unwrap_or_default();
+    let mut rows = Vec::new();
+    if update.available {
+        rows.push(PanelRow {
+            id: "update".into(),
+            kind: "update".into(),
+            label: format!("TailGauge {} is available", update.latest),
+            // No store owns any part of TailGauge, so there is never a copy
+            // the binary may not replace.
+            sublabel: "Install it now".into(),
+            icon: "software-update-available-symbolic".into(),
+            glyph: "\u{f06b0}".into(),
+            action: "update".into(),
+            busy: state.updating,
+            current: true,
+            payload: payload(&update),
+            ..PanelRow::default()
+        });
+    }
+    PanelSection {
+        id: "update".into(),
+        // No title: one banner does not need a section header over it.
+        title: String::new(),
+        visible: update.available,
+        empty: String::new(),
+        rows,
+    }
+}
+
+fn providers_section(state: &PanelState) -> PanelSection {
+    let current = providers::active_provider(state);
+    let rows: Vec<PanelRow> = providers::drivable_providers(state)
+        .into_iter()
+        .map(|provider| {
+            let selected = current.is_some_and(|c| c.id == provider.id);
+            PanelRow {
+                id: format!("provider:{}", provider.id),
+                kind: "provider".into(),
+                label: provider.label.into(),
+                icon: if selected {
+                    "checkmark-symbolic"
+                } else {
+                    "network-vpn-symbolic"
+                }
+                .into(),
+                glyph: if selected { "\u{f00c}" } else { "\u{f0982}" }.into(),
+                action: "switchProvider".into(),
+                current: selected,
+                bold: selected,
+                payload: payload(provider),
+                ..PanelRow::default()
+            }
+        })
+        .collect();
+    PanelSection {
+        id: "providers".into(),
+        title: "VPN".into(),
+        // One provider is not a choice, and nought is not a list.
+        visible: rows.len() > 1,
+        empty: String::new(),
+        rows,
+    }
+}
+
+fn self_section(state: &PanelState) -> PanelSection {
+    let mut rows = Vec::new();
+    if let Some(peer) = state.self_peer.as_ref() {
+        let copy_options = peer_copy_options(peer);
+        if !copy_options.is_empty() {
+            rows.push(PanelRow {
+                id: "self".into(),
+                kind: "self".into(),
+                label: row_label(peer),
+                sublabel: peer_subtitle(peer),
+                icon: os_icon_name(&peer.os).into(),
+                glyph: os_icon(&peer.os).into(),
+                action: "copy".into(),
+                actions: vec![RowAction::new(
+                    "copy",
+                    "Copy",
+                    "edit-copy-symbolic",
+                    "\u{f018f}",
+                )],
+                copy_options,
+                payload: payload(peer),
+                ..PanelRow::default()
+            });
+        }
+    }
+    PanelSection {
+        id: "self".into(),
+        title: "This device".into(),
+        visible: providers::provider_ready(state) && state.active && !rows.is_empty(),
+        empty: String::new(),
+        rows,
+    }
+}
+
+fn row_label(peer: &Peer) -> String {
+    if !peer.display_name.is_empty() {
+        peer.display_name.clone()
+    } else if !peer.host_name.is_empty() {
+        peer.host_name.clone()
+    } else {
+        "Unknown".to_string()
+    }
+}
+
+fn connections_section(state: &PanelState) -> PanelSection {
+    let mut rows = Vec::new();
+    if state.accounts_access_denied {
+        rows.push(PanelRow {
+            id: "auth".into(),
+            kind: "auth".into(),
+            label: "Authorize Tailscale operator".into(),
+            sublabel: "Allow this user to operate this Tailscale profile".into(),
+            icon: "security-medium-symbolic".into(),
+            glyph: "\u{f0483}".into(),
+            action: "authorize".into(),
+            busy: state.busy,
+            ..PanelRow::default()
+        });
+    }
+    for account in &state.accounts {
+        let selected = account.selected == Some(true);
+        rows.push(PanelRow {
+            id: format!("account:{}", account.id),
+            kind: "account".into(),
+            label: crate::accounts::account_label(account),
+            icon: if selected {
+                "checkmark-symbolic"
+            } else {
+                "user-symbolic"
+            }
+            .into(),
+            // No glyph either way: the account rows have never carried one, so
+            // Omarchy - which draws the glyph rather than the icon name - shows
+            // them bare. Faithful to the model rather than corrected here, since
+            // fixing it changes what a panel looks like.
+            glyph: String::new(),
+            action: "switchAccount".into(),
+            current: selected,
+            bold: selected,
+            busy: state.switching_account_id == account.id,
+            payload: payload(account),
+            ..PanelRow::default()
+        });
+    }
+    PanelSection {
+        id: "connections".into(),
+        title: "Connections".into(),
+        visible: providers::provider_supports(state, Capability::Accounts)
+            && (state.accounts.len() > 1 || state.accounts_access_denied),
+        empty: String::new(),
+        rows,
+    }
+}
+
+fn exit_node_row(state: &PanelState, node: &Peer) -> PanelRow {
+    let active = node.exit_node;
+    PanelRow {
+        id: format!("exit:{}", node.id),
+        kind: "exitNode".into(),
+        label: row_label(node),
+        icon: if node.mullvad {
+            "network-vpn-symbolic"
+        } else {
+            "network-connect-symbolic"
+        }
+        .into(),
+        glyph: if node.mullvad {
+            "\u{f0582}"
+        } else {
+            "\u{f11e2}"
+        }
+        .into(),
+        action: "setExitNode".into(),
+        current: active,
+        bold: active,
+        busy: state.setting_exit_node_id == node.id,
+        hint: if active { "Disconnect" } else { "Connect" }.into(),
+        payload: payload(node),
+        ..PanelRow::default()
+    }
+}
+
+fn exit_node_rows(
+    state: &PanelState,
+    recent_regions: &[String],
+    picker_open: bool,
+) -> Vec<PanelRow> {
+    let mut rows: Vec<PanelRow> = state
+        .own_exit_nodes
+        .iter()
+        .map(|node| exit_node_row(state, node))
+        .collect();
+
+    let regions: &[Peer] = if providers::provider_supports(state, Capability::Mullvad) {
+        &state.mullvad_regions
+    } else {
+        &[]
+    };
+    for node in crate::exit_nodes::recent_mullvad_nodes(regions, recent_regions, 5) {
+        rows.push(exit_node_row(state, &node));
+    }
+
+    if !regions.is_empty() {
+        let mut children = vec![PanelRow {
+            id: "mullvad:empty".into(),
+            kind: "empty".into(),
+            label: "No Mullvad regions found.".into(),
+            navigable: false,
+            search_scope: "mullvad".into(),
+            ..PanelRow::default()
+        }];
+        for region in regions {
+            let active = region.exit_node;
+            children.push(PanelRow {
+                id: format!("region:{}", region.id),
+                kind: "mullvadRegion".into(),
+                label: crate::exit_nodes::mullvad_region_title(region),
+                sublabel: crate::exit_nodes::mullvad_region_subtitle(region),
+                icon: "network-vpn-symbolic".into(),
+                glyph: "\u{f0582}".into(),
+                action: "setExitNode".into(),
+                current: active,
+                bold: active,
+                busy: state.setting_exit_node_id == region.id,
+                hint: if active { "Disconnect" } else { "Connect" }.into(),
+                search_scope: "mullvad".into(),
+                search_key: crate::exit_nodes::mullvad_region_search_key(region),
+                payload: payload(region),
+                ..PanelRow::default()
+            });
+        }
+        rows.push(PanelRow {
+            id: "mullvad:add".into(),
+            kind: "mullvadPicker".into(),
+            label: "Choose Mullvad region".into(),
+            icon: "list-add-symbolic".into(),
+            glyph: "+".into(),
+            action: "togglePicker".into(),
+            current: picker_open,
+            expanded: picker_open,
+            search_placeholder: "Search regions".into(),
+            children,
+            ..PanelRow::default()
+        });
+    }
+    rows
+}
+
+fn exit_nodes_section(
+    state: &PanelState,
+    recent_regions: &[String],
+    picker_open: bool,
+) -> PanelSection {
+    let supported = providers::provider_supports(state, Capability::ExitNodes);
+    let rows = if supported && state.active {
+        exit_node_rows(state, recent_regions, picker_open)
+    } else {
+        Vec::new()
+    };
+    PanelSection {
+        id: "exitNodes".into(),
+        title: "Exit nodes".into(),
+        visible: supported && state.active && !rows.is_empty(),
+        empty: String::new(),
+        rows,
+    }
+}
+
+fn networks_section(state: &PanelState) -> PanelSection {
+    let supported = providers::provider_supports(state, Capability::Networks);
+    let networks: &[crate::netbird::Network] = if supported { &state.networks } else { &[] };
+    let rows: Vec<PanelRow> = networks
+        .iter()
+        .map(|network| PanelRow {
+            id: format!("network:{}", network.id),
+            kind: "network".into(),
+            label: network.id.clone(),
+            sublabel: crate::netbird::network_subtitle(network),
+            icon: if network.selected {
+                "checkmark-symbolic"
+            } else {
+                "network-workgroup-symbolic"
+            }
+            .into(),
+            glyph: if network.selected {
+                "\u{f00c}"
+            } else {
+                "\u{f06db}"
+            }
+            .into(),
+            action: "selectNetwork".into(),
+            current: network.selected,
+            bold: network.selected,
+            busy: state.selecting_network_id == network.id,
+            hint: if network.selected { "Leave" } else { "Join" }.into(),
+            payload: payload(network),
+            ..PanelRow::default()
+        })
+        .collect();
+    PanelSection {
+        id: "networks".into(),
+        title: "Networks".into(),
+        visible: supported && state.active && !rows.is_empty(),
+        empty: String::new(),
+        rows,
+    }
+}
+
+/// A field over three machines is clutter; over eighty it is the only way to
+/// find one.
+const MACHINE_SEARCH_MIN: usize = 8;
+
+fn machines_section(state: &PanelState, expanded_peer_id: &str, now_ms: i64) -> PanelSection {
+    let peers: &[Peer] = if state.active { &state.peers } else { &[] };
+    let mut rows: Vec<PanelRow> = Vec::new();
+
+    if peers.len() > MACHINE_SEARCH_MIN {
+        rows.push(PanelRow {
+            id: "machines:search".into(),
+            kind: "machineSearch".into(),
+            search_placeholder: "Search machines".into(),
+            navigable: false,
+            ..PanelRow::default()
+        });
+    }
+    if !peers.is_empty() {
+        rows.push(PanelRow {
+            id: "machines:empty".into(),
+            kind: "empty".into(),
+            label: "No machines match.".into(),
+            navigable: false,
+            search_scope: "machines".into(),
+            ..PanelRow::default()
+        });
+    }
+
+    for peer in peers {
+        let copy_options = peer_copy_options(peer);
+        let details = peer_detail_rows(peer, now_ms);
+        let expanded = !details.is_empty() && expanded_peer_id == peer.id;
+
+        let mut actions: Vec<RowAction> = Vec::new();
+        if !details.is_empty() {
+            actions.push(if expanded {
+                RowAction::new("detail", "Hide details", "pan-up-symbolic", "\u{f0143}")
+            } else {
+                RowAction::new("detail", "Show details", "pan-down-symbolic", "\u{f0140}")
+            });
+        }
+        if can_send_files(state, peer) {
+            actions.push(RowAction::new(
+                "send",
+                "Send files",
+                "document-send-symbolic",
+                "\u{f048a}",
+            ));
+        }
+        if !copy_options.is_empty() {
+            actions.push(RowAction::new(
+                "copy",
+                "Copy",
+                "edit-copy-symbolic",
+                "\u{f018f}",
+            ));
+        }
+
+        rows.push(PanelRow {
+            id: format!("peer:{}", peer.id),
+            kind: "peer".into(),
+            label: row_label(peer),
+            sublabel: peer_row_subtitle(peer),
+            icon: os_icon_name(&peer.os).into(),
+            glyph: os_icon(&peer.os).into(),
+            action: if copy_options.is_empty() {
+                String::new()
+            } else {
+                "copy".into()
+            },
+            actions,
+            copy_options,
+            children: details,
+            expanded,
+            search_scope: "machines".into(),
+            search_key: crate::exit_nodes::machine_search_key(peer),
+            payload: payload(peer),
+            ..PanelRow::default()
+        });
+    }
+
+    PanelSection {
+        id: "machines".into(),
+        title: "Machines".into(),
+        visible: providers::provider_ready(state) && state.active,
+        empty: "No machines found on this tailnet.".into(),
+        rows,
+    }
+}
+
+/// One traversal order for every desktop: the header, then every navigable row
+/// of every visible section, in the order they are drawn. Cursor movement is
+/// an index into this, so no frontend carries a focus state machine that
+/// another could disagree with.
+fn panel_navigation(header: &PanelHeader, sections: &[PanelSection]) -> Vec<NavEntry> {
+    let entry = |section_id: &str, row: &PanelRow| NavEntry {
+        section_id: section_id.into(),
+        row_id: row.id.clone(),
+        action: row.action.clone(),
+        search_scope: row.search_scope.clone(),
+        search_key: row.search_key.clone(),
+    };
+
+    let mut nav = vec![NavEntry {
+        section_id: "header".into(),
+        row_id: header.id.clone(),
+        action: header.action.clone(),
+        search_scope: String::new(),
+        search_key: String::new(),
+    }];
+    for section in sections.iter().filter(|s| s.visible) {
+        for row in section.rows.iter().filter(|r| r.navigable) {
+            nav.push(entry(&section.id, row));
+            // An expanded row's children are drawn between it and the next
+            // row, so they are cursor stops in that position too. Collapsed,
+            // they are not on screen and must not be.
+            if !row.expanded {
+                continue;
+            }
+            for child in row.children.iter().filter(|c| c.navigable) {
+                nav.push(entry(&section.id, child));
+            }
+        }
+    }
+    nav
+}
+
+pub fn panel_spec(state: &PanelState, options: &ResolveOptions) -> Panel {
+    let header = panel_header(state, options.phrase_index);
+    let sections = vec![
+        update_section(state),
+        providers_section(state),
+        self_section(state),
+        connections_section(state),
+        exit_nodes_section(state, &options.recent_regions, options.mullvad_picker_open),
+        networks_section(state),
+        machines_section(state, &options.expanded_peer_id, options.now_ms),
+    ];
+    Panel {
+        bar: crate::bar::bar_state(state),
+        navigation: panel_navigation(&header, &sections),
+        header,
+        status: panel_status(state),
+        sections,
+        footer: panel_footer(state),
+    }
+}
+
+/// Resolve a navigation entry back to the row it points at, so a frontend can
+/// act on the cursor without keeping its own copy of the panel.
+pub fn panel_row_at(panel: &Panel, nav_index: usize) -> Option<&PanelRow> {
+    let entry = panel.navigation.get(nav_index)?;
+    if entry.section_id == "header" {
+        return None;
+    }
+    let section = panel.sections.iter().find(|s| s.id == entry.section_id)?;
+    for row in &section.rows {
+        if row.id == entry.row_id {
+            return Some(row);
+        }
+        if let Some(child) = row.children.iter().find(|c| c.id == entry.row_id) {
+            return Some(child);
+        }
+    }
+    None
+}
+
+/// Whether a row is drawn at all. A search field is the model's decision, so a
+/// frontend holding its query needs to hear when it has gone.
+pub fn panel_has_row(panel: &Panel, row_id: &str) -> bool {
+    panel.sections.iter().any(|section| {
+        section
+            .rows
+            .iter()
+            .any(|row| row.id == row_id || row.children.iter().any(|c| c.id == row_id))
+    })
+}
+
+/// What a row's single-letter keys are allowed to do follows the actions the
+/// model put on it, not its kind, so a new copyable row does not have to be
+/// taught to every frontend's key handler.
+pub fn panel_row_has_action(row: &PanelRow, action_id: &str) -> bool {
+    row.actions.iter().any(|a| a.id == action_id)
+}
+
+pub fn panel_nav_index_of(panel: &Panel, row_id: &str) -> usize {
+    panel
+        .navigation
+        .iter()
+        .position(|e| e.row_id == row_id)
+        .unwrap_or(0)
+}

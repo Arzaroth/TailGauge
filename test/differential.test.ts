@@ -492,3 +492,87 @@ test('the header, status and footer agree', () => {
             toggleHint: M.toggleHint(s as never),
         }))));
 });
+
+// The whole panel. This is the case the port exists for: every section, the
+// bar, the header, the status precedence and the traversal order, resolved
+// from one state and compared field for field.
+const statusOf = (raw: string) => {
+    const parsed = M.parseStatus(raw) as ModelTypes.StatusOk;
+    assert.ok(parsed.ok && !parsed.unavailable, 'the fixture should parse');
+    return parsed;
+};
+
+const tailnet = statusOf(fixture('status.json'));
+const mullvad = M.mullvadRegionOptions(M.parseExitNodeList(fixture('exit-nodes.txt')));
+const accountsFixture = M.parseAccounts(fixture('accounts.json'));
+const netbirdNetworks = M.parseNetbirdNetworks(fixture('netbird-networks.txt')).networks;
+
+const live = (over: Record<string, unknown> = {}) => ({
+    providers: detected('tailscale'),
+    installed: true, running: true, active: true, helpers: true,
+    selfName: tailnet.selfName, selfIp: tailnet.selfIp, selfUserId: tailnet.selfUserId,
+    selfPeer: tailnet.selfPeer, fileSharing: tailnet.fileSharing,
+    peers: tailnet.peers, ownExitNodes: tailnet.exitNodes,
+    version: '0.4.0',
+    ...over,
+});
+
+const manyPeers = Array.from({length: 12}, (_, i) => ({
+    ...tailnet.peers[0], id: `peer-${i}`, HostName: `box-${i}`, DisplayName: `box-${i}`,
+    DNSName: `box-${i}.example.ts.net`, IPv4: [`100.64.1.${i}`],
+    OS: i % 2 === 0 ? 'linux' : 'windows',
+}));
+
+const panelCases: [Record<string, unknown>, Record<string, unknown>][] = [
+    [{}, {}],
+    [{installed: true}, {}],
+    [{providers: detected('tailscale')}, {}],
+    [live(), {nowMs: NOW}],
+    [live({active: false}), {nowMs: NOW}],
+    [live({peers: manyPeers}), {nowMs: NOW}],
+    [live({peers: []}), {nowMs: NOW}],
+    // Either side of the threshold that grows the search field, and on it.
+    ...[7, 8, 9].map((n): [Record<string, unknown>, Record<string, unknown>] =>
+        [live({peers: manyPeers.slice(0, n)}), {nowMs: NOW}]),
+    // Exit nodes, the picker, and the shortlist of recent regions.
+    [live({mullvadRegions: mullvad}), {nowMs: NOW}],
+    [live({mullvadRegions: mullvad}), {nowMs: NOW, mullvadPickerOpen: true}],
+    [live({mullvadRegions: mullvad}),
+     {nowMs: NOW, recentRegions: ['France\nParis', 'Germany\nBerlin']}],
+    [live({mullvadRegions: [], ownExitNodes: []}), {nowMs: NOW}],
+    // An expanded machine puts its details into the traversal.
+    [live(), {nowMs: NOW, expandedPeerId: tailnet.peers[0].id}],
+    [live(), {nowMs: NOW, expandedPeerId: 'nothing-here'}],
+    // Accounts, and the operator refusal.
+    [live({accounts: accountsFixture.accounts}), {nowMs: NOW}],
+    [live({accounts: accountsFixture.accounts, switchingAccountId: accountsFixture.accounts[0]?.id}),
+     {nowMs: NOW}],
+    [live({accountsAccessDenied: true, busy: true}), {nowMs: NOW}],
+    // NetBird: networks instead of exit nodes, and no Taildrop.
+    [{...live(), providers: detected('netbird'), activeProviderId: 'netbird',
+      networks: netbirdNetworks}, {nowMs: NOW}],
+    [{...live(), providers: detected('tailscale', 'netbird'), networks: netbirdNetworks},
+     {nowMs: NOW}],
+    // The banner, the status precedence and the footer's skew line.
+    [live({update: {available: true, latest: '9.9.9', current: '0.4.0'}}), {nowMs: NOW}],
+    [live({update: {available: true, latest: '9.9.9', current: '0.4.0'}, updating: true}), {nowMs: NOW}],
+    [live({actionStatus: 'Connecting…', lastError: 'stale'}), {nowMs: NOW}],
+    [live({lastError: 'Something broke'}), {nowMs: NOW}],
+    [live({update: {current: '0.3.9'}}), {nowMs: NOW}],
+    // A store install has no binary on PATH, so the send action goes.
+    [live({helpers: false}), {nowMs: NOW}],
+    [live({fileSharing: false}), {nowMs: NOW}],
+    // Every phrase, and the wrap at both ends.
+    ...[0, 5, 10, -3].map((i): [Record<string, unknown>, Record<string, unknown>] =>
+        [live(), {nowMs: NOW, phraseIndex: i}]),
+];
+
+test('the whole panel agrees, section for section', () => {
+    const fromRust = rust('panel', JSON.stringify(panelCases)) as unknown[];
+    const fromTs = panelCases.map(([state, options]) =>
+        JSON.parse(JSON.stringify(M.resolvePanel(state as never, options as never))));
+    // One case at a time, so a failure names the state rather than dumping
+    // every panel in the table.
+    for (let i = 0; i < panelCases.length; i++)
+        assert.deepEqual(fromRust[i], fromTs[i], `case ${i} disagrees`);
+});
