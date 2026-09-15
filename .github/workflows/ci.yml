@@ -42,63 +42,7 @@ jobs:
       - name: Test
         run: cargo test --locked
 
-  # The shared model is where both desktops get their panel from, so it is the
-  # only place a behaviour change can be caught once instead of twice.
-  model:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          persist-credentials: false
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          cache: true
-
-      - name: Set up Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: '22'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build
-        run: scripts/build.sh
-
-      # The differential tests hold the Rust port against the TypeScript that
-      # is still driving all three frontends, so they need both halves built.
-      - name: Build the binary
-        run: cargo build --locked
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-      # Coverage is a read-out here, not a gate - no threshold fails the build.
-      # The compiled tests are excluded so the percentages describe the model,
-      # which is the only shipped code Node executes.
-      - name: Test
-        run: |
-          node --test --experimental-test-coverage \
-            --test-coverage-exclude='build/.ts/tests/**' \
-            'build/.ts/tests/test/**/*.test.js'
-
-      - name: Check the generated ES module resolves
-        run: |
-          node --input-type=module -e '
-            const m = await import("./build/.ts/model/model.js");
-            const missing = ["resolvePanel", "parseStatus", "panelRowAt", "panelNavIndexOf"]
-              .filter(name => typeof m[name] !== "function");
-            if (missing.length) {
-              console.error("missing exports: " + missing.join(", "));
-              process.exit(1);
-            }
-            console.log(Object.keys(m).length + " exports");
-          '
-
-  # The frontends install separately from anything the model job builds, so a
+  # The frontends install separately from anything the binary job builds, so a
   # syntax error in one of them ships without any other job noticing.
   frontends:
     runs-on: ubuntu-latest
@@ -156,6 +100,9 @@ jobs:
             echo "::error::QML syntax error - see the [syntax] diagnostics above"
             exit 1
           fi
+
+      - name: Typecheck the GNOME extension
+        run: pnpm typecheck
 
       - name: Check the GNOME extension
         run: |

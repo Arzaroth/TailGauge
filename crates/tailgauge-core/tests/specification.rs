@@ -21,13 +21,11 @@ use tailgauge_core::status::StatusOk;
 
 // ---- the fixtures the panel is resolved from ------------------------------
 
+/// Captures of what a real daemon said, which is what the panel is resolved
+/// from here. They moved in with these tests when the TypeScript that also
+/// read them went.
 fn fixture(name: &str) -> String {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(|p| p.parent())
-        .expect("workspace root")
-        .join("test/fixtures")
-        .join(name);
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures").join(name);
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }
 

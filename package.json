@@ -7,9 +7,7 @@
   "packageManager": "pnpm@11.21.0",
   "scripts": {
     "build": "scripts/build.sh",
-    "typecheck": "tsc -p tsconfig.json && tsc -p test/tsconfig.json --noEmit",
-    "test": "scripts/build.sh && cargo build --quiet && node --test 'build/.ts/tests/test/**/*.test.js'",
-    "coverage": "scripts/build.sh && cargo build --quiet && node --test --experimental-test-coverage --test-coverage-exclude='build/.ts/tests/**' 'build/.ts/tests/test/**/*.test.js'"
+    "typecheck": "tsc -p tsconfig.gnome.json --noEmit"
   },
   "devDependencies": {
     "@girs/gnome-shell": "50.0.4",
