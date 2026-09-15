@@ -114,6 +114,12 @@ jobs:
       - name: Drive the QML frontends against a recorded panel
         run: tests/qml/run.sh
 
+      # Node rather than GJS: the loader hook in register.js answers the
+      # `gi://` imports with mocks, so the extension's logic runs here without
+      # a shell to host it.
+      - name: Test the GNOME extension
+        run: node --import ./tests/gnome/register.js --test 'tests/gnome/**/*.test.js'
+
       - name: Check the GNOME extension
         run: |
           shopt -s globstar nullglob

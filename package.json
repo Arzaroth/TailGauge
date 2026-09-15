@@ -7,7 +7,8 @@
   "packageManager": "pnpm@11.21.0",
   "scripts": {
     "build": "scripts/build.sh",
-    "typecheck": "tsc -p tsconfig.gnome.json --noEmit"
+    "typecheck": "tsc -p tsconfig.gnome.json --noEmit",
+    "test": "scripts/build.sh && node --import ./tests/gnome/register.js --test 'tests/gnome/**/*.test.js'"
   },
   "devDependencies": {
     "@girs/gnome-shell": "50.0.4",
