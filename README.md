@@ -82,14 +82,14 @@ Run from a key binding there is no terminal to print on, so `up` opens the login
 
 ## Distribution
 
-The three frontends are QML and JavaScript their desktops install; the binary is one file in `~/.local/bin`. Each store updates the frontend it carries, and `tailgauge update` replaces the binary and refreshes whichever frontends are already installed.
+The three frontends are QML and JavaScript their desktops install; the binary is one file in `~/.local/bin`. Each store updates the frontend it carries, and `tailgauge --update` replaces the binary and refreshes whichever frontends are already installed.
 
 | Channel | Installs | Updates |
 |---|---|---|
 | [store.kde.org](https://store.kde.org) | the Plasma widget | *Add Widgets* shows updates; KNewStuff tracks the version |
 | [extensions.gnome.org](https://extensions.gnome.org) | the GNOME extension | the Extensions app applies them on next session |
-| GitHub releases | the Omarchy widget | `tailgauge update`; there is no plugin store to go through |
-| GitHub releases | everything, the binary included | `tailgauge update` |
+| GitHub releases | the Omarchy widget | `tailgauge --update`; there is no plugin store to go through |
+| GitHub releases | everything, the binary included | `tailgauge --update` |
 | Distro package | everything, as one unit | the package manager |
 
 **Neither store can install the binary or the systemd unit** - the KDE Store ships a kpackage, EGO ships an extension zip. A store-installed TailGauge is the panel only: status, toggle, connections, exit nodes, machines and copy actions all work; **Taildrop send does not appear**, because the panel checks for `tailgauge` on `PATH` before offering it. Install it from the release archive to get it back:
@@ -102,11 +102,22 @@ install -m 755 tailgauge ~/.local/bin/
 ### Updating
 
 ```bash
-tailgauge update             # is there a newer release?
-tailgauge update --apply     # install it
+tailgauge --check-update              # is there a newer release? prints the status as JSON
+tailgauge --update                    # install it
+tailgauge --install-frontend gnome    # after switching desktops; `all` takes the set
 ```
 
-The check is cached for six hours, so the panel polling it costs nothing. Both panels show a banner when an update is out, with an **Install it now** row when TailGauge can do it itself.
+`--check-update` serves a cached answer for six hours, so the panel polling it costs nothing; `--force` goes out anyway. All three panels show a banner when an update is out, with an **Install it now** row.
+
+`--update` reports each frontend by the version read back off disk, and splits the restart hints into the ones a shell restart covers and the one that needs the session. On the path where nothing was updated it still says whether an installed frontend disagrees with the binary, which is the skew the whole thing exists to catch:
+
+```
+$ tailgauge --update
+Current version: 0.5.0
+Checking for updates...
+Already up to date (0.5.0).
+Omarchy bar widget is still v0.4.0 - update it: tailgauge --install-frontend omarchy
+```
 
 It replaces the binary next to itself and reinstalls whichever frontends are already on the machine, from the payloads the same archive carries - so the binary and the QML it feeds cannot end up a release apart. A frontend that fails to install is reported rather than rolled into the binary's failure, and the old copy is moved aside rather than deleted, so a failed replacement leaves the one that was working.
 
@@ -117,7 +128,7 @@ Tagging `vX.Y.Z` publishes:
 - `tailgauge-vX.Y.Z-plasmoid.plasmoid` - `kpackagetool6 -t Plasma/Applet -i`, and the KDE Store upload
 - `tailgauge-vX.Y.Z-gnome-shell-extension.zip` - `gnome-extensions install`, and the EGO upload
 - `tailgauge-vX.Y.Z-omarchy-plugin.tar.gz` - unpacks into `~/.config/omarchy/plugins/`
-- `tailgauge-vX.Y.Z-linux-x86_64.tar.gz`, `-linux-aarch64.tar.gz` - the binary, the three frontend payloads under `frontends/`, and the systemd unit. This is what `tailgauge update` downloads.
+- `tailgauge-vX.Y.Z-linux-x86_64.tar.gz`, `-linux-aarch64.tar.gz` - the binary, the three frontend payloads under `frontends/`, and the systemd unit. This is what `--update` and `--install-frontend` download.
 
 The distribution tests in `crates/tailgauge/src/update.rs` fail the build if those names stop matching what the updater asks for - the asset name is spelled by the updater's own `arch_target()`, so the test compares the workflow against the running code rather than against a second copy of the name. The three manifests and `Cargo.toml` all declare the version, and a tag that disagrees with any of them refuses to publish.
 
