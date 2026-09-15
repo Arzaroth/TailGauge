@@ -12,7 +12,7 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Extension, gettext as _} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-import * as Model from './model.js';
+import * as Panel from './panel.js';
 import {ProviderService} from './provider.js';
 
 const RECENT_MULLVAD_LIMIT = 5;
@@ -25,7 +25,7 @@ const SCROLL_MIN_HEIGHT = 200;
 // the St or PopupMenu type definitions, so the shape is named once here.
 type RowItem = PopupMenu.PopupBaseMenuItem & {
     _rowId?: string;
-    _row?: Model.PanelRow;
+    _row?: Panel.PanelRow;
     _sublabel?: St.Label;
     readonly label?: St.Label;
     readonly icon?: St.Icon;
@@ -40,7 +40,7 @@ function menuItems(owner: {_getMenuItems(): unknown[]}): RowItem[] {
     return owner._getMenuItems() as RowItem[];
 }
 
-type Delegated = Clutter.Actor & {_delegate?: {_row?: Model.PanelRow}; _row?: Model.PanelRow};
+type Delegated = Clutter.Actor & {_delegate?: {_row?: Panel.PanelRow}; _row?: Panel.PanelRow};
 
 // The three helpers below probe for the spelling the running shell has. A
 // single release's type definitions can only describe one of them, so the
@@ -199,6 +199,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
             String(extension.metadata['version-name'] ?? ''));
         this._signature = '';
         this._phraseIndex = 0;
+        this._pushUi();
         this._phraseTimeoutId = 0;
         this._mullvadQuery = '';
         this._machineQuery = '';
@@ -252,15 +253,22 @@ class TailGaugeIndicator extends PanelMenu.Button {
         this._sync();
     }
 
-    // The panel is resolved in the shared model, so what GNOME shows and what
-    // Plasma shows cannot drift. The picker is always resolved open here: its
-    // regions live in a submenu that PopupMenu shows and hides on its own.
-    _panel(): Model.Panel {
-        return Model.resolvePanel(this._service.snapshot(), {
+    // The panel arrives resolved from the binary, so what GNOME shows and what
+    // the other desktops show cannot drift. The picker is always asked for
+    // open: its regions live in a submenu that PopupMenu shows and hides on
+    // its own.
+    _panel(): Panel.Panel {
+        return this._service.panel;
+    }
+
+    // What only this side decides. Assigning it makes the service re-ask, so a
+    // phrase tick or a newly expanded row redraws rather than waiting.
+    _pushUi(): void {
+        this._service.ui = {
             recentRegions: this._settings.get_strv('recent-mullvad-regions'),
             mullvadPickerOpen: true,
             phraseIndex: this._phraseIndex,
-        });
+        };
     }
 
     _buildStaticItems(): void {
@@ -300,7 +308,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         // Labelled from the panel, not from here, so every desktop names it
         // the same way and it is translated once.
         this._refreshItem = new PopupMenu.PopupMenuItem('');
-        this._refreshItem.connect('activate', () => this._service.refresh(true));
+        this._refreshItem.connect('activate', () => this._service.refresh());
         this._menu.addMenuItem(this._refreshItem);
 
         const settingsItem = new PopupMenu.PopupMenuItem(_('Settings'));
@@ -355,7 +363,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         }
     }
 
-    _signatureOf(panel: Model.Panel): string {
+    _signatureOf(panel: Panel.Panel): string {
         const parts = [panel.header.toggleVisible ? '1' : '0'];
         for (const section of panel.sections) {
             parts.push(`${section.id}:${section.visible ? 1 : 0}:` +
@@ -364,7 +372,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         return parts.join('|');
     }
 
-    _syncPanel(panel: Model.Panel): void {
+    _syncPanel(panel: Panel.Panel): void {
         // The bar describes the machine, not the panel's current view.
         this._panelIcon.setState(panel.bar.crossed, panel.bar.warning);
         this._panelIcon.opacity = panel.header.dimmed ? 130 : 255;
@@ -375,7 +383,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         this._panelLabel.visible = this._panelLabel.text !== '';
     }
 
-    _syncHeader(panel: Model.Panel): void {
+    _syncHeader(panel: Panel.Panel): void {
         this._headerItem.label.text = panel.header.title;
         this._headerItem.setSensitive(panel.header.toggleEnabled);
         if (this._headerItem.state !== panel.header.toggleChecked)
@@ -401,8 +409,8 @@ class TailGaugeIndicator extends PanelMenu.Button {
     }
 
     // Cheap pass for the things that change without the row set changing.
-    _syncRows(panel: Model.Panel): void {
-        const byId = new Map<string, Model.PanelRow>();
+    _syncRows(panel: Panel.Panel): void {
+        const byId = new Map<string, Panel.PanelRow>();
         for (const section of panel.sections) {
             for (const row of section.rows) {
                 byId.set(row.id, row);
@@ -416,7 +424,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         }
     }
 
-    _applyRow(item: RowItem, byId: Map<string, Model.PanelRow>): void {
+    _applyRow(item: RowItem, byId: Map<string, Panel.PanelRow>): void {
         const row = item._rowId ? byId.get(item._rowId) : null;
         if (row) {
             item.setOrnament(row.current ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
@@ -443,7 +451,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         return '';
     }
 
-    _searchMatches(row: Model.PanelRow): boolean {
+    _searchMatches(row: Panel.PanelRow): boolean {
         const query = this._searchQuery(row.searchScope);
         return query === '' || row.searchKey.includes(query);
     }
@@ -451,7 +459,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
     // A scope whose query matches nothing draws its keyless row instead, which
     // is the message the model wrote for exactly that case.
     _applySearch(): void {
-        const filtered: {item: RowItem; row: Model.PanelRow}[] = [];
+        const filtered: {item: RowItem; row: Panel.PanelRow}[] = [];
         const matched = new Set<string>();
 
         const collect = (items: RowItem[]): void => {
@@ -476,7 +484,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         }
     }
 
-    _rebuildSections(panel: Model.Panel): void {
+    _rebuildSections(panel: Panel.Panel): void {
         // Both fields are about to be destroyed with the sections holding them.
         this._machineEntry = null;
         this._mullvadEntry = null;
@@ -506,7 +514,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         this._applySearch();
     }
 
-    _renderRow(row: Model.PanelRow): RowItem {
+    _renderRow(row: Panel.PanelRow): RowItem {
         if (row.kind === 'empty') {
             const empty: RowItem = new PopupMenu.PopupMenuItem(
                 row.label, {reactive: false, can_focus: false});
@@ -528,7 +536,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         return item;
     }
 
-    _renderMachineSearch(row: Model.PanelRow): RowItem {
+    _renderMachineSearch(row: Panel.PanelRow): RowItem {
         const item: RowItem = new PopupMenu.PopupBaseMenuItem({reactive: false, can_focus: false});
         item._rowId = row.id;
         item._row = row;
@@ -548,7 +556,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         return item;
     }
 
-    _renderSubmenuRow(row: Model.PanelRow): RowItem {
+    _renderSubmenuRow(row: Panel.PanelRow): RowItem {
         const item = new PopupMenu.PopupSubMenuMenuItem(row.label, true);
         item.icon!.icon_name = row.icon;
         this._decorate(item, row);
@@ -614,7 +622,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
     // The sublabel rides on the trailing edge of the row rather than under it:
     // a PopupMenuItem is one line tall, and dropping it instead would put GNOME
     // and Plasma back out of step.
-    _decorate(item: RowItem, row: Model.PanelRow): void {
+    _decorate(item: RowItem, row: Panel.PanelRow): void {
         item._rowId = row.id;
         item._row = row;
         if (item.label)
@@ -638,7 +646,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
     }
 
     // The one place a resolved row turns back into a service call.
-    _dispatch(row: Model.PanelRow | null | undefined): void {
+    _dispatch(row: Panel.PanelRow | null | undefined): void {
         if (!row)
             return;
         switch (row.action) {
@@ -655,29 +663,25 @@ class TailGaugeIndicator extends PanelMenu.Button {
             this._service.selectNetwork(row.payload);
             break;
         case 'switchAccount':
-            this._service.switchAccount(row.payload.id);
+            this._service.switchAccount(row.payload?.id ?? '');
             break;
         case 'update':
             this._service.applyUpdate();
             this._menu.close();
             break;
         case 'openUrl':
-            this._service.openUrl(row.payload ? row.payload.url : '');
+            this._service.openUrl(row.payload?.url ?? '');
             this._menu.close();
             break;
         case 'setExitNode':
-            if (row.payload.Mullvad === true) {
-                this._settings.set_strv('recent-mullvad-regions', Model.pushRecentMullvad(
-                    this._settings.get_strv('recent-mullvad-regions'),
-                    Model.mullvadRegionKey(row.payload),
-                    RECENT_MULLVAD_LIMIT));
-            }
+            if (row.payload?.Mullvad === true)
+                this._service.rememberMullvadRegion(row.payload);
             this._service.setExitNode(row.payload);
             break;
         }
     }
 
-    _copyOption(row: Model.PanelRow | null | undefined, kind: string): void {
+    _copyOption(row: Panel.PanelRow | null | undefined, kind: string): void {
         if (!row)
             return;
         if (kind === 'name')
@@ -692,7 +696,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
                     this._service.copyToClipboard(option.label);
     }
 
-    _sendFile(row: Model.PanelRow | null | undefined): void {
+    _sendFile(row: Panel.PanelRow | null | undefined): void {
         if (!row || !row.payload)
             return;
         // The file chooser takes over from here, so get the menu out of the way.
@@ -717,7 +721,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
             return Clutter.EVENT_STOP;
         }
         if (symbol === Clutter.KEY_r || symbol === Clutter.KEY_R) {
-            this._service.refresh(true);
+            this._service.refresh();
             return Clutter.EVENT_STOP;
         }
 
@@ -733,7 +737,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         else if (copyable && (symbol === Clutter.KEY_d || symbol === Clutter.KEY_D))
             this._copyOption(row, 'dns');
         else if ((symbol === Clutter.KEY_s || symbol === Clutter.KEY_S) &&
-                 Model.panelRowHasAction(row, 'send'))
+                 row.actions.some(action => action.id === 'send'))
             this._sendFile(row);
         else
             return Clutter.EVENT_PROPAGATE;
@@ -743,7 +747,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
         return Clutter.EVENT_STOP;
     }
 
-    _focusedRow(): Model.PanelRow | null {
+    _focusedRow(): Panel.PanelRow | null {
         let actor = global.stage.get_key_focus() as Delegated | null;
         while (actor) {
             if (actor._delegate?._row)
@@ -766,7 +770,9 @@ class TailGaugeIndicator extends PanelMenu.Button {
         this._stopPhrases();
         this._phraseTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, PHRASE_INTERVAL_MS, () => {
             this._phraseIndex += 1;
-            this._syncHeader(this._panel());
+            // The phrase is the binary's to pick, so the tick asks rather than
+            // rotating a list of its own.
+            this._pushUi();
             return GLib.SOURCE_CONTINUE;
         });
     }

@@ -88,7 +88,7 @@ jobs:
       - name: Check the generated ES module resolves
         run: |
           node --input-type=module -e '
-            const m = await import("./build/tailgauge@arzaroth.github.io/model.js");
+            const m = await import("./build/.ts/model/model.js");
             const missing = ["resolvePanel", "parseStatus", "panelRowAt", "panelNavIndexOf"]
               .filter(name => typeof m[name] !== "function");
             if (missing.length) {
@@ -121,7 +121,7 @@ jobs:
         run: |
           node -e '
             const fs = require("fs");
-            const esm = fs.readFileSync("build/tailgauge@arzaroth.github.io/model.js", "utf8");
+            const esm = fs.readFileSync("build/.ts/model/model.js", "utf8");
             const plain = fs.readFileSync("build/org.tailgauge.plasmoid/contents/code/model.js", "utf8");
             const names = src => [...src.matchAll(/^function\s+(\w+)/gm)].map(m => m[1]).sort();
             const a = names(esm), b = names(plain);
