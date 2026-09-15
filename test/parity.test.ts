@@ -23,11 +23,11 @@ const omarchySource = omarchy.map(read).join('\n');
 
 const frontends = [['plasma', plasmaSource], ['gnome', gnomeSource], ['omarchy', omarchySource]];
 
-// The frontends still resolving the panel for themselves. Omarchy has been
-// flipped onto `tailgauge panel --json`, so the rules about gathering a
-// snapshot and handing it to resolvePanel describe the two that have not been,
-// and will be empty by the end of the port.
-const resolving = [['plasma', plasmaSource], ['gnome', gnomeSource]];
+// The frontends still resolving the panel for themselves. Omarchy and GNOME
+// have been flipped onto `tailgauge panel --json`, so the rules about
+// gathering a snapshot and handing it to resolvePanel describe the one that
+// has not been, and will be empty by the end of the port.
+const resolving = [['plasma', plasmaSource]];
 
 // Rows GNOME shows that Plasma puts in the applet context menu instead. Both
 // are desktop conventions, not panel content, so they are allowed to differ.
@@ -101,23 +101,31 @@ test('every frontend still on the model reads the panel through resolvePanel', (
 
 // A flipped frontend draws what the binary sent and nothing it worked out
 // itself. The panel arrives; it is not derived.
+// A flipped frontend draws what the binary sent and nothing it worked out
+// itself. The panel arrives; it is not derived.
+const flipped = {
+    omarchy: ['omarchy/arzaroth.tailgauge/Panel.qml', 'omarchy/arzaroth.tailgauge/Service.qml'],
+    gnome: ['gnome/tailgauge@arzaroth.github.io/extension.ts',
+            'gnome/tailgauge@arzaroth.github.io/provider.ts'],
+};
+
 test('a flipped frontend has no model left to call', () => {
-    const service = read('omarchy/arzaroth.tailgauge/Service.qml');
-    for (const [what, source] of [['the panel', omarchySource], ['the service', service]]) {
-        assert.equal(/\bModel\./.test(source), false, `omarchy's ${what} still calls the model`);
-        assert.equal(/Model\.js/.test(source), false, `omarchy's ${what} still imports it`);
+    for (const [name, files] of Object.entries(flipped)) {
+        const source = files.map(read).join('\n');
+        // GNOME's `Model.` is its own panel.ts, aliased: the types the binary
+        // sends, which is a declaration rather than a second implementation.
+        assert.equal(/from '\.\/model\.js'|"Model\.js"/.test(source), false,
+            `${name} still imports shared/model.ts`);
+        assert.equal(/resolvePanel|parseStatus|parseAccounts|parseExitNodeList/.test(source), false,
+            `${name} still resolves or parses for itself`);
+        assert.match(source, /'tailgauge', 'panel', '--json'|"tailgauge", "panel", "--json"/,
+            `${name} does not ask the binary for its panel`);
     }
-    assert.match(service, /"tailgauge", "panel", "--json"/,
-        'omarchy does not ask the binary for its panel');
-    // Nothing is parsed on this side any more: the answer arrives resolved.
-    assert.equal(/parseStatus|parseAccounts|parseExitNodeList/.test(service), false,
-        'omarchy still parses a CLI');
 });
 
 test('every service hands resolvePanel the same snapshot shape', () => {
     const services = {
-        plasma: 'plasma/org.tailgauge.plasmoid/contents/ui/ProviderService.qml',
-        gnome: 'gnome/tailgauge@arzaroth.github.io/provider.ts'
+        plasma: 'plasma/org.tailgauge.plasmoid/contents/ui/ProviderService.qml'
     };
     // The object literal is flat, so its first closing brace ends the field
     // list whatever the file indents with.
@@ -280,8 +288,7 @@ test('every service still on the model hands resolvePanel every field it reads',
     assert.ok(declared.length > 20, 'PanelState was not found');
 
     for (const [name, file] of Object.entries({
-        plasma: 'plasma/org.tailgauge.plasmoid/contents/ui/ProviderService.qml',
-        gnome: 'gnome/tailgauge@arzaroth.github.io/provider.ts'
+        plasma: 'plasma/org.tailgauge.plasmoid/contents/ui/ProviderService.qml'
     })) {
         const src = read(file);
         const body = src.split('snapshot()')[1] ?? '';

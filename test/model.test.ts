@@ -6,7 +6,10 @@ import {root, testDir} from './paths.js';
 
 import type * as ModelTypes from '../shared/model.js';
 
-const built = path.join(root, 'build', 'tailgauge@arzaroth.github.io', 'model.js');
+// The compiled ES module, which no frontend ships any more: GNOME and Omarchy
+// read their panel from the binary, so this is built for the tests and for
+// Plasma until it is flipped too.
+const built = path.join(root, 'build', '.ts', 'model', 'model.js');
 
 if (!fs.existsSync(built))
     throw new Error('run scripts/build.sh before the tests: the ES module build is missing');

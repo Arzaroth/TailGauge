@@ -70,7 +70,6 @@ cp -r "$root/gnome/$EXTENSION_UUID" "$build/$EXTENSION_UUID"
 # The .ts sources are the input to the compiler, not part of the package.
 rm -f "$build/$EXTENSION_UUID"/*.ts
 cp "$build/.ts/gnome/gnome/$EXTENSION_UUID"/*.js "$build/$EXTENSION_UUID/"
-cp "$model_esm" "$build/$EXTENSION_UUID/model.js"
 
 # ---- Omarchy --------------------------------------------------------------
 # The shell's plugin registry refuses symlinks anywhere inside a plugin folder,
