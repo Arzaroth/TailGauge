@@ -57,8 +57,9 @@ const statusCases: Case[] = [
         TailscaleIPs: ['100.64.0.1', 'fd7a:115c:a1e0::1', '192.168.1.5'],
         Self: {HostName: 'box', DNSName: 'box.example.ts.net.'},
     })},
-    // Both halves of the sort, and a tie the two languages could break
-    // differently: localeCompare folds case, comparing bytes does not.
+    // Both halves of the sort, and the tie the two languages break
+    // differently: localeCompare folds case and puts lowercase first, while
+    // comparing bytes does neither.
     {what: 'machine names that differ only in case', input: JSON.stringify({
         BackendState: 'Running',
         Peer: {
@@ -67,6 +68,14 @@ const statusCases: Case[] = [
             c: {HostName: 'box-1', Online: true},
             d: {HostName: 'apple', Online: false},
             e: {HostName: 'Zebra', Online: true},
+        },
+    })},
+    {what: 'two machines whose names differ only in case', input: JSON.stringify({
+        BackendState: 'Running',
+        Peer: {
+            a: {HostName: 'Box', Online: true},
+            b: {HostName: 'box', Online: true},
+            c: {HostName: 'BOX', Online: true},
         },
     })},
     {what: 'a machine that calls itself localhost', input: JSON.stringify({
@@ -130,5 +139,123 @@ for (const {what, input} of statusCases) {
     test(`parseStatus agrees on ${what}`, () => {
         assert.deepEqual(rust('parse-status', input), JSON.parse(JSON.stringify(M.parseStatus(input))),
             'the Rust parser disagrees with shared/model.ts, which is still the specification');
+    });
+}
+
+const accountCases: Case[] = [
+    {what: 'the captured profile list', input: fixture('accounts.json')},
+    {what: 'nothing at all', input: ''},
+    {what: 'output that is not JSON', input: 'Error: not logged in'},
+    {what: 'an object where a list belongs', input: '{}'},
+    {what: 'an empty list', input: '[]'},
+    // The CLI has spelled these both ways across versions, and both are still
+    // out there on machines that have not updated.
+    {what: 'the capitalised spelling', input: JSON.stringify(
+        [{ID: '7', Name: 'Work', Tailnet: 'work.ts.net', LoginName: 'a@b', Selected: true}])},
+    {what: 'an account with nothing but an id', input: JSON.stringify([{id: '9', selected: true}])},
+    {what: 'no account selected', input: JSON.stringify([{id: '1', nickname: 'work'}])},
+];
+
+for (const {what, input} of accountCases) {
+    test(`parseAccounts agrees on ${what}`, () => {
+        assert.deepEqual(rust('parse-accounts', input), JSON.parse(JSON.stringify(M.parseAccounts(input))));
+    });
+}
+
+const table = (rows: string) =>
+    'IP             HOSTNAME                      COUNTRY        CITY           STATUS\n' + rows;
+
+const exitNodeCases: Case[] = [
+    {what: 'the captured table', input: fixture('exit-nodes.txt')},
+    {what: 'nothing at all', input: ''},
+    {what: 'a table with no header', input: 'some error\n'},
+    {what: 'a header and nothing under it', input: table('')},
+    {what: 'a city with a space in it', input: table(
+        '100.100.0.3    us-nyc-wg-201.mullvad.ts.net  USA            New York       -\n')},
+    {what: 'a row that is not a Mullvad server', input: table(
+        '100.100.0.4    router.example.ts.net         -              -              -\n')},
+    {what: 'two servers in one city', input: table(
+        '100.100.0.1    de-ber-wg-001.mullvad.ts.net  Germany        Berlin         -\n' +
+        '100.100.0.5    de-ber-wg-002.mullvad.ts.net  Germany        Berlin         selected\n')},
+    {what: 'a comment line and a blank one', input: table(
+        '\n# a note\n100.100.0.2    fr-par-wg-101.mullvad.ts.net  France         Paris          -\n')},
+    {what: 'a city the CLI calls Any', input: table(
+        '100.100.0.6    se-got-wg-001.mullvad.ts.net  Sweden         Any            -\n')},
+    {what: 'a row cut short', input: table('100.100.0.7\n')},
+    {what: 'CRLF line endings', input: table(
+        '100.100.0.1    de-ber-wg-001.mullvad.ts.net  Germany        Berlin         -\r\n').replace(/(?<!\r)\n/g, '\r\n')},
+];
+
+for (const {what, input} of exitNodeCases) {
+    test(`parseExitNodeList agrees on ${what}`, () => {
+        assert.deepEqual(rust('parse-exit-node-list', input),
+            JSON.parse(JSON.stringify(M.parseExitNodeList(input))));
+    });
+    test(`mullvadRegionOptions agrees on ${what}`, () => {
+        assert.deepEqual(rust('mullvad-region-options', input),
+            JSON.parse(JSON.stringify(M.mullvadRegionOptions(M.parseExitNodeList(input)))));
+    });
+}
+
+const netbirdStatusCases: Case[] = [
+    {what: 'the captured daemon', input: fixture('netbird-status.json')},
+    {what: 'an idle daemon', input: fixture('netbird-status-idle.json')},
+    {what: 'nothing at all', input: ''},
+    {what: 'output that is not JSON', input: 'netbird: command not found'},
+    {what: 'a list where an object belongs', input: '[]'},
+    {what: 'a session that expired', input: JSON.stringify({daemonStatus: 'SessionExpired'})},
+    {what: 'a login that failed', input: JSON.stringify({daemonStatus: 'LoginFailed'})},
+    {what: 'an address carrying its prefix length', input: JSON.stringify({
+        daemonStatus: 'Connected', netbirdIp: '100.92.0.3/16', fqdn: 'me.netbird.cloud.',
+    })},
+    {what: 'a latency in nanoseconds', input: JSON.stringify({
+        daemonStatus: 'Connected',
+        peers: {details: [
+            {fqdn: 'a.netbird.cloud', status: 'Connected', latency: 25500000},
+            {fqdn: 'b.netbird.cloud', status: 'Disconnected'},
+        ]},
+    })},
+    {what: 'a peer with no name at all', input: JSON.stringify({
+        daemonStatus: 'Connected',
+        peers: {details: [{netbirdIp: '100.92.0.9/16', status: 'Connected', publicKey: 'abc='}]},
+    })},
+    {what: 'a peer reporting its transfer and its endpoint', input: JSON.stringify({
+        daemonStatus: 'Connected',
+        peers: {details: [{
+            fqdn: 'box.netbird.cloud', status: 'Connected',
+            connectionType: 'P2P', relayAddress: 'rel.example:443',
+            iceCandidateEndpoint: {remote: '10.0.0.2:51820'},
+            transferReceived: 4096, transferSent: 2048,
+            lastWireguardHandshake: '0001-01-01T00:00:00Z',
+            networks: ['10.0.0.0/24'],
+        }]},
+    })},
+];
+
+for (const {what, input} of netbirdStatusCases) {
+    test(`parseNetbirdStatus agrees on ${what}`, () => {
+        assert.deepEqual(rust('parse-netbird-status', input),
+            JSON.parse(JSON.stringify(M.parseNetbirdStatus(input))));
+    });
+}
+
+const netbirdNetworkCases: Case[] = [
+    {what: 'the captured network list', input: fixture('netbird-networks.txt')},
+    {what: 'nothing at all', input: ''},
+    {what: 'a daemon with no networks', input: 'No networks available.'},
+    {what: 'an error rather than a list', input: 'Error: daemon not running\nsecond line'},
+    {what: 'a block with a dash for every absent field', input:
+        'Available Networks:\n\n- ID: office\n  Network: -\n  Domains: -\n  Status: Not selected\n'},
+    {what: 'a resolved-address line', input:
+        'Available Networks:\n- ID: lab\n  Domains: lab.example.com, other.example.com\n' +
+        '  [10.0.0.5]: resolved\n  Status: Selected\n'},
+    {what: 'a field the panel does not show', input:
+        'Available Networks:\n- ID: lab\n  Something Else: whatever\n  Status: Selected\n'},
+];
+
+for (const {what, input} of netbirdNetworkCases) {
+    test(`parseNetbirdNetworks agrees on ${what}`, () => {
+        assert.deepEqual(rust('parse-netbird-networks', input),
+            JSON.parse(JSON.stringify(M.parseNetbirdNetworks(input))));
     });
 }

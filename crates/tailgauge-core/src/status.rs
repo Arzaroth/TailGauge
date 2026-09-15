@@ -174,28 +174,17 @@ pub fn peer_from_status(
         } else {
             String::new()
         }),
-        latency_ms: Some(-1),
+        latency_ms: Some(-1.0),
         endpoint: Some(cur_addr),
         relay: Some(relay),
         rx_bytes: Some(peer::number(raw, "RxBytes").unwrap_or(0)),
         tx_bytes: Some(peer::number(raw, "TxBytes").unwrap_or(0)),
-        last_handshake: Some(non_zero_time(raw, "LastHandshake")),
-        last_seen: Some(non_zero_time(raw, "LastSeen")),
-        created: Some(non_zero_time(raw, "Created")),
+        last_handshake: Some(peer::non_zero_time(raw, "LastHandshake")),
+        last_seen: Some(peer::non_zero_time(raw, "LastSeen")),
+        created: Some(peer::non_zero_time(raw, "Created")),
         public_key: Some(peer::field(raw, "PublicKey")),
         routes: Some(peer::strings(raw, "PrimaryRoutes")),
         ..Peer::default()
-    }
-}
-
-/// Go's zero time is what tailscaled writes for "never", and printing it as a
-/// date would put 1 January year 1 on a machine that simply has not talked yet.
-fn non_zero_time(raw: &Value, key: &str) -> String {
-    let value = peer::field(raw, key);
-    if value.trim().is_empty() || value.trim_start().starts_with("0001-01-01") {
-        String::new()
-    } else {
-        value
     }
 }
 

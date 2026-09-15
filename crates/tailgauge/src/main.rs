@@ -166,6 +166,11 @@ enum Command {
 #[derive(clap::ValueEnum, Clone, Copy, Debug)]
 enum ModelOp {
     ParseStatus,
+    ParseAccounts,
+    ParseExitNodeList,
+    MullvadRegionOptions,
+    ParseNetbirdStatus,
+    ParseNetbirdNetworks,
 }
 
 #[derive(Subcommand)]
@@ -429,8 +434,18 @@ fn report_frontend_skew(binary: &str) {
 fn run_model_op(op: ModelOp) -> Result<()> {
     let mut raw = String::new();
     std::io::Read::read_to_string(&mut std::io::stdin(), &mut raw)?;
+    use tailgauge_core as core;
     let answer = match op {
-        ModelOp::ParseStatus => serde_json::to_string(&tailgauge_core::parse_status(&raw))?,
+        ModelOp::ParseStatus => serde_json::to_string(&core::parse_status(&raw))?,
+        ModelOp::ParseAccounts => serde_json::to_string(&core::parse_accounts(&raw))?,
+        ModelOp::ParseExitNodeList => serde_json::to_string(&core::parse_exit_node_list(&raw))?,
+        ModelOp::MullvadRegionOptions => serde_json::to_string(&core::mullvad_region_options(
+            &core::parse_exit_node_list(&raw),
+        ))?,
+        ModelOp::ParseNetbirdStatus => serde_json::to_string(&core::parse_netbird_status(&raw))?,
+        ModelOp::ParseNetbirdNetworks => {
+            serde_json::to_string(&core::parse_netbird_networks(&raw))?
+        }
     };
     println!("{answer}");
     Ok(())
