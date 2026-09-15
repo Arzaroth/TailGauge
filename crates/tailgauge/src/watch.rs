@@ -128,15 +128,18 @@ fn poll_fallback(timeout: Duration) -> Outcome {
 }
 
 fn fingerprint() -> Option<String> {
-    let status = tailscale::status()?;
-    Some(format!(
+    tailscale::status().as_ref().map(fingerprint_of)
+}
+
+fn fingerprint_of(status: &serde_json::Value) -> String {
+    format!(
         "{}|{}",
-        tailscale::backend_state(&status),
+        tailscale::backend_state(status),
         status
             .pointer("/ExitNodeStatus/ID")
             .and_then(serde_json::Value::as_str)
             .unwrap_or("")
-    ))
+    )
 }
 
 #[cfg(test)]

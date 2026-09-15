@@ -316,7 +316,6 @@ fn main() -> ExitCode {
             report(receive::run(&dir, once))
         }
 
-
         Command::Panel { ui, json: _ } => report(run_panel(&ui)),
 
         Command::Copy { text } => report(copy::run(text.as_deref().unwrap_or(""))),
@@ -557,7 +556,10 @@ fn report(result: anyhow::Result<()>) -> ExitCode {
 /// subcommand. Splicing it in rather than branching keeps one parser: the
 /// symlink and the subcommand cannot drift in what they accept.
 fn argv() -> Vec<OsString> {
-    let mut args: Vec<OsString> = std::env::args_os().collect();
+    splice_alias(std::env::args_os().collect())
+}
+
+fn splice_alias(mut args: Vec<OsString>) -> Vec<OsString> {
     let alias = args
         .first()
         .and_then(|a| Path::new(a).file_name())
