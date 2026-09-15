@@ -440,3 +440,54 @@ mod tests {
         assert!(tailscale.select_network("x", true).is_none());
     }
 }
+
+/// What turning a provider on means right now: a URL to open when the daemon
+/// is waiting for an authorization, and the command to run otherwise.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+pub struct LoginPlan {
+    #[serde(rename = "authUrl")]
+    pub auth_url: String,
+    pub command: Vec<String>,
+}
+
+pub fn login_plan(needs_login: bool, auth_url: &str, up_command: &[String]) -> LoginPlan {
+    let url = auth_url.trim();
+    if needs_login && (url.starts_with("https://") || url.starts_with("http://")) {
+        return LoginPlan {
+            auth_url: url.to_string(),
+            command: Vec::new(),
+        };
+    }
+    LoginPlan {
+        auth_url: String::new(),
+        command: up_command.to_vec(),
+    }
+}
+
+#[cfg(test)]
+mod login_tests {
+    use super::*;
+
+    #[test]
+    fn a_pending_authorization_is_a_url_to_open_whoever_the_provider_is() {
+        let up: Vec<String> = vec!["netbird".into(), "up".into()];
+        assert_eq!(
+            login_plan(false, "", &up),
+            LoginPlan {
+                auth_url: String::new(),
+                command: up.clone()
+            }
+        );
+        assert_eq!(
+            login_plan(true, "https://login.example/x", &up),
+            LoginPlan {
+                auth_url: "https://login.example/x".into(),
+                command: Vec::new()
+            }
+        );
+        // A daemon that wants a login but named no URL still has to be told to
+        // come up, or the button does nothing.
+        assert_eq!(login_plan(true, "", &up).command, up);
+        assert_eq!(login_plan(false, "", &[]), LoginPlan::default());
+    }
+}
