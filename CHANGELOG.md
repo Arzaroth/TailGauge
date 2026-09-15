@@ -15,9 +15,19 @@ All notable changes to this project are documented here.
 
 - **The release publishes a binary archive per architecture**, x86_64 and
   aarch64, carrying the binary and the three frontend payloads. `tailgauge
-  update` replaces the binary next to itself and reinstalls whichever frontends
-  are present from the same archive, so the binary and the QML it feeds cannot
-  end up a release apart.
+  --update` replaces the binary next to itself and reinstalls whichever
+  frontends are present from the same archive, so the binary and the QML it
+  feeds cannot end up a release apart.
+
+- **`tailgauge --install-frontend <plasma|gnome|omarchy|all>`** installs a
+  frontend that is not there yet, from the release the running binary belongs
+  to - the path for a machine that changed desktops. `--update` only refreshes
+  what is already present.
+
+- **Update reports frontend skew.** An installed frontend that disagrees with
+  the binary is the failure the frontend payloads exist to prevent, so
+  `--update` says so even when there was nothing to update, and names the
+  command that fixes it.
 
 ### Fixed
 
@@ -40,6 +50,15 @@ All notable changes to this project are documented here.
   a store-installed TailGauge is still the panel only. Upgrading from 0.4.0 or
   earlier means re-running the install script: the helpers tarball went with
   the helpers, so the old shell updater has no asset left to fetch.
+
+- **Updating is a flag, not a subcommand.** `tailgauge --check-update` prints
+  the update status as JSON and `tailgauge --update` installs it, replacing
+  `tailgauge-update --check --json` and `--apply`. The panel reads that status
+  directly, so the update object it sees is `{current, latest, available,
+  checked_ms, notified}`: the banner always offers to install, since no store
+  owns any part of TailGauge, and the footer reads the binary's version from
+  `current` rather than out of a targets array. There is no `tailgauge-update`
+  symlink, because there is no `update` subcommand for it to point at.
 
 ## [0.4.0]
 
