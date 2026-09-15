@@ -1673,6 +1673,18 @@ function updateSection(state: PanelState): PanelSection {
 // The local machine, rendered as a machine row: `tailscale status` already
 // describes it exactly the way it describes a peer, and copying your own
 // address is the one thing the header's name alone cannot do.
+function providerPayload(provider: ProviderDescriptor): Raw {
+  return {
+    id: provider.id,
+    label: provider.label,
+    cli: provider.cli,
+    supported: provider.supported,
+    icon: provider.icon,
+    glyph: provider.glyph,
+    capabilities: provider.capabilities
+  }
+}
+
 function providersSection(state: PanelState): PanelSection {
   var drivable = drivableProviders(state)
   var current = activeProvider(state)
@@ -1689,7 +1701,11 @@ function providersSection(state: PanelState): PanelSection {
       action: "switchProvider",
       current: selected,
       bold: selected,
-      payload: provider
+      // The descriptor without its commands. A frontend reads the id off this
+      // row and nothing else, and JSON.stringify was already dropping the
+      // function-valued ones - which made the shape an accident rather than a
+      // decision.
+      payload: providerPayload(provider)
     }))
   }
   return {

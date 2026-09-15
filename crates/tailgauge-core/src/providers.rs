@@ -4,9 +4,12 @@
 //! and the argv for each thing the panel asks of it. Nothing else in the crate
 //! names a provider, and no frontend does at all.
 
+use serde::Serialize;
+
 use crate::panel_state::PanelState;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Capabilities {
     pub exit_nodes: bool,
     pub mullvad: bool,
@@ -41,7 +44,10 @@ impl Capabilities {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Serialized as a row payload, so a frontend can read the id off the row it
+/// was handed. The commands are methods rather than data: an argv the panel
+/// never reads has no business crossing to it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct ProviderDescriptor {
     pub id: &'static str,
     pub label: &'static str,

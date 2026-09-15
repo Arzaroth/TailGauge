@@ -263,3 +263,192 @@ IP             HOSTNAME                      COUNTRY        CITY           STATU
         assert_eq!(mullvad_region_key(&Peer::default()), "");
     }
 }
+
+// ---------------------------------------------------------------------------
+// what a region row is found and remembered by
+// ---------------------------------------------------------------------------
+
+pub fn mullvad_region_title(node: &Peer) -> String {
+    let city = node.city.as_deref().unwrap_or("").trim();
+    let country = node.country.as_deref().unwrap_or("").trim();
+    if city.is_empty() || city == "Any" {
+        if country.is_empty() {
+            if node.display_name.is_empty() {
+                "Unknown".into()
+            } else {
+                node.display_name.clone()
+            }
+        } else {
+            country.to_string()
+        }
+    } else {
+        city.to_string()
+    }
+}
+
+pub fn mullvad_region_subtitle(node: &Peer) -> String {
+    node.country.as_deref().unwrap_or("").trim().to_string()
+}
+
+pub fn mullvad_region_search_key(node: &Peer) -> String {
+    format!(
+        "{} {}",
+        node.city.as_deref().unwrap_or(""),
+        node.country.as_deref().unwrap_or("")
+    )
+    .to_lowercase()
+}
+
+/// Everything a machine row shows is searchable, plus the OS, so "linux" or a
+/// half-remembered address finds a machine as readily as its name does.
+pub fn machine_search_key(node: &Peer) -> String {
+    [
+        node.display_name.clone(),
+        node.host_name.clone(),
+        node.dns_name.clone(),
+        node.os.clone(),
+        node.user_name.clone().unwrap_or_default(),
+        node.ipv4.join(" "),
+        node.ipv6.join(" "),
+    ]
+    .join(" ")
+    .to_lowercase()
+}
+
+fn mullvad_region_node<'a>(regions: &'a [Peer], region: &str) -> Option<&'a Peer> {
+    regions
+        .iter()
+        .find(|node| mullvad_region_key(node) == region)
+        .or_else(|| {
+            regions
+                .iter()
+                .find(|node| node.country.as_deref().unwrap_or("") == region)
+        })
+}
+
+/// The active region first, then the most recently used ones, capped so the
+/// exit-node list stays a shortlist rather than the whole Mullvad fleet.
+pub fn recent_mullvad_nodes(regions: &[Peer], recent: &[String], limit: usize) -> Vec<Peer> {
+    let mut nodes: Vec<Peer> = Vec::new();
+    let mut seen: Vec<String> = Vec::new();
+
+    for node in regions {
+        if nodes.len() >= limit {
+            break;
+        }
+        let key = mullvad_region_key(node);
+        if node.exit_node && !key.is_empty() && !seen.contains(&key) {
+            seen.push(key);
+            nodes.push(node.clone());
+        }
+    }
+    for region in recent {
+        if nodes.len() >= limit {
+            break;
+        }
+        if region.is_empty() || seen.contains(region) {
+            continue;
+        }
+        if let Some(node) = mullvad_region_node(regions, region) {
+            seen.push(region.clone());
+            nodes.push(node.clone());
+        }
+    }
+    nodes
+}
+
+/// The chosen region to the front, the rest in the order they were, capped.
+pub fn push_recent_mullvad(recent: &[String], region: &str, limit: usize) -> Vec<String> {
+    if region.is_empty() {
+        return recent.to_vec();
+    }
+    let mut next = vec![region.to_string()];
+    for existing in recent {
+        if next.len() >= limit {
+            break;
+        }
+        if !existing.is_empty() && existing != region && !next.contains(existing) {
+            next.push(existing.clone());
+        }
+    }
+    next
+}
+
+#[cfg(test)]
+mod recent_tests {
+    use super::*;
+
+    fn region(country: &str, city: &str, active: bool) -> Peer {
+        Peer {
+            id: format!("mullvad-region:{country}\n{city}"),
+            display_name: format!("{city}, {country}"),
+            country: Some(country.into()),
+            city: Some(city.into()),
+            exit_node: active,
+            mullvad: true,
+            ..Peer::default()
+        }
+    }
+
+    #[test]
+    fn the_region_in_use_leads_the_shortlist() {
+        let regions = vec![
+            region("France", "Paris", false),
+            region("Germany", "Berlin", true),
+            region("Sweden", "Gothenburg", false),
+        ];
+        let recent = vec!["France\nParis".to_string(), "Germany\nBerlin".to_string()];
+        let shortlist = recent_mullvad_nodes(&regions, &recent, 5);
+        assert_eq!(
+            shortlist
+                .iter()
+                .map(|n| n.display_name.as_str())
+                .collect::<Vec<_>>(),
+            ["Berlin, Germany", "Paris, France"],
+            "the active region first, and never twice"
+        );
+    }
+
+    #[test]
+    fn the_shortlist_stops_at_its_cap() {
+        let regions: Vec<Peer> = (0..10)
+            .map(|i| region("X", &format!("c{i}"), false))
+            .collect();
+        let recent: Vec<String> = (0..10).map(|i| format!("X\nc{i}")).collect();
+        assert_eq!(recent_mullvad_nodes(&regions, &recent, 5).len(), 5);
+    }
+
+    #[test]
+    fn a_remembered_region_that_is_gone_is_skipped() {
+        let regions = vec![region("France", "Paris", false)];
+        let recent = vec!["Nowhere\nGone".to_string(), "France\nParis".to_string()];
+        assert_eq!(recent_mullvad_nodes(&regions, &recent, 5).len(), 1);
+    }
+
+    #[test]
+    fn choosing_a_region_moves_it_to_the_front() {
+        let recent = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        assert_eq!(push_recent_mullvad(&recent, "b", 5), ["b", "a", "c"]);
+        assert_eq!(push_recent_mullvad(&recent, "d", 3), ["d", "a", "b"]);
+        assert_eq!(
+            push_recent_mullvad(&recent, "", 5),
+            recent,
+            "nothing chosen changes nothing"
+        );
+    }
+
+    #[test]
+    fn a_region_with_no_city_falls_back_to_its_country() {
+        let any = region("Sweden", "Any", false);
+        assert_eq!(mullvad_region_title(&any), "Sweden");
+        assert_eq!(
+            mullvad_region_title(&region("France", "Paris", false)),
+            "Paris"
+        );
+        assert_eq!(
+            mullvad_region_subtitle(&region("France", "Paris", false)),
+            "France"
+        );
+        assert_eq!(mullvad_region_title(&Peer::default()), "Unknown");
+    }
+}

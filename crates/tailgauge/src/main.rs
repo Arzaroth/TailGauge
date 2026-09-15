@@ -185,6 +185,8 @@ enum ModelOp {
     PeerRow,
     /// Take a PanelState and answer with the header, status and footer.
     PanelChrome,
+    /// The whole panel: a `[state, options]` pair per case.
+    Panel,
 }
 
 #[derive(Subcommand)]
@@ -513,6 +515,39 @@ fn run_model_op(op: ModelOp) -> Result<()> {
                 })
                 .collect();
             serde_json::to_string(&out)?
+        }
+        ModelOp::Panel => {
+            #[derive(serde::Deserialize, Default)]
+            #[serde(default)]
+            struct Options {
+                #[serde(rename = "phraseIndex")]
+                phrase_index: i64,
+                #[serde(rename = "recentRegions")]
+                recent_regions: Vec<String>,
+                #[serde(rename = "mullvadPickerOpen")]
+                mullvad_picker_open: bool,
+                #[serde(rename = "expandedPeerId")]
+                expanded_peer_id: String,
+                #[serde(rename = "nowMs")]
+                now_ms: i64,
+            }
+            let cases: Vec<(core::panel_state::PanelState, Options)> = serde_json::from_str(&raw)?;
+            let panels: Vec<_> = cases
+                .iter()
+                .map(|(state, o)| {
+                    core::panel::panel_spec(
+                        state,
+                        &core::panel::ResolveOptions {
+                            phrase_index: o.phrase_index,
+                            recent_regions: o.recent_regions.clone(),
+                            mullvad_picker_open: o.mullvad_picker_open,
+                            expanded_peer_id: o.expanded_peer_id.clone(),
+                            now_ms: o.now_ms,
+                        },
+                    )
+                })
+                .collect();
+            serde_json::to_string(&panels)?
         }
     };
     println!("{answer}");
