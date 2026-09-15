@@ -1,11 +1,12 @@
 //! `tailscale switch --list --json`, and the label a switcher row shows.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::peer::text;
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Account {
     pub id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -18,7 +19,8 @@ pub struct Account {
     pub selected: Option<bool>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AccountsResult {
     pub accounts: Vec<Account>,
     #[serde(rename = "selectedAccountId")]
