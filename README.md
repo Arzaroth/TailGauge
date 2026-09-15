@@ -134,41 +134,45 @@ The distribution tests in `crates/tailgauge/src/update.rs` fail the build if tho
 
 ## The parity rule
 
-The three frontends do not each decide what to draw. `shared/model.ts` resolves the whole panel and hands all of them the same answer:
+The three frontends do not each decide what to draw, and none of them reads a VPN CLI. One call to the binary probes for the daemons, polls every installed one at once, and returns the whole panel:
 
-```ts
-resolvePanel(state, {t, recentRegions, mullvadQuery, mullvadPickerOpen, machineQuery, phraseIndex})
-  -> {header, status, sections: [{id, title, visible, empty, rows}], navigation}
+```
+tailgauge panel --json --ui '{"activeProviderId":…,"mullvadPickerOpen":…,"phraseIndex":…}'
+  -> {bar, header, status, sections: [{id, title, visible, empty, rows}], footer, navigation}
 ```
 
 It owns **which sections exist, in what order, when each is visible, which rows it holds, every label and empty state, which rows are cursor stops, and in what order**. A row arrives fully formed - label, sublabel, icon, ornament state, busy state, tooltip, its actions and its copy options - and a frontend decides only which widget draws it. Keyboard traversal is an index into `panel.navigation`, so neither desktop carries a focus state machine the other could disagree with.
 
-Strings are chosen by the model and resolved by the caller: Plasma passes `i18n`, GNOME passes `gettext`, and Omarchy - whose shell has no translation layer - passes nothing and renders them as they come.
+Strings arrive finished. There is no translator: the panel is English, written once, and each desktop keeps only the words its own settings dialog needs.
 
-This is enforced, not remembered. `test/parity.test.ts` fails the build if a user-visible string is written in two frontends or written in the Omarchy one at all, if any of them re-derives section visibility or the exit-node and copy-option lists, or if the three services stop handing `resolvePanel()` the same snapshot shape.
+A frontend does three things the binary cannot. It draws. It filters the machine and region lists as you type, because a keystroke cannot wait on a process - which is why a row carries a pre-lowercased `searchKey` and the frontend does nothing but test the substring. And it holds the state only it knows, which it hands back on every call: which provider is being shown, what it is optimistically showing after a click, and what it has in flight.
+
+This is enforced, not remembered. The parity tests in `crates/tailgauge-core/tests/parity.rs` fail the build if a user-visible string is written in two frontends, if any of them re-derives section visibility or the exit-node and copy-option lists, if one builds its own search haystack, or if one names a provider's binary in an argv. They are the rules that outlived the shared model they were written to guard.
 
 ## Layout
 
 ```
-shared/model.ts          the only copy of the data model AND the panel layout
+crates/tailgauge-core/   the panel: the provider registry, the parsers, panel_spec
+crates/tailgauge/        the binary every frontend shells out to
 plasma/                  the Plasma 6 plasmoid (QML)
 gnome/                   the GNOME Shell extension (GJS, TypeScript)
 omarchy/                 the Omarchy 4 bar widget (Quickshell QML)
-crates/tailgauge/        the binary every frontend shells out to (Rust)
 systemd/                 the Taildrop receive user unit
-test/                    model and parity tests, and their own tsconfig
-tsconfig*.json           one checking project, three emitting ones (model, GNOME, tests)
-scripts/build.sh         compiles TypeScript, then assembles build/
+scripts/build.sh         compiles the extension, then assembles build/
 scripts/install.sh       builds, then installs the binary, unit and packages
 ```
 
+### The two crates
+
+`tailgauge-core` is the panel and nothing else: the table of providers TailGauge knows how to drive, the parsers for what their CLIs print, and `panel_spec`, which turns a gathered state into the sections every desktop draws. It shells out to nothing and has no opinion about how a row looks.
+
+`tailgauge` is the binary. It runs the CLIs, assembles the state, calls `panel_spec`, and answers every other thing a frontend asks for - the connection, the exit node, Taildrop, the clipboard, the update. A symlink per subcommand sits beside it under the name the old shell helper had.
+
 ### TypeScript
 
-Everything that is not QML or shell is TypeScript, checked under `strict`. Nothing is authored in JavaScript, and nothing under `build/` is edited by hand.
+The GNOME extension is TypeScript, checked under `strict`, and is the only thing here that needs a Node toolchain. It is typed against [`@girs/gnome-shell`](https://www.npmjs.com/package/@girs/gnome-shell), pinned to the newest shell the extension supports.
 
-`shared/model.ts` compiles once and ships twice. The GNOME extension imports the ES module as emitted; both QML engines load a copy with the trailing `export` statement removed, because a QML shared script cannot carry module syntax - a stray `export` there loads as a blank panel on Plasma. `scripts/build.sh` makes both copies and CI checks the shipped ones rather than the source. The model targets ES5 with the ES5 library so a newer built-in cannot be reached for by accident, since the QML engines are the oldest runtime it lands in.
-
-The GNOME sources are typed against [`@girs/gnome-shell`](https://www.npmjs.com/package/@girs/gnome-shell), pinned to the newest shell the extension supports. `tsconfig.gnome.json` uses `rootDirs` so `import * as Model from './model.js'` resolves to `shared/model.ts` when checking while the emitted specifier stays the flat one the packaged extension actually has. The tests live in their own project because Node's `global` and the shell's are different objects, and one set of ambient types cannot describe both.
+`gnome/tailgauge@arzaroth.github.io/panel.ts` declares the JSON the binary sends. The other side of that contract is a Rust struct, so there is nothing to generate it from and it is written out by hand - which makes it the one frontend where the panel's shape is checked rather than assumed.
 
 **Edit the `.ts` sources, never the copies under `build/`.**
 
@@ -189,25 +193,23 @@ Plasma stores these in the widget's own configuration, GNOME in `org.gnome.shell
 - **GNOME** uses native `PopupMenu` rows rather than a custom keyboard-driven panel, so arrows, Enter and type-ahead behave the way every other extension does. Machines and the Mullvad picker are submenus; the copy actions live inside a machine's submenu.
 - **Clipboard** goes through `St.Clipboard` on GNOME and a helper that picks `wl-copy` / `xclip` / `xsel` on Plasma, so the copy actions also work in an X11 session.
 - **No IPC on Plasma and GNOME**. `tailgauge-ctl toggle` stands in there, but it drives tailscaled rather than the panel: nothing talks to a running widget. The Omarchy widget has the shell's IPC and uses it.
-- **A machine's copy actions** are a popup menu on Plasma and a submenu on GNOME. Both list the same options in the same order, because the model resolves them once.
+- **A machine's copy actions** are a popup menu on Plasma and a submenu on GNOME. Both list the same options in the same order, because the binary resolves them once.
 
 ## Development
 
 ```bash
-pnpm install                        # once, for the TypeScript toolchain
-pnpm build                          # compile and assemble build/ without installing to the desktop
-pnpm typecheck                      # tsc over every project, emitting nothing
-pnpm test                           # build, then the model and parity tests
-cargo test                          # the binary, and the distribution contract
-pnpm coverage                       # the tests again, with a coverage report for the model
+cargo test                          # the panel, the parsers, the parity rules, distribution
+cargo build --release               # the binary
+pnpm build                          # compile the extension and assemble build/
+pnpm typecheck                      # tsc over the extension, emitting nothing
 scripts/install.sh                  # build and install for the running desktop
 ```
 
-The toolchain is managed with [pnpm](https://pnpm.io), pinned by the `packageManager` field and `pnpm-lock.yaml`. `scripts/build.sh` falls back to `npm install` when pnpm is absent, so installing from a clone needs nothing beyond Node. That fallback is best-effort: npm cannot read `pnpm-lock.yaml`, so it re-resolves the ranges in `package.json` and may compile with a different TypeScript patch than CI did.
+Almost everything is a cargo test. `crates/tailgauge-core/tests/specification.rs` says what the panel should do, against captures of what a real daemon said; `parity.rs` reads the three frontends' sources and fails the build when one of them starts deciding something the panel already decided.
 
-`pnpm coverage` reports on `shared/model.ts` alone - the test files are excluded, and the three frontends never execute under Node, so what the parity tests assert about them does not appear as a percentage.
+The Node toolchain exists to compile the GNOME extension and nothing else. It is managed with [pnpm](https://pnpm.io), pinned by the `packageManager` field and `pnpm-lock.yaml`; `scripts/build.sh` falls back to `npm install` when pnpm is absent, so installing from a clone needs nothing beyond Node. That fallback is best-effort: npm cannot read `pnpm-lock.yaml`, so it may compile with a different TypeScript patch than CI did.
 
-CI runs those on every pull request, along with `cargo fmt`, `clippy -D warnings` and `cargo test` on x86_64 and aarch64, `qmllint` for QML syntax on both QML frontends, `node --check` on the emitted extension, and a check that the three manifests and `Cargo.toml` declare the same version. Tagging `vX.Y.Z` builds and publishes the plasmoid package, the GNOME extension zip, the Omarchy plugin tarball and a binary archive per architecture.
+CI runs `cargo fmt`, `clippy -D warnings` and `cargo test` on x86_64 and aarch64, `qmllint` for QML syntax on both QML frontends, `tsc` and `node --check` on the extension, and a check that the three manifests and `Cargo.toml` declare the same version. Tagging `vX.Y.Z` builds and publishes the plasmoid package, the GNOME extension zip, the Omarchy plugin tarball and a binary archive per architecture.
 
 Plasma logs QML errors under the `plasmashell` identifier rather than a unit, because it usually runs as a transient `app-plasmashell@<hash>.service`:
 

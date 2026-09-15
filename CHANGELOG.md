@@ -40,6 +40,21 @@ All notable changes to this project are documented here.
 
 ### Changed
 
+- **The panel is resolved in the binary, and the three frontends draw what it
+  sends.** One call - `tailgauge panel --json` - probes for the VPN CLIs, polls
+  every installed one at once, and returns the bar, the header, every section
+  and the cursor's traversal order. `shared/model.ts` is gone with the 2,830
+  lines of service code that fed it: Plasma's went from 863 to 371, GNOME's
+  from 1,046 to 455, Omarchy's from 921 to 346.
+
+  Nothing changes on screen. What changes is that a panel is one process spawn
+  rather than four CLI calls parsed three different ways - and measured on a
+  live tailnet with 52 machines, it is faster than those calls alone were.
+
+  A frontend still filters its machine and region lists as you type, because a
+  keystroke cannot wait on a process, and still holds the state only it knows.
+  Everything else arrives decided.
+
 - **The panel's strings are English, written once in the model.** There were
   never any translations - no `.po` files have ever been in this repository -
   so `_()` on GNOME and `i18n()` on Plasma were resolving to their own
