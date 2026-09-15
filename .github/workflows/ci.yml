@@ -39,6 +39,9 @@ jobs:
       - name: Clippy
         run: cargo clippy --all-targets --locked -- -D warnings
 
+      # The e2e tests run the shipped binary against fake `tailscale` and
+      # `netbird` commands on an isolated PATH, so what they exercise is the
+      # gather - probe, poll, parse, resolve - and not just its pieces.
       - name: Test
         run: cargo test --locked
 
