@@ -135,15 +135,6 @@ enum Command {
         directory: Option<PathBuf>,
     },
 
-    /// Internal: feed a fixture to the Rust model and print what it made of
-    /// it, so `test/differential.test.ts` can hold the answer against the
-    /// TypeScript's. Reads the fixture on stdin.
-    #[command(hide = true)]
-    InternalModel {
-        #[arg(value_enum)]
-        op: ModelOp,
-    },
-
     /// Read the machine and print the panel every frontend draws.
     ///
     /// This is the call a panel makes on its own tick: one spawn, every
@@ -188,34 +179,6 @@ enum Command {
         #[arg(long)]
         multiple: bool,
     },
-}
-
-/// What the differential harness can ask the model for. One per ported
-/// function, added as each one lands.
-#[derive(clap::ValueEnum, Clone, Copy, Debug)]
-enum ModelOp {
-    ParseStatus,
-    ParseAccounts,
-    ParseExitNodeList,
-    MullvadRegionOptions,
-    ParseNetbirdStatus,
-    ParseNetbirdNetworks,
-    ParseProviderProbe,
-    /// Takes a PanelState rather than raw CLI output.
-    BarState,
-    /// Takes one value per line and prints one answer per line, so a whole
-    /// table of cases crosses in a single spawn.
-    FormatBytes,
-    FormatSince,
-    ElideStatus,
-    FirstUrl,
-    ShellCommand,
-    /// Take a Peer per case and answer with what its row shows.
-    PeerRow,
-    /// Take a PanelState and answer with the header, status and footer.
-    PanelChrome,
-    /// The whole panel: a `[state, options]` pair per case.
-    Panel,
 }
 
 #[derive(Subcommand)]
@@ -353,7 +316,6 @@ fn main() -> ExitCode {
             report(receive::run(&dir, once))
         }
 
-        Command::InternalModel { op } => report(run_model_op(op)),
 
         Command::Panel { ui, json: _ } => report(run_panel(&ui)),
 
@@ -520,125 +482,6 @@ fn report_frontend_skew(binary: &str) {
             );
         }
     }
-}
-
-/// The harness prints compact JSON on one line, because the test parses it
-/// rather than reads it.
-fn run_model_op(op: ModelOp) -> Result<()> {
-    let mut raw = String::new();
-    std::io::Read::read_to_string(&mut std::io::stdin(), &mut raw)?;
-    use tailgauge_core as core;
-    let answer = match op {
-        ModelOp::ParseStatus => serde_json::to_string(&core::parse_status(&raw))?,
-        ModelOp::ParseAccounts => serde_json::to_string(&core::parse_accounts(&raw))?,
-        ModelOp::ParseExitNodeList => serde_json::to_string(&core::parse_exit_node_list(&raw))?,
-        ModelOp::MullvadRegionOptions => serde_json::to_string(&core::mullvad_region_options(
-            &core::parse_exit_node_list(&raw),
-        ))?,
-        ModelOp::ParseNetbirdStatus => serde_json::to_string(&core::parse_netbird_status(&raw))?,
-        ModelOp::ParseNetbirdNetworks => {
-            serde_json::to_string(&core::parse_netbird_networks(&raw))?
-        }
-        ModelOp::ParseProviderProbe => {
-            serde_json::to_string(&core::providers::parse_provider_probe(&raw))?
-        }
-        ModelOp::BarState => {
-            serde_json::to_string(&core::bar::bar_state(&serde_json::from_str(&raw)?))?
-        }
-        // The table ops take a JSON array of cases and answer in order. JSON
-        // rather than a separator, because every separator worth choosing
-        // turns up inside a shell argument or a CLI's complaint sooner or
-        // later - which is exactly what the first attempt at this hit.
-        ModelOp::FormatBytes => table::<i64>(&raw, |v| core::fmt::format_bytes(*v))?,
-        ModelOp::FormatSince => {
-            table::<(String, i64)>(&raw, |(v, now)| core::fmt::format_since(v, *now))?
-        }
-        ModelOp::ElideStatus => table::<String>(&raw, |t| {
-            core::fmt::elide_status(t, core::fmt::STATUS_LIMIT)
-        })?,
-        ModelOp::FirstUrl => table::<(String, String)>(&raw, |(t, f)| core::fmt::first_url(t, f))?,
-        ModelOp::ShellCommand => table::<Vec<String>>(&raw, |a| core::fmt::shell_command(a))?,
-        ModelOp::PeerRow => {
-            let cases: Vec<(core::Peer, i64)> = serde_json::from_str(&raw)?;
-            let rows: Vec<_> = cases
-                .iter()
-                .map(|(peer, now)| {
-                    serde_json::json!({
-                        "address": core::panel::peer_address(peer),
-                        "exitNodeTarget": core::panel::exit_node_target(peer),
-                        "copyOptions": core::panel::peer_copy_options(peer),
-                        "subtitle": core::panel::peer_subtitle(peer),
-                        "rowSubtitle": core::panel::peer_row_subtitle(peer),
-                        "connection": core::panel::connection_summary(peer),
-                        "osIcon": core::panel::os_icon(&peer.os),
-                        "osIconName": core::panel::os_icon_name(&peer.os),
-                        "details": core::panel::peer_detail_rows(peer, *now),
-                    })
-                })
-                .collect();
-            serde_json::to_string(&rows)?
-        }
-        ModelOp::PanelChrome => {
-            let cases: Vec<(core::panel_state::PanelState, i64)> = serde_json::from_str(&raw)?;
-            let out: Vec<_> = cases
-                .iter()
-                .map(|(state, phrase)| {
-                    serde_json::json!({
-                        "header": core::panel::panel_header(state, *phrase),
-                        "status": core::panel::panel_status(state),
-                        "footer": core::panel::panel_footer(state),
-                        "toggleHint": core::panel::toggle_hint(state),
-                    })
-                })
-                .collect();
-            serde_json::to_string(&out)?
-        }
-        ModelOp::Panel => {
-            #[derive(serde::Deserialize, Default)]
-            #[serde(default)]
-            struct Options {
-                #[serde(rename = "phraseIndex")]
-                phrase_index: i64,
-                #[serde(rename = "recentRegions")]
-                recent_regions: Vec<String>,
-                #[serde(rename = "mullvadPickerOpen")]
-                mullvad_picker_open: bool,
-                #[serde(rename = "expandedPeerId")]
-                expanded_peer_id: String,
-                #[serde(rename = "nowMs")]
-                now_ms: i64,
-            }
-            let cases: Vec<(core::panel_state::PanelState, Options)> = serde_json::from_str(&raw)?;
-            let panels: Vec<_> = cases
-                .iter()
-                .map(|(state, o)| {
-                    core::panel::panel_spec(
-                        state,
-                        &core::panel::ResolveOptions {
-                            phrase_index: o.phrase_index,
-                            recent_regions: o.recent_regions.clone(),
-                            mullvad_picker_open: o.mullvad_picker_open,
-                            expanded_peer_id: o.expanded_peer_id.clone(),
-                            now_ms: o.now_ms,
-                        },
-                    )
-                })
-                .collect();
-            serde_json::to_string(&panels)?
-        }
-    };
-    println!("{answer}");
-    Ok(())
-}
-
-/// One answer per case, so a whole table crosses the process boundary in a
-/// single spawn.
-fn table<T: serde::de::DeserializeOwned>(
-    raw: &str,
-    answer: impl Fn(&T) -> String,
-) -> serde_json::Result<String> {
-    let cases: Vec<T> = serde_json::from_str(raw)?;
-    serde_json::to_string(&cases.iter().map(&answer).collect::<Vec<String>>())
 }
 
 /// The provider to act on: the one named, or the one the panel would be
