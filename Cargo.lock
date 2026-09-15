@@ -1793,6 +1793,15 @@ dependencies = [
  "self_update",
  "serde",
  "serde_json",
+ "tailgauge-core",
+]
+
+[[package]]
+name = "tailgauge-core"
+version = "0.4.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

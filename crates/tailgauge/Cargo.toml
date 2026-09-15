@@ -12,6 +12,7 @@ name = "tailgauge"
 path = "src/main.rs"
 
 [dependencies]
+tailgauge-core = { path = "../tailgauge-core" }
 anyhow = { workspace = true }
 clap = { workspace = true }
 serde = { workspace = true }
