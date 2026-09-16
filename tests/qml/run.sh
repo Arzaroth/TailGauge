@@ -41,6 +41,12 @@ for harness in "$here"/*.qml; do
   [[ $name == "Check" ]] && continue
   if ! timeout 60 "$qml" -I "$here/stubs" -I "$here" "$harness"; then
     echo "::error::the $name frontend failed its QML harness" >&2
+    # Qt reports a root component that will not build as "Component is not
+    # ready" and keeps the reason to itself, so ask again with the import
+    # resolver talking. Only on the way out, where the noise costs nothing.
+    echo "--- $qml ($("$qml" --version 2>&1)) could not load $harness:" >&2
+    QT_LOGGING_RULES='qt.qml.import*=true' timeout 60 "$qml" \
+      -I "$here/stubs" -I "$here" "$harness" 2>&1 | tail -40 >&2
     status=1
   fi
 done
