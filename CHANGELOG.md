@@ -4,6 +4,21 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.5.1]
+
+### Fixed
+
+- **Upgrading from 0.4.0 or earlier no longer breaks the panel.** That install
+  updates by running its own `tailgauge-update`, which downloads a `helpers`
+  archive and installs whatever `bin/` it carries. 0.5.0 stopped publishing
+  that asset, because the helpers had become the binary - so the script
+  upgraded the widgets, failed to find the helpers, and stopped, leaving a
+  panel that calls a binary nobody had installed. The asset is published again
+  and carries a bootstrap: run `tailgauge-update` once more and it fetches the
+  right architecture, installs the binary under every name the old scripts
+  answered to, and removes itself. Updating is `tailgauge --update` from then
+  on.
+
 ## [0.5.0]
 
 ### Added

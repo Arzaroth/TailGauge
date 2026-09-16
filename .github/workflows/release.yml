@@ -146,6 +146,16 @@ jobs:
             tar -czf "dist/tailgauge-$safe-linux-$arch.tar.gz" -C "$stage" .
           done
 
+          # The `helpers` asset an install from 0.4.0 or earlier still asks
+          # for. There are no helpers any more, so what it carries is the
+          # bootstrap that fetches the binary: without it that updater 404s,
+          # and it does so *after* upgrading the frontends, which leaves a
+          # panel calling a binary nobody installed.
+          rm -rf pack/helpers
+          mkdir -p pack/helpers/bin
+          install -m 755 scripts/compat/tailgauge-update pack/helpers/bin/tailgauge-update
+          tar -czf "dist/tailgauge-$safe-helpers.tar.gz" -C pack/helpers .
+
           ls -l dist
 
       - name: Extract release notes from CHANGELOG
