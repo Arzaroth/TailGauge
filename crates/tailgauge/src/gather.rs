@@ -12,8 +12,10 @@ use tailgauge_core as core;
 use tailgauge_core::panel_state::{PanelState, ProviderState, UpdateInfo};
 use tailgauge_core::providers::{self, Capability, ProviderDescriptor};
 
+use selvedge::state;
+
 use crate::launch;
-use crate::state;
+use crate::project::TAILGAUGE;
 
 /// What only the frontend knows: which provider the user is looking at, what
 /// it is optimistically showing, and what it has in flight. Handed over as one
@@ -159,7 +161,7 @@ fn extras(provider: &'static ProviderDescriptor) -> Extras {
 /// What the last update check found. Read from the cache only: a panel drawing
 /// itself must not wait on GitHub, and `--check-update` is what refreshes it.
 fn update_info() -> UpdateInfo {
-    state::read_update_status(&state::update_cache_file())
+    state::read_update_status(&state::update_cache_file(&TAILGAUGE))
         .map(|cached| UpdateInfo {
             current: cached.current,
             latest: cached.latest.unwrap_or_default(),
