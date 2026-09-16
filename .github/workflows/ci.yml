@@ -79,7 +79,7 @@ jobs:
       - name: Install the QML runtime and the modules the harness loads
         run: |
           sudo apt-get install -y \
-            qml-qt6 qml6-module-qtquick \
+            qml-qt6 qml6-module-qtquick qml6-module-qtquick-window \
             qml6-module-qtqml qml6-module-qtqml-models \
             qml6-module-qtqml-workerscript
 
