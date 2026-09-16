@@ -19,6 +19,24 @@ use selvedge::proc;
 /// `status` answers a script, so it reports the connection rather than a fault.
 pub const EXIT_DISCONNECTED: u8 = 3;
 
+/// Set by a caller that owns the screen, so nothing it runs writes on it.
+static HEADLESS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Say that stdout is not a place to print, whatever it looks like.
+///
+/// `is_terminal` answers "is a person watching this stream", and for a command
+/// line that is the same question as "may a child write here". For the TUI it
+/// is not: stdout is a terminal, and it is the one holding a drawn frame, so a
+/// daemon's chatter lands on top of the panel.
+pub fn take_over_terminal() {
+    HEADLESS.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Whether a child may write to stdout and be read by a person.
+fn attended() -> bool {
+    !HEADLESS.load(std::sync::atomic::Ordering::Relaxed) && std::io::stdout().is_terminal()
+}
+
 pub enum Outcome {
     Ok,
     Disconnected,
@@ -29,7 +47,7 @@ pub enum Outcome {
 /// Bound to a key there is no terminal at all, and a notification is the only
 /// way a failure reaches anyone.
 fn announce(urgency: &str, summary: &str, body: &str) {
-    if std::io::stdout().is_terminal() {
+    if attended() {
         return;
     }
     let _ = notify::run(&Notification {
@@ -98,7 +116,7 @@ fn connected_line(self_name: &str, self_ip: &str) -> String {
 
 pub fn up(provider: &ProviderDescriptor) -> Outcome {
     let argv = provider.up();
-    if std::io::stdout().is_terminal() {
+    if attended() {
         return match Command::new(&argv[0]).args(&argv[1..]).status() {
             Ok(s) if s.success() => Outcome::Ok,
             _ => Outcome::Failed(format!("{} failed", argv.join(" "))),
@@ -289,11 +307,17 @@ pub fn authorize(provider: &ProviderDescriptor) -> Outcome {
     if !provider.capabilities.has(Capability::Accounts) {
         return Outcome::Failed(format!("{} has no profiles to operate", provider.label));
     }
-    match Command::new("sh")
-        .arg("-c")
-        .arg(authorize_command(provider.cli))
-        .status()
-    {
+    let mut command = Command::new("sh");
+    command.arg("-c").arg(authorize_command(provider.cli));
+    if !attended() {
+        // pkexec would otherwise draw its own prompt over whatever is on
+        // screen, and there is no way to type into it from here.
+        command
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+    }
+    match command.status() {
         Ok(status) if status.success() => Outcome::Ok,
         _ => {
             announce(
