@@ -336,11 +336,19 @@ fn no_frontend_assembles_its_own_search_haystack() {
 
 #[test]
 fn no_frontend_gates_a_control_on_background_work() {
+    // One line at a time: `source` is every file of a frontend joined, so
+    // asking whether it contains both spellings anywhere passes whenever one
+    // of them is absent and fails on two unrelated lines.
     for (name, source) in frontends() {
-        assert!(
-            !source.contains("enabled: !") || !source.contains("busy"),
-            "{name} disables a control while busy; the panel decides that"
-        );
+        for (number, line) in source.lines().enumerate() {
+            let gated = line.contains("enabled:") || line.contains("enabled =");
+            assert!(
+                !(gated && line.contains("busy")),
+                "{name}:{} disables a control while busy; the panel decides that: {}",
+                number + 1,
+                line.trim()
+            );
+        }
     }
 }
 
@@ -387,4 +395,42 @@ fn every_frontend_draws_the_header_controls_it_is_handed() {
             "{name} never reads the header's actions"
         );
     }
+}
+
+/// The GNOME extension builds one menu slot per section id and silently drops
+/// a section it has no slot for. That is how provider switching and network
+/// selection went missing there while their actions sat in the dispatch, so
+/// the list it builds from is held against the sections the panel emits.
+#[test]
+fn the_gnome_extension_has_a_slot_for_every_section_the_panel_emits() {
+    let source = repo_file("gnome/tailgauge@arzaroth.github.io/panel.ts");
+    let declared = source
+        .split_once("export const SECTION_IDS = [")
+        .and_then(|(_, rest)| rest.split_once(']'))
+        .map(|(list, _)| {
+            list.split(',')
+                .map(|id| id.trim().trim_matches('\'').trim_matches('"').to_string())
+                .filter(|id| !id.is_empty())
+                .collect::<Vec<_>>()
+        })
+        .expect("panel.ts declares SECTION_IDS");
+
+    let state = tailgauge_core::panel_state::PanelState {
+        installed: true,
+        running: true,
+        helpers: true,
+        active: true,
+        active_provider_id: "tailscale".into(),
+        ..Default::default()
+    };
+    let emitted: Vec<String> = tailgauge_core::panel::panel_spec(&state, &Default::default())
+        .sections
+        .iter()
+        .map(|s| s.id.clone())
+        .collect();
+
+    assert_eq!(
+        declared, emitted,
+        "panel.ts must list every section the panel emits, in the order it emits them"
+    );
 }

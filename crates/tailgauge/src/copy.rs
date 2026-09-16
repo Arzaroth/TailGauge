@@ -17,7 +17,10 @@ pub fn run(text: &str) -> Result<()> {
         if !launch::has(program) {
             continue;
         }
-        if pipe_into(program, args, text)? {
+        // A tool that is installed can still fail: xclip on a session with no
+        // DISPLAY exits at once, and the write to it then fails with EPIPE.
+        // That is a reason to try the next one, not to give up.
+        if pipe_into(program, args, text).unwrap_or(false) {
             return Ok(());
         }
     }

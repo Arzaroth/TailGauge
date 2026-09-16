@@ -47,8 +47,12 @@ pub fn run(timeout: Duration) -> Outcome {
         return Outcome::Unusable;
     }
 
+    // One deadline for the whole call. The bus can hang up at any point inside
+    // its own wait, and starting the fallback on a fresh timeout would make a
+    // frontend that asked for 300 seconds wait nearly 600.
+    let deadline = Instant::now() + timeout;
     if supports_watch_ipn() {
-        match watch_ipn(timeout) {
+        match watch_ipn(remaining(deadline)) {
             // A bus that hangs up immediately is not a state change; fall back
             // rather than spinning on it.
             Outcome::Unusable => {}
@@ -56,7 +60,13 @@ pub fn run(timeout: Duration) -> Outcome {
         }
     }
 
-    poll_fallback(timeout)
+    poll_fallback(deadline)
+}
+
+/// What is left of the wait, never negative: `Instant - Instant` panics when
+/// the deadline has already passed.
+fn remaining(deadline: Instant) -> Duration {
+    deadline.saturating_duration_since(Instant::now())
 }
 
 fn supports_watch_ipn() -> bool {
@@ -115,16 +125,18 @@ fn reap(mut child: Child, outcome: Outcome) -> Outcome {
 /// Older daemons have no watch-ipn, and a broken bus should not turn the panel
 /// into a busy loop. Comparing only the fields the panel renders keeps this
 /// from firing on netmap churn.
-fn poll_fallback(timeout: Duration) -> Outcome {
+fn poll_fallback(deadline: Instant) -> Outcome {
     let before = fingerprint();
-    let deadline = Instant::now() + timeout;
-    while Instant::now() < deadline {
-        thread::sleep(Duration::from_secs(2).min(deadline - Instant::now()));
+    loop {
+        let left = remaining(deadline);
+        if left.is_zero() {
+            return Outcome::Expired;
+        }
+        thread::sleep(Duration::from_secs(2).min(left));
         if fingerprint() != before {
             return Outcome::Changed;
         }
     }
-    Outcome::Expired
 }
 
 fn fingerprint() -> Option<String> {
