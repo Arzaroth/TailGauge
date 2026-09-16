@@ -57,10 +57,9 @@ rm -f "$build/$EXTENSION_UUID"/*.ts
 cp "$build/.ts/gnome/gnome/$EXTENSION_UUID"/*.js "$build/$EXTENSION_UUID/"
 
 # ---- Omarchy --------------------------------------------------------------
-# The shell's plugin registry refuses symlinks anywhere inside a plugin folder,
-# so the model is copied in beside the QML rather than linked.
-# No model copy: the Omarchy widget asks the binary for its panel rather than
-# resolving one, so there is nothing here for it to import.
+# Copied rather than linked: the shell's plugin registry refuses symlinks
+# anywhere inside a plugin folder. There is nothing to copy in beside it any
+# more - the widget asks the binary for its panel rather than resolving one.
 cp -r "$root/omarchy/$PLUGIN_ID" "$build/$PLUGIN_ID"
 
 # GNOME reads the extension's own schema source the moment schemas/ exists, so
