@@ -1,43 +1,20 @@
-TailGauge is a port of the first-party Tailscale panel plugin that ships with
-Omarchy 4 (Quattro), from Hyprland/Quickshell to KDE Plasma 6 and GNOME Shell,
-plus a third-party Omarchy widget built back on the result.
+TailGauge began as a port of the first-party Tailscale panel plugin that ships
+with Omarchy 4 (Quattro), moved off Hyprland/Quickshell onto KDE Plasma 6 and
+GNOME Shell, with an Omarchy widget built back on the result.
 
 Upstream: https://github.com/basecamp/omarchy (MIT, Copyright (c) David
-Heinemeier Hansson), branch `quattro`:
+Heinemeier Hansson), branch `quattro`, `shell/plugins/panels/tailscale/` and
+the `omarchy-tailscale-*` helpers.
 
-  shell/plugins/panels/tailscale/{Model.js,Service.qml,Panel.qml,TailscaleIcon.qml}
-  bin/omarchy-tailscale-send
-  bin/omarchy-tailscale-receive
-  default/systemd/user/omarchy-tailscale-receive.service
+The codebase has since been rewritten in Rust, and none of the files that
+carried upstream's code survive it. What is owed is the lineage rather than a
+file: the behaviour this panel reproduces - how a status is read, how accounts
+and exit nodes are grouped, how Mullvad regions are folded together, when
+Taildrop is offered - was worked out there first, and the MIT notice in
+LICENSE-MIT travels with it.
 
-What was carried over and what was rewritten:
-
-  shared/model.ts
-      Derived from Model.js, near-verbatim. The status, account and exit-node
-      parsing, the Mullvad region grouping and the Taildrop capability checks
-      are upstream's. Added here: osIconName, the recent-region helpers that
-      Panel.qml kept inline, and the shell-quoting helpers Plasma needs.
-
-  bin/tailgauge-send, bin/tailgauge-receive
-      Derived from the omarchy-tailscale-* scripts. The Taildrop staging and
-      link(2) name-claiming logic is upstream's; the file chooser and the
-      notification helper are replaced with desktop-neutral equivalents.
-
-  plasma/, gnome/
-      Rewritten. Service.qml's state machine (optimistic toggle, poll
-      watchdog, startup ramp, login URL scraping) is reproduced against
-      Plasma5Support.DataSource and Gio.Subprocess respectively; Panel.qml's
-      layout and keyboard model are reproduced against Plasma Components and
-      St/PopupMenu. No Quickshell code is used.
-
-  omarchy/arzaroth.tailgauge/
-      Quickshell again, so it rides on the same shell APIs upstream's widget
-      does (qs.Ui, qs.Commons), and TailscaleIcon.qml is upstream's dot-grid
-      mark near-verbatim. Panel.qml and Service.qml are rewritten against
-      shared/model.ts: the panel is resolved by the model rather than assembled
-      in QML, and the cursor is one index into it rather than a per-section
-      focus state machine. It is a third-party plugin (arzaroth.tailgauge) and
-      does not replace or modify omarchy.tailscale.
+`omarchy/arzaroth.tailgauge` is a third-party plugin. It does not replace or
+modify `omarchy.tailscale`, and is not endorsed by the Omarchy project.
 
 Tailscale and Mullvad are trademarks of their respective owners. TailGauge is
 not affiliated with, endorsed by, or sponsored by Tailscale Inc., Mullvad, or

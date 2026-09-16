@@ -2,7 +2,7 @@
 
 Tailscale in your **KDE Plasma 6**, **GNOME Shell** and **Omarchy** panel: connection state, on/off, account switching, exit nodes including Mullvad regions, machine browsing with copy actions, and Taildrop file sending.
 
-It started as a port of the first-party `omarchy.tailscale` panel plugin that ships with [Omarchy 4 (Quattro)](https://github.com/basecamp/omarchy), moved off Hyprland/Quickshell onto the two big desktops. The Omarchy widget then came back: the same panel, rebuilt on this repository's shared model, for the shell it came from. See [NOTICE](NOTICE) for what was carried over and what was rewritten.
+It started as a port of the first-party `omarchy.tailscale` panel plugin that ships with [Omarchy 4 (Quattro)](https://github.com/basecamp/omarchy), moved off Hyprland/Quickshell onto the two big desktops. The Omarchy widget then came back: the same panel, rebuilt on this repository's shared model, for the shell it came from. The code has since been rewritten in Rust; [NOTICE](NOTICE) records the lineage.
 
 There is no daemon and no service to run. All three frontends drive the `tailscale` CLI directly and share one data model.
 
