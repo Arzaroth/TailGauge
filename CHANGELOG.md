@@ -4,6 +4,29 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.6.0]
+
+### Added
+
+- **`tailgauge tui` draws the panel in a terminal.** The same rows the desktop
+  widgets draw, with a keyboard instead of a pointer: a menu of sections down
+  the left with each one's value beside it, the selected one opening a pane to
+  its right. `j`/`k` and the arrows move, `l` opens, `h` backs out, enter acts,
+  `.` connects or disconnects without opening anything, `/` filters the machine
+  and region lists, `q` quits. It is laid out after
+  [tsui](https://github.com/neuralinkcorp/tsui), which is the thing it is meant
+  to replace.
+
+  It ships as a subcommand of the one binary rather than a second one, so it
+  reads the machine in-process rather than spawning anything, and
+  `tailgauge-tui` works too through the symlink the installer writes. This is
+  what the port to Rust was for: the panel is decided in one place, and a
+  terminal is now one more thing that draws it.
+
+  This device opens onto the name, the addresses and what the link is doing;
+  exit nodes open with `None`, so turning one off is a row rather than
+  something you have to know; machines are grouped under whoever owns them.
+
 ## [0.5.2]
 
 ### Fixed
