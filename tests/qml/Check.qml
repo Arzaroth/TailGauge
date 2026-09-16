@@ -20,6 +20,27 @@ Item {
 
     function ok(what, condition) { equal(what, !!condition, true) }
 
+    function fail(what) {
+        checks += 1
+        failures += 1
+        console.warn("FAIL " + what)
+    }
+
+    /// Load one frontend file, rather than importing the directory it sits in.
+    /// A directory import registers every file beside it, and those import the
+    /// desktop's own modules - which exist on a machine running that desktop
+    /// and on no CI runner, so the whole import fails and takes the harness
+    /// with it. This also turns "Component is not ready" into the actual error.
+    function load(path, parent) {
+        var component = Qt.createComponent(Qt.resolvedUrl(path))
+        if (component.status !== Component.Ready) {
+            fail("the frontend did not load: " + component.errorString())
+            done()
+            return null
+        }
+        return component.createObject(parent)
+    }
+
     /// Read a fixture and hand it over, then run `body` and leave whatever
     /// happens - an assertion that failed, or a throw that never reached one.
     function run(fixture, body) {
