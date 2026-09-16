@@ -65,14 +65,23 @@ jobs:
         with:
           node-version: '22'
 
-      # qt6-declarative-dev-tools carries qmllint but no QML runtime: the `qml`
-      # binary is its own package, and without it tests/qml/run.sh has nothing
-      # to load the harnesses with.
-      - name: Install the QML runtime, qmllint and glib tools
+      - name: Install qmllint and glib tools
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            qt6-declarative-dev-tools qml-qt6 qml6-module-qtquick libglib2.0-bin
+            qt6-declarative-dev-tools libglib2.0-bin
+
+      # qt6-declarative-dev-tools carries qmllint but nothing that can run a
+      # QML file: the `qml` binary is its own package. QtQuick then pulls its
+      # own imports at load time rather than declaring them, and Ubuntu splits
+      # each one into a package it only Recommends - so these install with
+      # recommends on, and the QtQml modules QtQuick loads are named outright.
+      - name: Install the QML runtime and the modules the harness loads
+        run: |
+          sudo apt-get install -y \
+            qml-qt6 qml6-module-qtquick \
+            qml6-module-qtqml qml6-module-qtqml-models \
+            qml6-module-qtqml-workerscript
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
