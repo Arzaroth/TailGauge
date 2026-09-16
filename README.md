@@ -261,4 +261,4 @@ the [WTFPL](LICENSE-WTFPL), whichever you prefer
 (`SPDX-License-Identifier: MIT OR WTFPL`).
 
 Portions derived from Omarchy stay under its MIT licence.
-[NOTICE](NOTICE) says which, file by file.
+[NOTICE](NOTICE) records that lineage and the attribution it carries.
