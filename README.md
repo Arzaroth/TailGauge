@@ -256,4 +256,9 @@ Linting QML needs `qmllint` from the Qt 6 declarative dev package (`qt6-qtdeclar
 
 ## License
 
-MIT. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+Dual-licensed: use it under **either** the [MIT License](LICENSE-MIT) **or**
+the [WTFPL](LICENSE-WTFPL), whichever you prefer
+(`SPDX-License-Identifier: MIT OR WTFPL`).
+
+Portions derived from Omarchy stay under its MIT licence.
+[NOTICE](NOTICE) says which, file by file.
