@@ -71,7 +71,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
 // ---------------------------------------------------------------------------
 
 fn header(frame: &mut Frame, area: Rect, app: &App) {
-    let mark = WORDMARK[0].chars().count() as u16 + 4;
+    let mark = cells(WORDMARK[0]) as u16 + 4;
     let versions = 24;
     // A narrow terminal drops the decoration before it drops the information:
     // the wordmark goes first, the versions second, and the status stays.
@@ -174,13 +174,20 @@ fn body(frame: &mut Frame, area: Rect, app: &App) {
     pane(frame, columns[2], app);
 }
 
+/// How wide a string is on a terminal, which is not how many `char`s it has:
+/// a CJK hostname is two cells per character and a combining mark is none, and
+/// counting characters puts the column somewhere else for both.
+fn cells(text: &str) -> usize {
+    Line::from(text).width()
+}
+
 /// `left` padded so `right` starts at `column`, with a single space between
 /// them when the label runs past it.
 fn split(left: &str, right: &str, column: usize) -> String {
     if right.is_empty() {
         return left.to_string();
     }
-    let gap = column.saturating_sub(left.chars().count()).max(1);
+    let gap = column.saturating_sub(cells(left)).max(1);
     format!("{left}{}{right}", " ".repeat(gap))
 }
 
@@ -210,7 +217,7 @@ fn menu(frame: &mut Frame, area: Rect, app: &App) {
 
             let label = format!(" {}", section.title);
             let value = app.section_value(section);
-            let gap = MENU_WIDTH.saturating_sub(label.chars().count() + value.chars().count());
+            let gap = MENU_WIDTH.saturating_sub(cells(&label) + cells(&value));
             ListItem::new(Line::from(vec![
                 Span::styled(label, style),
                 Span::styled(" ".repeat(gap), style),
@@ -318,7 +325,7 @@ fn status_bar(frame: &mut Frame, area: Rect, app: &App) {
     let quit = "press q to quit";
     let columns = Layout::horizontal([
         Constraint::Min(10),
-        Constraint::Length(quit.len() as u16 + 1),
+        Constraint::Length(cells(quit) as u16 + 1),
     ])
     .split(area);
 

@@ -41,9 +41,25 @@ const SETTLE: Duration = Duration::from_millis(600);
 pub fn run() -> Result<()> {
     // Everything this runs from here on has to keep its output to itself.
     crate::ctl::take_over_terminal();
+    selvedge::update::silence_progress();
+
+    // A panic unwinds past any cleanup written after the call, and what it
+    // would leave behind is a shell with no echo and someone else's screen.
+    // The hook puts the terminal back before the message is printed, or the
+    // message lands on the alternate screen and goes with it.
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|info| {
+        let _ = restore();
+        eprintln!("{info}");
+    }));
+
     let mut terminal = enter()?;
     let outcome = App::new().run(&mut terminal);
+    // Held to the end rather than dropped early: until the screen is back,
+    // the hook is the only thing that can put it back.
     leave(&mut terminal)?;
+    let _ = std::panic::take_hook();
+    std::panic::set_hook(previous);
     outcome
 }
 
@@ -59,9 +75,16 @@ fn enter() -> Result<Screen> {
 /// Always runs, including on the way out of an error: a process that dies in
 /// raw mode leaves the shell without an echo.
 fn leave(terminal: &mut Screen) -> Result<()> {
-    disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    restore()?;
     terminal.show_cursor()?;
+    Ok(())
+}
+
+/// Undo what `enter` did, without needing the terminal back. The panic hook
+/// has no access to it and still has to hand the screen over.
+fn restore() -> Result<()> {
+    disable_raw_mode()?;
+    execute!(io::stdout(), LeaveAlternateScreen)?;
     Ok(())
 }
 
@@ -294,6 +317,21 @@ impl App {
             self.ui.active = None;
         }
 
+        // The panel picks the first *supported* provider when nothing is
+        // chosen; the fallback in `perform` picks the first *installed* one.
+        // Those differ on a machine with both, so take the panel's answer
+        // rather than leaving this empty and letting them disagree.
+        if self.ui.active_provider_id.is_empty()
+            && let Some(current) = self
+                .panel
+                .sections
+                .iter()
+                .find(|s| s.id == "providers")
+                .and_then(|s| s.rows.iter().find(|r| r.current))
+        {
+            self.ui.active_provider_id = string_field(current, "id");
+        }
+
         self.section = section_id
             .and_then(|id| self.menu().iter().position(|s| s.id == id))
             .unwrap_or(0)
@@ -469,40 +507,54 @@ impl App {
     /// runs beside it. The owner and the OS are both on the peer the row
     /// carries, so this is a sort, a caption and a different second column.
     fn grouped_by_owner(rows: Vec<PanelRow>) -> Vec<PanelRow> {
-        fn peer_of(row: &PanelRow) -> Option<tailgauge_core::Peer> {
-            serde_json::from_value(row.payload.clone()).ok()
-        }
-        fn owner(row: &PanelRow) -> String {
-            peer_of(row).and_then(|p| p.user_name).unwrap_or_default()
-        }
-
-        let (mut peers, others): (Vec<PanelRow>, Vec<PanelRow>) =
+        let (peers, others): (Vec<PanelRow>, Vec<PanelRow>) =
             rows.into_iter().partition(|r| r.kind == "peer");
+
+        // Read the peer once per row. `sort_by_key` calls its key function
+        // more than once per element, and this runs on every draw: parsing a
+        // payload per comparison is a JSON parse per machine per frame.
+        let mut prepared: Vec<(String, PanelRow)> = peers
+            .into_iter()
+            .map(|mut row| {
+                let peer: Option<tailgauge_core::Peer> =
+                    serde_json::from_value(row.payload.clone()).ok();
+                let owner = peer
+                    .as_ref()
+                    .and_then(|p| p.user_name.clone())
+                    .unwrap_or_default();
+                // The owner is the caption now, so the column beside the name
+                // says what the machine runs instead of repeating it.
+                if let Some(peer) = &peer {
+                    row.sublabel = os_label(&peer.os);
+                }
+                (owner, row)
+            })
+            .collect();
+
         // The panel sorts by name, which is what a flat list wants. Grouped,
         // it has to be by owner first or a person appears twice.
-        peers.sort_by_key(|r| (owner(r).to_lowercase(), r.label.to_lowercase()));
+        prepared.sort_by(|(a_owner, a), (b_owner, b)| {
+            a_owner
+                .to_lowercase()
+                .cmp(&b_owner.to_lowercase())
+                .then_with(|| a.label.to_lowercase().cmp(&b.label.to_lowercase()))
+        });
 
         let mut out = others;
         let mut last = String::new();
         let mut started = false;
-        for mut row in peers {
-            let who = owner(&row);
-            if who != last || !started {
+        for (owner, row) in prepared {
+            if owner != last || !started {
                 if started {
                     out.push(Self::blank());
                 }
-                last = who.clone();
+                last = owner.clone();
                 started = true;
-                out.push(Self::caption(if who.is_empty() {
+                out.push(Self::caption(if owner.is_empty() {
                     "Other devices"
                 } else {
-                    who.as_str()
+                    owner.as_str()
                 }));
-            }
-            // The owner is the caption now, so the column beside the name says
-            // what the machine runs instead of repeating it.
-            if let Some(peer) = peer_of(&row) {
-                row.sublabel = os_label(&peer.os);
             }
             out.push(row);
         }
@@ -807,10 +859,12 @@ impl App {
             }),
             "authorize" => Some(Act::Authorize),
             "update" => Some(Act::Update),
+            // The option carries the value; `label` is what the row is drawn
+            // with, and for a peer with no name of its own that is "Unknown".
             "copy" => row
                 .copy_options
                 .first()
-                .map(|_| Act::Copy(row.label.clone())),
+                .map(|option| Act::Copy(option.label.clone())),
             "togglePicker" => {
                 self.options.mullvad_picker_open = !self.options.mullvad_picker_open;
                 self.ask(jobs);
@@ -1187,6 +1241,69 @@ mod tests {
         match rx.try_recv() {
             Ok(Job::Act(_, provider)) => assert_eq!(provider, "netbird"),
             _ => panic!("the toggle named no provider"),
+        }
+    }
+
+    /// The panel chooses the first *supported* provider when nothing is
+    /// chosen; the fallback in `perform` chooses the first *installed* one.
+    /// Leaving this empty lets them disagree on a machine with both.
+    #[test]
+    fn the_provider_a_command_names_comes_from_the_panel() {
+        let mut app = app_with(Vec::new());
+        let mut state = PanelState {
+            installed: true,
+            running: true,
+            active: true,
+            helpers: true,
+            ..Default::default()
+        };
+        state.providers = Some(vec![
+            tailgauge_core::panel_state::ProviderState {
+                id: "tailscale".into(),
+                installed: true,
+            },
+            tailgauge_core::panel_state::ProviderState {
+                id: "netbird".into(),
+                installed: true,
+            },
+        ]);
+        state.active_provider_id = "netbird".into();
+
+        assert!(app.ui.active_provider_id.is_empty());
+        app.landed(state, Options::default());
+        assert_eq!(
+            app.ui.active_provider_id, "netbird",
+            "a command would have gone to whichever CLI resolved first"
+        );
+    }
+
+    /// `label` is what the row is drawn with, and a peer with no name of its
+    /// own is drawn as "Unknown". The copy options carry the values.
+    #[test]
+    fn copying_a_row_copies_the_value_and_not_the_word_unknown() {
+        let (jobs, rx) = channel();
+        let mut row = peer_row("p", "Unknown", None, "linux", true);
+        row.action = "copy".into();
+        row.copy_options = vec![tailgauge_core::panel::CopyOption {
+            kind: "dns".into(),
+            label: "box.tail.ts.net".into(),
+        }];
+
+        let mut app = app_with(Vec::new());
+        app.panel.sections = vec![tailgauge_core::panel::PanelSection {
+            id: "connections".into(),
+            title: "Connections".into(),
+            visible: true,
+            empty: String::new(),
+            rows: vec![row],
+        }];
+        app.open = true;
+        app.row = 0;
+        app.act(&jobs);
+
+        match rx.try_recv() {
+            Ok(Job::Act(Act::Copy(text), _)) => assert_eq!(text, "box.tail.ts.net"),
+            _ => panic!("nothing was copied"),
         }
     }
 
