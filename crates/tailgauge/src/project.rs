@@ -33,6 +33,7 @@ pub const ALIASES: &[&str] = &[
     "tailgauge-receive",
     "tailgauge-file-select",
     "tailgauge-copy",
+    "tailgauge-tui",
 ];
 
 pub const FRONTENDS: &[Frontend] = &[
@@ -309,6 +310,7 @@ mod tests {
             "receive",
             "file-select",
             "copy",
+            "tui",
         ];
         for alias in TAILGAUGE.aliases {
             let sub = alias.strip_prefix("tailgauge-").unwrap();

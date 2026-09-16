@@ -14,6 +14,7 @@ mod project;
 mod receive;
 mod send;
 mod tailscale;
+mod tui;
 mod watch;
 
 use std::ffi::OsString;
@@ -136,6 +137,13 @@ enum Command {
         once: bool,
         directory: Option<PathBuf>,
     },
+
+    /// The panel, in a terminal.
+    ///
+    /// The same rows the desktop widgets draw, with a keyboard instead of a
+    /// pointer. Invocable as `tailgauge-tui` through the symlink beside the
+    /// binary.
+    Tui,
 
     /// Read the machine and print the panel every frontend draws.
     ///
@@ -317,6 +325,7 @@ fn main() -> ExitCode {
             report(receive::run(&dir, once))
         }
 
+        Command::Tui => report(tui::run()),
         Command::Panel { ui, json: _ } => report(run_panel(&ui)),
 
         Command::Copy { text } => report(copy::run(text.as_deref().unwrap_or(""))),

@@ -90,7 +90,7 @@ install -m 755 "$root/target/release/tailgauge" "$bindir/tailgauge"
 # `tailgauge-update` with a usage error, so the key binding that used to run it
 # breaks quietly. Take it with us.
 rm -f "$bindir/tailgauge-update"
-for alias in ctl watch notify send receive file-select copy; do
+for alias in ctl watch notify send receive file-select copy tui; do
   ln -sfn tailgauge "$bindir/tailgauge-$alias"
 done
 echo "Installed tailgauge into $bindir"
