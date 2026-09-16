@@ -786,4 +786,56 @@ mod distribution {
             "the tag check does not read the binary's own version"
         );
     }
+
+    /// An install from 0.4.0 or earlier updates by running its own
+    /// `tailgauge-update`, which downloads a `helpers` asset and installs
+    /// whatever `bin/` it carries. 0.5.0 stopped publishing that asset, so
+    /// every one of those installs upgraded its frontends, 404'd on the
+    /// helpers, and left a panel calling a binary nobody had installed.
+    #[test]
+    fn the_release_still_publishes_the_helpers_asset_older_installs_ask_for() {
+        assert!(
+            published_suffixes().iter().any(|s| s == "helpers.tar.gz"),
+            "the compatibility asset is gone; published: {:?}",
+            published_suffixes()
+        );
+
+        let release = repo_file(".github/workflows/release.yml");
+        assert!(
+            release.contains("scripts/compat/tailgauge-update pack/helpers/bin/tailgauge-update"),
+            "the helpers asset must carry the bootstrap under bin/, which is \
+             the only path the old updater installs from"
+        );
+    }
+
+    /// The bootstrap is the one thing that turns a 0.4.0 install into a
+    /// working one, and it names the archive itself.
+    #[test]
+    fn the_bootstrap_downloads_an_archive_the_release_publishes() {
+        let bootstrap = repo_file("scripts/compat/tailgauge-update");
+        for arch in ARCHES {
+            let wanted = format!("linux-{arch}.tar.gz");
+            assert!(
+                published_suffixes().iter().any(|s| s.ends_with(&wanted)),
+                "the release publishes no {wanted}"
+            );
+        }
+        assert!(
+            bootstrap.contains("tailgauge-$tag-linux-$arch.tar.gz"),
+            "the bootstrap does not name the archive the release publishes"
+        );
+        // It installs the binary under every name the old scripts answered to,
+        // or a key binding on tailgauge-ctl breaks on upgrade.
+        for alias in ALIASES {
+            let sub = alias.strip_prefix("tailgauge-").expect("prefixed");
+            assert!(
+                bootstrap.contains(sub),
+                "{alias} is not among the names the bootstrap links"
+            );
+        }
+        assert!(
+            bootstrap.contains("rm -f \"$bindir/tailgauge-update\""),
+            "the bootstrap must remove itself; nothing else will"
+        );
+    }
 }

@@ -194,7 +194,7 @@ jobs:
       - name: Syntax-check the shell scripts
         run: |
           shopt -s nullglob
-          files=(scripts/*.sh)
+          files=(scripts/*.sh scripts/compat/*)
           if [[ ${#files[@]} -eq 0 ]]; then
             echo "no shell sources found - the glob has gone stale" >&2
             exit 1
@@ -206,12 +206,12 @@ jobs:
       - name: ShellCheck
         run: |
           shopt -s nullglob
-          shellcheck --severity=warning scripts/*.sh
+          shellcheck --severity=warning scripts/*.sh scripts/compat/*
 
       - name: Check the scripts are executable
         run: |
           shopt -s nullglob
-          for file in scripts/*.sh; do
+          for file in scripts/*.sh scripts/compat/*; do
             if [[ ! -x $file ]]; then
               echo "::error::$file is not executable - the installer copies the mode bits"
               exit 1

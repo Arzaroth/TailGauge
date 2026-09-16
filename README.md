@@ -170,6 +170,13 @@ scripts/install.sh       builds, then installs the binary, unit and packages
 
 `tailgauge` is the binary. It runs the CLIs, assembles the state, calls `panel_spec`, and answers every other thing a frontend asks for - the connection, the exit node, Taildrop, the clipboard, the update. A symlink per subcommand sits beside it under the name the old shell helper had.
 
+### Upgrading from 0.4.0 or earlier
+
+Run `tailgauge-update` twice. The first run is the old shell script: it
+upgrades the widgets and replaces itself with a bootstrap. The second run is
+that bootstrap, which installs the binary and removes itself. After that,
+updating is `tailgauge --update`.
+
 ### TypeScript
 
 The GNOME extension is TypeScript, checked under `strict`, and is the only thing here that needs a Node toolchain. It is typed against [`@girs/gnome-shell`](https://www.npmjs.com/package/@girs/gnome-shell), pinned to the newest shell the extension supports.
