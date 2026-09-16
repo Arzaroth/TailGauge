@@ -25,7 +25,6 @@ Item {
             check.ok("it goes through a shell", line.indexOf("sh -c ") === 0)
             check.ok("the binary is named", line.indexOf("tailgauge") !== -1)
             check.ok("the JSON survived the quoting", line.indexOf("activeProviderId") !== -1)
-            check.ok("nothing unquoted broke out", line.indexOf("; rm ") === -1)
 
             asked.answer(panelJson, "", 0)
 
@@ -40,6 +39,34 @@ Item {
             service.down()
             check.equal("the click shows immediately", service.active, false)
             check.ok("and the command was run", Registry.find("ctl") !== null)
+
+            // The quoting, against a value that would end the command if it
+            // reached the shell unquoted. Nothing in the fixture can do that,
+            // so the value is put where the frontend serialises one.
+            // The click's own refresh is still outstanding, and the service
+            // will not ask twice at once, so let it finish first.
+            var settled = Registry.find("panel")
+            if (settled) settled.answer(panelJson, "", 0)
+            Registry.clear()
+            var hostile = "x'; rm -rf ~; echo 'pwned"
+            service.activeProviderId = hostile
+            service.refresh()
+            var quoted = Registry.find("panel")
+            check.ok("the hostile provider id was sent", quoted !== null)
+            if (quoted) {
+                // Undo the shell's own quoting, then read back what sh would
+                // have passed: the value has to arrive as one argument, intact.
+                var inner = check.unquote(quoted.commandLine.substring("sh -c ".length))
+                var ui = JSON.parse(check.unquote(inner.substring(inner.indexOf("{") - 1)))
+                // Surviving a shell round trip intact is the property: sh
+                // would hand the binary this value as one argument, so
+                // nothing in it was ever a command.
+                check.equal("it arrives as data, not as commands",
+                            ui.activeProviderId, hostile)
+                check.ok("the quote it tried to close with was escaped",
+                         inner.indexOf("'\\''") !== -1)
+            }
+            service.activeProviderId = ""
 
             // Output that is not a panel is reported, not drawn.
             Registry.clear()

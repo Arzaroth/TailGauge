@@ -41,6 +41,20 @@ Item {
         return component.createObject(parent)
     }
 
+    /// The inverse of a frontend's shell quoting: take one single-quoted
+    /// argument off the front of `text` and return what sh would pass on.
+    function unquote(text) {
+        if (text.charAt(0) !== "'") return text
+        var out = ""
+        for (var i = 1; i < text.length; i++) {
+            if (text.charAt(i) !== "'") { out += text.charAt(i); continue }
+            // `'\''` is how a quote is carried through: close, escape, reopen.
+            if (text.substr(i, 4) === "'\\''") { out += "'"; i += 3; continue }
+            break
+        }
+        return out
+    }
+
     /// Read a fixture and hand it over, then run `body` and leave whatever
     /// happens - an assertion that failed, or a throw that never reached one.
     function run(fixture, body) {

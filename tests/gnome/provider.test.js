@@ -197,6 +197,20 @@ test('a chosen region is remembered, capped and deduplicated', () => {
     svc.rememberMullvadRegion({id: 'peer:laptop'});
     assert.deepEqual(config.values['recent-mullvad-regions'],
         ['France\nParis', 'Germany\nBerlin']);
+
+    // Choosing one already in the list moves it to the front rather than
+    // adding it twice.
+    svc.rememberMullvadRegion({id: 'mullvad-region:Germany\nBerlin'});
+    assert.deepEqual(config.values['recent-mullvad-regions'],
+        ['Germany\nBerlin', 'France\nParis']);
+
+    // And the list stops at five, dropping the oldest.
+    for (const city of ['Oslo', 'Rome', 'Madrid', 'Lisbon'])
+        svc.rememberMullvadRegion({id: `mullvad-region:Country\n${city}`});
+    assert.deepEqual(config.values['recent-mullvad-regions'], [
+        'Country\nLisbon', 'Country\nMadrid', 'Country\nRome',
+        'Country\nOslo', 'Germany\nBerlin',
+    ]);
 });
 
 test('the update check is cached unless forced, and refreshes the panel', () => {
