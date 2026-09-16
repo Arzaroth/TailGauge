@@ -7,7 +7,7 @@ version = "0.6.0"
 edition = "2024"
 # selvedge locks with File::try_lock, stable from 1.89.
 rust-version = "1.89"
-license = "GPL-3.0-or-later"
+license = "MIT OR WTFPL"
 repository = "https://github.com/Arzaroth/TailGauge"
 
 [workspace.dependencies]

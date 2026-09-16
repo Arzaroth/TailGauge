@@ -143,6 +143,9 @@ jobs:
             cp -a "build/tailgauge@arzaroth.github.io" "$stage/frontends/gnome/"
             cp -a build/arzaroth.tailgauge "$stage/frontends/omarchy/"
             cp systemd/tailgauge-receive.service "$stage/systemd/"
+            # MIT asks that its notice travel with a copy, and an archive is a
+            # copy. NOTICE is what says which portions that covers.
+            cp LICENSE LICENSE-MIT LICENSE-WTFPL NOTICE "$stage/"
             tar -czf "dist/tailgauge-$safe-linux-$arch.tar.gz" -C "$stage" .
           done
 
