@@ -1,6 +1,6 @@
 //! `tailgauge file-select` - the desktop's own file chooser.
 
-use crate::launch;
+use selvedge::proc;
 
 pub enum Picked {
     Files(Vec<String>),
@@ -13,14 +13,14 @@ pub fn run(title: &str, multiple: bool) -> Picked {
     let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
 
     for chooser in order(&desktop) {
-        if !launch::has(chooser) {
+        if !proc::has(chooser) {
             continue;
         }
         let args = match chooser {
             "kdialog" => kdialog_args(title, multiple),
             _ => zenity_args(title, multiple),
         };
-        let Ok(out) = launch::run(chooser, &args) else {
+        let Ok(out) = proc::run(chooser, &args) else {
             continue;
         };
         return picked(out.status.success(), &out.stdout);

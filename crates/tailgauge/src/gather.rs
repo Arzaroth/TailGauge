@@ -14,8 +14,8 @@ use tailgauge_core::providers::{self, Capability, ProviderDescriptor};
 
 use selvedge::state;
 
-use crate::launch;
 use crate::project::TAILGAUGE;
+use selvedge::proc;
 
 /// What only the frontend knows: which provider the user is looking at, what
 /// it is optimistically showing, and what it has in flight. Handed over as one
@@ -59,7 +59,7 @@ fn probe() -> Vec<ProviderState> {
         .iter()
         .map(|p| ProviderState {
             id: p.id.into(),
-            installed: launch::has(p.cli),
+            installed: proc::has(p.cli),
         })
         .collect()
 }
@@ -74,7 +74,7 @@ fn statuses(installed: &[&'static ProviderDescriptor]) -> Vec<(&'static str, cor
             let id = provider.id;
             let argv = provider.status();
             thread::spawn(move || {
-                let raw = launch::output(&argv[0], &argv[1..]).unwrap_or_default();
+                let raw = proc::output(&argv[0], &argv[1..]).unwrap_or_default();
                 let parsed = if id == "netbird" {
                     core::parse_netbird_status(&raw)
                 } else {
@@ -117,13 +117,13 @@ fn extras(provider: &'static ProviderDescriptor) -> Extras {
 
     let mullvad = thread::spawn(move || {
         exit_nodes.map(|argv| {
-            let raw = launch::output(&argv[0], &argv[1..]).unwrap_or_default();
+            let raw = proc::output(&argv[0], &argv[1..]).unwrap_or_default();
             core::mullvad_region_options(&core::parse_exit_node_list(&raw))
         })
     });
     let accounts = thread::spawn(move || {
         accounts_argv.map(|argv| {
-            let out = launch::run(&argv[0], &argv[1..]).ok();
+            let out = proc::run(&argv[0], &argv[1..]).ok();
             let stdout = out
                 .as_ref()
                 .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
@@ -140,7 +140,7 @@ fn extras(provider: &'static ProviderDescriptor) -> Extras {
     });
     let networks = thread::spawn(move || {
         networks_argv.map(|argv| {
-            let raw = launch::output(&argv[0], &argv[1..]).unwrap_or_default();
+            let raw = proc::output(&argv[0], &argv[1..]).unwrap_or_default();
             core::parse_netbird_networks(&raw).networks
         })
     });

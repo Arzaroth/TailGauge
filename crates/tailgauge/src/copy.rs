@@ -4,7 +4,7 @@ use anyhow::{Result, bail};
 use std::io::Write;
 use std::process::{Command, Stdio};
 
-use crate::launch;
+use selvedge::proc;
 
 pub fn run(text: &str) -> Result<()> {
     if text.is_empty() {
@@ -14,7 +14,7 @@ pub fn run(text: &str) -> Result<()> {
     let on_wayland = std::env::var_os("WAYLAND_DISPLAY").is_some_and(|v| !v.is_empty());
 
     for (program, args) in candidates(on_wayland) {
-        if !launch::has(program) {
+        if !proc::has(program) {
             continue;
         }
         // A tool that is installed can still fail: xclip on a session with no

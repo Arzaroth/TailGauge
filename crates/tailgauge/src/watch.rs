@@ -10,8 +10,8 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::launch;
 use crate::tailscale;
+use selvedge::proc;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Outcome {
@@ -70,10 +70,10 @@ fn remaining(deadline: Instant) -> Duration {
 }
 
 fn supports_watch_ipn() -> bool {
-    if launch::run_quiet("tailscale", ["debug", "watch-ipn", "--help"]) {
+    if proc::run_quiet("tailscale", ["debug", "watch-ipn", "--help"]) {
         return true;
     }
-    launch::run("tailscale", ["debug", "--help"]).is_ok_and(|out| {
+    proc::run("tailscale", ["debug", "--help"]).is_ok_and(|out| {
         let text = String::from_utf8_lossy(&out.stdout) + String::from_utf8_lossy(&out.stderr);
         text.contains("watch-ipn")
     })

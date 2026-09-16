@@ -3,7 +3,7 @@
 use anyhow::Result;
 use std::process::{Command, Stdio};
 
-use crate::launch;
+use selvedge::proc;
 
 pub struct Notification<'a> {
     pub summary: &'a str,
@@ -71,7 +71,7 @@ impl Notification<'_> {
 /// Post the notification. A machine with no `notify-send` is not a failure:
 /// every caller is reporting something it has already done.
 pub fn run(n: &Notification<'_>) -> Result<()> {
-    if !launch::has("notify-send") {
+    if !proc::has("notify-send") {
         return Ok(());
     }
 
@@ -82,12 +82,12 @@ pub fn run(n: &Notification<'_>) -> Result<()> {
         return Ok(());
     }
 
-    let _ = launch::run_quiet("notify-send", n.post_args());
+    let _ = proc::run_quiet("notify-send", n.post_args());
     Ok(())
 }
 
 fn supports_actions() -> bool {
-    launch::run("notify-send", ["--help"]).is_ok_and(|out| {
+    proc::run("notify-send", ["--help"]).is_ok_and(|out| {
         let text = String::from_utf8_lossy(&out.stdout) + String::from_utf8_lossy(&out.stderr);
         text.contains("--action")
     })
@@ -105,7 +105,7 @@ fn spawn_actionable(n: &Notification<'_>, path: &str) -> std::io::Result<()> {
 
 /// The blocking half of [`spawn_actionable`], running in the detached copy.
 pub fn await_action(n: &Notification<'_>, path: &str) -> Result<()> {
-    let chosen = launch::output("notify-send", n.wait_args()).unwrap_or_default();
+    let chosen = proc::output("notify-send", n.wait_args()).unwrap_or_default();
     if chosen.trim() == "default" {
         let _ = detached(Command::new("xdg-open").arg(path)).spawn();
     }

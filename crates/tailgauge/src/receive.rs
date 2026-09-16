@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
 
-use crate::launch;
 use crate::notify::{self, Notification};
+use selvedge::proc;
 
 /// Taildrop lands in a staging directory next door rather than straight in the
 /// downloads directory: waiting for a delivery can take hours, and everything
@@ -25,7 +25,7 @@ pub fn run(dir: &Path, once: bool) -> anyhow::Result<()> {
     deliver(dir, &staging);
 
     loop {
-        let got = launch::run_quiet(
+        let got = proc::run_quiet(
             "tailscale",
             [
                 "file".as_ref(),

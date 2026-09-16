@@ -3,8 +3,8 @@
 use std::path::Path;
 
 use crate::file_select::{self, Picked};
-use crate::launch;
 use crate::notify::{self, Notification};
+use selvedge::proc;
 
 pub enum Outcome {
     Sent,
@@ -40,7 +40,7 @@ pub fn run(machine: &str, files: &[String]) -> Outcome {
     }
 
     let what = describe(&files);
-    match launch::run("tailscale", taildrop_args(machine, &files)) {
+    match proc::run("tailscale", taildrop_args(machine, &files)) {
         Ok(out) if out.status.success() => {
             announce("normal", &format!("Sent to {name}"), &what);
             Outcome::Sent
