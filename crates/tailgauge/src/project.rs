@@ -13,7 +13,9 @@ pub const TAILGAUGE: Project = Project {
     version: env!("CARGO_PKG_VERSION"),
     frontends: FRONTENDS,
     aliases: ALIASES,
-    legacy: &[],
+    // A shell script whose replacement is a flag: the binary answers this
+    // name with a usage error, so a key binding on it has to stop finding it.
+    legacy: &["tailgauge-update"],
 };
 
 /// One symlink per subcommand, under the name the shell helper had. A key
@@ -179,7 +181,11 @@ mod tests {
         assert!(release.contains(&format!("\"$stage/{}\"", TAILGAUGE.binary)));
         for f in TAILGAUGE.frontends {
             assert!(
-                release.contains(&format!("$stage/{}/{}", selvedge::frontend::ARCHIVE_ROOT, f.id)),
+                release.contains(&format!(
+                    "$stage/{}/{}",
+                    selvedge::frontend::ARCHIVE_ROOT,
+                    f.id
+                )),
                 "the archive has nowhere to put the {} payload",
                 f.id
             );
@@ -314,6 +320,34 @@ mod tests {
             !TAILGAUGE.aliases.contains(&"tailgauge-update"),
             "updating is --update, so this alias would resolve to nothing"
         );
+    }
+
+    /// The two lists are opposites, and a name in both would be written and
+    /// removed by the same update.
+    #[test]
+    fn a_legacy_name_is_not_also_an_alias() {
+        for stale in TAILGAUGE.legacy {
+            assert!(
+                !TAILGAUGE.aliases.contains(stale),
+                "{stale} is listed as both a name to keep and a name to take away"
+            );
+            let sub = stale
+                .strip_prefix("tailgauge-")
+                .expect("a legacy name is one of ours");
+            assert!(
+                ![
+                    "ctl",
+                    "watch",
+                    "notify",
+                    "send",
+                    "receive",
+                    "file-select",
+                    "copy"
+                ]
+                .contains(&sub),
+                "{stale} names a subcommand the binary has; removing it breaks that name"
+            );
+        }
     }
 
     /// An install from 0.4.0 or earlier updates by running its own
