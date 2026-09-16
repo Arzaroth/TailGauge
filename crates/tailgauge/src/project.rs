@@ -4,7 +4,7 @@
 use selvedge::{Frontend, Project, Restart, VersionSource};
 
 pub const TAILGAUGE: Project = Project {
-    binary: "tailgauge",
+    binaries: &["tailgauge"],
     repo: "Arzaroth/TailGauge",
     // So a fork can self-update from its own releases.
     repo_env: "TAILGAUGE_REPO",
@@ -16,6 +16,9 @@ pub const TAILGAUGE: Project = Project {
     // A shell script whose replacement is a flag: the binary answers this
     // name with a usage error, so a key binding on it has to stop finding it.
     legacy: &["tailgauge-update"],
+    // No MSI: there is no Windows build, and an update always replaces in
+    // place.
+    msi_marker_key: None,
 };
 
 /// One symlink per subcommand, under the name the shell helper had. A key
@@ -178,7 +181,7 @@ mod tests {
         // Package step that stopped writing one of them would download fine
         // and then refuse the update.
         let release = repo_file(".github/workflows/release.yml");
-        assert!(release.contains(&format!("\"$stage/{}\"", TAILGAUGE.binary)));
+        assert!(release.contains(&format!("\"$stage/{}\"", TAILGAUGE.primary())));
         for f in TAILGAUGE.frontends {
             assert!(
                 release.contains(&format!(
