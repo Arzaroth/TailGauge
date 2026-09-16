@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.5.0]
+
 ### Added
 
 - **One binary, `tailgauge`, replaces the eight shell helpers.** A subcommand
@@ -29,6 +31,16 @@ All notable changes to this project are documented here.
   the binary is the failure the frontend payloads exist to prevent, so
   `--update` says so even when there was nothing to update, and names the
   command that fixes it.
+
+- **The panel is tested at four levels, and the TypeScript suite is gone with
+  the model it measured.** `tests/specification.rs` holds the 113 cases that
+  were `model.test.ts` against the same recorded daemon output.
+  `crates/tailgauge/tests/e2e.rs` runs the real binary against fake `tailscale`
+  and `netbird` scripts on a PATH with nothing else on it. `tests/qml/` loads
+  the Plasma and Omarchy services in a QML runtime with the desktop imports
+  stubbed, and `tests/gnome/` runs the extension under Node with GJS mocked.
+  The QML one found a click that did not move the switch for a round trip, on
+  all three desktops.
 
 ### Fixed
 
