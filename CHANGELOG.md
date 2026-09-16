@@ -4,6 +4,37 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.5.2]
+
+### Fixed
+
+- **An interrupted update no longer blocks every later one.** The lock was a
+  file that existed: kill an update mid-download and the file stayed, so every
+  update after it was refused until somebody deleted it by hand - which the
+  error message asked them to do. It is a lock the kernel holds on an open
+  descriptor now, and a process that dies closes its descriptors.
+
+- **`tailgauge --update` takes the old shell updater away.** Nothing writes
+  `tailgauge-update` any more and the binary answers that name with a usage
+  error, so an install that kept it kept a script that ran instead of the thing
+  that replaced it. The installer already removed it; the path everybody
+  already on the binary takes did not.
+
+- **A check that finishes after an update no longer undoes it.** Asking GitHub
+  takes seconds, and an update landing inside them was overwritten on paper: the
+  cached status went back to the version that had just been replaced, so the
+  panel went on offering an update to the version it was already running.
+
+### Changed
+
+- **The updater is a separate crate**,
+  [selvedge](https://github.com/Arzaroth/selvedge), shared with TokenGauge.
+  Fetching a release, replacing the binary, reinstalling the desktop payloads
+  and finding the programs TailGauge does not ship were 1,656 lines here and
+  much the same lines there. Nothing about the panel changes; the three fixes
+  above are all from that move, because two projects reading the same code found
+  what one had been living with.
+
 ## [0.5.1]
 
 ### Fixed

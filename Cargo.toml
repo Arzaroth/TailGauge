@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/tailgauge-core", "crates/tailgauge"]
 
 [workspace.package]
-version = "0.5.1"
+version = "0.5.2"
 edition = "2024"
 # selvedge locks with File::try_lock, stable from 1.89.
 rust-version = "1.89"
