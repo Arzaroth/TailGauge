@@ -144,9 +144,11 @@ Item {
     return true
   }
 
+  // Not one shared Process: assigning `command` to a Process that is already
+  // running and setting `running` again starts nothing, so a copy that lands
+  // while a send is in flight is dropped without a word.
   function _detach(argv) {
-    detachProc.command = argv
-    detachProc.running = true
+    Quickshell.execDetached(argv)
   }
 
   // The click shows on the frame it was clicked rather than a round trip
@@ -295,7 +297,6 @@ Item {
   Action { id: selectNetworkProc; clears: "network" }
   Action { id: operatorProc }
 
-  Process { id: detachProc }
 
   FileView {
     path: Qt.resolvedUrl("manifest.json").toString().replace(/^file:\/\//, "")

@@ -55,6 +55,19 @@ Item {
             reconcile.answer(JSON.stringify(off), "", 0)
             check.equal("the override is cleared once agreed", service._desired, -1)
 
+            // Every detached command goes out. They used to share one Process,
+            // so a copy started while a send was in flight was dropped.
+            Registry.clear()
+            service.copyToClipboard("first")
+            service.sendFile({id: "n1", HostName: "box"})
+            service.openUrl("https://example.invalid")
+            check.equal("each detached command went out",
+                        Registry.detachedCommands.length, 3)
+            check.ok("the clipboard one carries its text",
+                     Registry.detachedCommands[0].indexOf("copy first") !== -1)
+            check.ok("the send one carries its peer",
+                     Registry.detachedCommands[1].indexOf("send --peer") !== -1)
+
             // Output that is not a panel is reported, not drawn.
             Registry.clear()
             service.refresh()

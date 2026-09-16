@@ -18,5 +18,9 @@ QtObject {
         return null
     }
 
-    function clear() { running = [] }
+    property var detachedCommands: []
+
+    function detached(argv) { detachedCommands.push(argv.join(" ")) }
+
+    function clear() { running = []; detachedCommands = [] }
 }
