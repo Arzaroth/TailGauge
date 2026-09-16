@@ -9,7 +9,6 @@ mod copy;
 mod ctl;
 mod file_select;
 mod gather;
-mod launch;
 mod notify;
 mod project;
 mod receive;
@@ -23,7 +22,7 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use selvedge::{frontend, state, update};
+use selvedge::{frontend, proc, state, update};
 
 use crate::project::TAILGAUGE;
 use clap::{Parser, Subcommand};
@@ -501,7 +500,7 @@ fn resolve_provider(
             );
             return None;
         };
-        if !launch::has(provider.cli) {
+        if !proc::has(provider.cli) {
             eprintln!("tailgauge: {} is not on PATH", provider.cli);
             return None;
         }
@@ -510,7 +509,7 @@ fn resolve_provider(
 
     let installed: Vec<_> = providers::PROVIDERS
         .iter()
-        .filter(|p| launch::has(p.cli))
+        .filter(|p| proc::has(p.cli))
         .collect();
     match installed.iter().find(|p| p.supported).or(installed.first()) {
         Some(provider) => Some(provider),

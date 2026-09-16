@@ -12,9 +12,9 @@ use std::thread;
 use tailgauge_core as core;
 use tailgauge_core::providers::{Capability, ProviderDescriptor};
 
-use crate::launch;
 use crate::notify::{self, Notification};
 use crate::tailscale;
+use selvedge::proc;
 
 /// `status` answers a script, so it reports the connection rather than a fault.
 pub const EXIT_DISCONNECTED: u8 = 3;
@@ -44,7 +44,7 @@ fn announce(urgency: &str, summary: &str, body: &str) {
 /// The provider's own status, through whichever parser it needs.
 fn read(provider: &ProviderDescriptor) -> core::StatusResult {
     let argv = provider.status();
-    let raw = launch::output(&argv[0], &argv[1..]).unwrap_or_default();
+    let raw = proc::output(&argv[0], &argv[1..]).unwrap_or_default();
     if provider.id == "netbird" {
         core::parse_netbird_status(&raw)
     } else {
@@ -180,7 +180,7 @@ fn login_url(line: &str) -> Option<String> {
 
 pub fn down(provider: &ProviderDescriptor) -> Outcome {
     let argv = provider.down();
-    if launch::run_quiet(&argv[0], &argv[1..]) {
+    if proc::run_quiet(&argv[0], &argv[1..]) {
         return Outcome::Ok;
     }
     announce(
@@ -241,7 +241,7 @@ pub fn exit_node(provider: &ProviderDescriptor, target: Option<&str>) -> Outcome
     let Some(argv) = provider.set_exit_node(requested_node(target)) else {
         return Outcome::Failed(format!("{} cannot set an exit node", provider.label));
     };
-    if launch::run_quiet(&argv[0], &argv[1..]) {
+    if proc::run_quiet(&argv[0], &argv[1..]) {
         return Outcome::Ok;
     }
     announce("critical", "Could not set the exit node", target);
@@ -261,7 +261,7 @@ pub fn switch_account(provider: &ProviderDescriptor, account_id: &str) -> Outcom
     let Some(argv) = provider.switch_account(account_id) else {
         return Outcome::Failed(format!("{} has no profiles to switch", provider.label));
     };
-    if launch::run_quiet(&argv[0], &argv[1..]) {
+    if proc::run_quiet(&argv[0], &argv[1..]) {
         return Outcome::Ok;
     }
     announce("critical", "Could not switch profile", account_id);
@@ -272,7 +272,7 @@ pub fn select_network(provider: &ProviderDescriptor, network_id: &str, join: boo
     let Some(argv) = provider.select_network(network_id, join) else {
         return Outcome::Failed(format!("{} has no networks", provider.label));
     };
-    if launch::run_quiet(&argv[0], &argv[1..]) {
+    if proc::run_quiet(&argv[0], &argv[1..]) {
         return Outcome::Ok;
     }
     let what = if join { "join" } else { "leave" };
@@ -314,7 +314,7 @@ pub fn exit_nodes(provider: &ProviderDescriptor) -> Outcome {
     let Some(argv) = provider.exit_node_list() else {
         return Outcome::Failed(format!("{} has no exit nodes", provider.label));
     };
-    match launch::run(&argv[0], &argv[1..]) {
+    match proc::run(&argv[0], &argv[1..]) {
         Ok(out) => {
             print!("{}", String::from_utf8_lossy(&out.stdout));
             if out.status.success() {

@@ -2,14 +2,14 @@
 
 use serde_json::Value;
 
-use crate::launch;
+use selvedge::proc;
 
 pub fn installed() -> bool {
-    launch::has("tailscale")
+    proc::has("tailscale")
 }
 
 pub fn status() -> Option<Value> {
-    let raw = launch::output("tailscale", ["status", "--json"])?;
+    let raw = proc::output("tailscale", ["status", "--json"])?;
     serde_json::from_str(&raw).ok()
 }
 
@@ -26,7 +26,7 @@ pub fn backend_state(status: &Value) -> &str {
 /// node is not in the peer list until it is in use, and the name in the table
 /// is the one the panel and the CLI both accept back.
 pub fn current_exit_node() -> Option<String> {
-    let table = launch::output("tailscale", ["exit-node", "list"])?;
+    let table = proc::output("tailscale", ["exit-node", "list"])?;
     first_active_host(&table)
 }
 
