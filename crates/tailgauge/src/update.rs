@@ -837,5 +837,31 @@ mod distribution {
             bootstrap.contains("rm -f \"$bindir/tailgauge-update\""),
             "the bootstrap must remove itself; nothing else will"
         );
+
+        // It is the only way back, so it goes after the binary has been shown
+        // to run. A binary for the wrong libc is a file that exists and does
+        // nothing, and `set -e` is not on.
+        let proves = bootstrap
+            .find("--version 2>&1")
+            .expect("the bootstrap runs the binary before trusting it");
+        let removes = bootstrap
+            .find("rm -f \"$bindir/tailgauge-update\"")
+            .expect("the bootstrap removes itself");
+        assert!(
+            proves < removes,
+            "the bootstrap removes the way back before proving the binary runs"
+        );
+
+        // A 0.4.0 panel polls --json and applies with --apply, so the pending
+        // migration has to show up as available or that panel reports the
+        // install as current while the binary is missing.
+        let json = bootstrap
+            .split_once("--json ]]")
+            .map(|(_, rest)| rest.split("exit 0").next().unwrap_or(""))
+            .expect("the bootstrap answers --json");
+        assert!(
+            json.contains(r#""available":true"#) && json.contains(r#""updatable":true"#),
+            "the --json answer hides the pending migration from an old panel"
+        );
     }
 }
