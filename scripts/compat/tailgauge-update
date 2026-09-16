@@ -15,19 +15,48 @@ REPO="${TAILGAUGE_REPO:-Arzaroth/TailGauge}"
 bindir="$HOME/.local/bin"
 ALIASES=(ctl watch notify send receive file-select copy)
 
-# The panel of a 0.4.0 install polls this with --json. Answer it rather than
-# starting a download nobody asked for: a poll is not a request to install.
-for arg in "$@"; do
-  if [[ $arg == --json ]]; then
-    printf '{"available":false,"updatable":false,"latest":"","url":"https://github.com/%s/releases/latest","error":"TailGauge is a binary now - run tailgauge-update to finish upgrading","targets":[]}\n' "$REPO"
-    exit 0
-  fi
-done
-
 die() {
   echo "tailgauge-update: $1" >&2
   exit 1
 }
+
+cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/tailgauge"
+cache_file="$cache_dir/update.json"
+
+# The tag of the newest release, from the same cache the old script kept and
+# with the same six hours on it, so a polling panel is not a request per tick.
+latest_tag() {
+  local cached now
+  if [[ -r $cache_file ]]; then
+    cached=$(sed -n 's/.*"latest": *"\([^"]*\)".*/\1/p' "$cache_file" | head -1)
+    now=$(sed -n 's/.*"checked": *"\([^"]*\)".*/\1/p' "$cache_file" | head -1)
+    if [[ -n $cached && -n $now ]] && (($(date +%s) - now < 21600)); then
+      printf 'v%s' "${cached#v}"
+      return 0
+    fi
+  fi
+  command -v curl >/dev/null 2>&1 || return 1
+  local tag
+  tag=$(curl -fsSL --max-time 15 "https://api.github.com/repos/$REPO/releases/latest" |
+    sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1) || return 1
+  [[ -n $tag ]] || return 1
+  mkdir -p "$cache_dir" 2>/dev/null &&
+    printf '{"latest":"%s","checked":"%s"}\n' "${tag#v}" "$(date +%s)" >"$cache_file"
+  printf '%s' "$tag"
+}
+
+# The panel of a 0.4.0 install polls this with --json, and applies with
+# --apply, so saying an upgrade is pending is what lets a user finish the
+# migration from the panel they already have open. It is pending whether or
+# not GitHub answers: the binary is missing from this machine either way.
+for arg in "$@"; do
+  if [[ $arg == --json ]]; then
+    tag=$(latest_tag) || tag=""
+    printf '{"available":true,"updatable":true,"latest":"%s","url":"https://github.com/%s/releases/latest","error":"","targets":[{"kind":"helpers","current":"0.4.0","latest":"%s","managed":"manual","outdated":true}]}\n' \
+      "${tag#v}" "$REPO" "${tag#v}"
+    exit 0
+  fi
+done
 
 case "$(uname -m)" in
 x86_64 | amd64) arch=x86_64 ;;
@@ -37,8 +66,7 @@ esac
 
 command -v curl >/dev/null 2>&1 || die "curl is required"
 
-tag=$(curl -fsSL --max-time 15 "https://api.github.com/repos/$REPO/releases/latest" |
-  sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)
+tag=$(latest_tag) || die "could not ask GitHub for the latest release"
 [[ -n $tag ]] || die "could not ask GitHub for the latest release"
 
 echo "TailGauge is a binary now. Installing tailgauge $tag ($arch)..."
@@ -53,10 +81,22 @@ tar -C "$work" -xzf "$work/archive.tar.gz" || die "the archive did not extract"
 [[ -f "$work/tailgauge" ]] || die "the archive carries no binary"
 
 mkdir -p "$bindir"
+install -m 755 "$work/tailgauge" "$bindir/tailgauge.new.$$" || {
+  rm -f "$bindir/tailgauge.new.$$"
+  die "could not install the binary into $bindir"
+}
+
+# Run it before it is the installed copy. A binary for the wrong libc, or a
+# truncated download, is a file that exists and does nothing - and this script
+# is the only way back, so it must still be here if that is what we have.
+installed_version=$("$bindir/tailgauge.new.$$" --version 2>&1) || {
+  rm -f "$bindir/tailgauge.new.$$"
+  die "the downloaded binary does not run here: $installed_version"
+}
+
 # Renamed into place: this script is running from the same directory, and bash
 # reads a script as it goes.
-install -m 755 "$work/tailgauge" "$bindir/tailgauge.new.$$" &&
-  mv -f "$bindir/tailgauge.new.$$" "$bindir/tailgauge" || {
+mv -f "$bindir/tailgauge.new.$$" "$bindir/tailgauge" || {
   rm -f "$bindir/tailgauge.new.$$"
   die "could not install the binary into $bindir"
 }
@@ -77,8 +117,9 @@ if [[ -f "$work/systemd/tailgauge-receive.service" ]]; then
     systemctl --user restart tailgauge-receive.service 2>/dev/null
 fi
 
-echo "Installed into $bindir. Removing the old helper scripts."
-rm -f "$bindir/tailgauge-update"
+echo "Installed $installed_version into $bindir."
 
-"$bindir/tailgauge" --version
+# Last, and only now: until this runs there is a way back, and after it there
+# is not.
+rm -f "$bindir/tailgauge-update"
 echo "Updating is 'tailgauge --update' from now on."
