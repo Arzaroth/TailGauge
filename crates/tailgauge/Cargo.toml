@@ -14,8 +14,7 @@ path = "src/main.rs"
 [dependencies]
 tailgauge-core = { path = "../tailgauge-core" }
 anyhow = { workspace = true }
+selvedge = { workspace = true }
 clap = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-self_update = { version = "0.44", default-features = false, features = ["reqwest", "rustls", "archive-tar", "compression-flate2", "archive-zip", "compression-zip-deflate"] }
-http = "1"

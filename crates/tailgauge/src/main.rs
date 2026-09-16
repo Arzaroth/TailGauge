@@ -8,15 +8,13 @@
 mod copy;
 mod ctl;
 mod file_select;
-mod frontend;
 mod gather;
 mod launch;
 mod notify;
+mod project;
 mod receive;
 mod send;
-mod state;
 mod tailscale;
-mod update;
 mod watch;
 
 use std::ffi::OsString;
@@ -25,6 +23,9 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
+use selvedge::{frontend, state, update};
+
+use crate::project::TAILGAUGE;
 use clap::{Parser, Subcommand};
 
 /// Nothing to pick with, which is a different answer from picking nothing.
@@ -365,7 +366,7 @@ fn main() -> ExitCode {
 /// `--check-update`: cached where it can be, live otherwise, and the status as
 /// JSON either way. This is what the three panels poll.
 fn handle_check_update(force: bool) -> Result<()> {
-    let status = update::check_cached(&state::update_cache_file(), force)?;
+    let status = update::check_cached(&TAILGAUGE, &state::update_cache_file(&TAILGAUGE), force)?;
     println!("{}", serde_json::to_string(&status)?);
     Ok(())
 }
@@ -373,10 +374,10 @@ fn handle_check_update(force: bool) -> Result<()> {
 /// `--update`: download the latest release, swap the binary, and refresh
 /// whichever frontends are installed.
 fn handle_update() -> Result<()> {
-    let current = update::current_version();
+    let current = TAILGAUGE.version;
     println!("Current version: {current}");
     println!("Checking for updates...");
-    let applied = update::apply(&state::update_cache_file())?;
+    let applied = update::apply(&TAILGAUGE, &state::update_cache_file(&TAILGAUGE))?;
     if !update::version_gt(&applied.version, current) {
         println!("Already up to date ({current}).");
         report_frontend_skew(current);
@@ -392,20 +393,20 @@ fn handle_update() -> Result<()> {
 fn handle_install_frontend(spec: &str) -> Result<()> {
     let spec = spec.trim().to_lowercase();
     let wanted: Vec<&'static frontend::Frontend> = if spec == "all" {
-        frontend::FRONTENDS.iter().collect()
+        TAILGAUGE.frontends.iter().collect()
     } else {
-        vec![frontend::find(&spec).ok_or_else(|| {
-            let ids: Vec<&str> = frontend::FRONTENDS.iter().map(|f| f.id).collect();
+        vec![frontend::find(&TAILGAUGE, &spec).ok_or_else(|| {
+            let ids: Vec<&str> = TAILGAUGE.frontends.iter().map(|f| f.id).collect();
             anyhow::anyhow!("unknown frontend '{spec}' (known: {}, all)", ids.join(", "))
         })?]
     };
 
-    let version = update::current_version();
+    let version = TAILGAUGE.version;
     for target in &wanted {
         println!("Installing the {} from v{version}...", target.label);
     }
 
-    let outcomes = update::install_frontends(&wanted, version)?;
+    let outcomes = update::install_frontends(&TAILGAUGE, &wanted, version)?;
     report_frontends(&outcomes);
 
     let failed: Vec<&str> = outcomes
@@ -461,7 +462,7 @@ fn report_frontends(outcomes: &[update::FrontendOutcome]) {
 /// An installed frontend that disagrees with the binary is the failure this all
 /// exists to catch, so say so even on the path where nothing was updated.
 fn report_frontend_skew(binary: &str) {
-    for f in frontend::installed() {
+    for f in frontend::installed(&TAILGAUGE) {
         match f.installed_version() {
             Some(v) if v == binary => {}
             Some(v) => println!(
@@ -474,7 +475,7 @@ fn report_frontend_skew(binary: &str) {
             ),
         }
     }
-    for f in frontend::installed() {
+    for f in frontend::installed(&TAILGAUGE) {
         if !f.schemas_ready() {
             println!(
                 "{} has no compiled GSettings schemas - reinstall it: tailgauge --install-frontend {}",

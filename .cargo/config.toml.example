@@ -1,0 +1,5 @@
+# Copy to .cargo/config.toml (gitignored) to build against a local selvedge
+# checkout instead of the pinned tag. Cargo.lock still records the tag, so
+# nothing about the release changes.
+[patch."https://github.com/Arzaroth/selvedge"]
+selvedge = { path = "../selvedge" }

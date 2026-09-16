@@ -177,6 +177,18 @@ upgrades the widgets and replaces itself with a bootstrap. The second run is
 that bootstrap, which installs the binary and removes itself. After that,
 updating is `tailgauge --update`.
 
+### The shared crate
+
+Updating the binary and reinstalling the desktop payloads is
+[selvedge](https://github.com/Arzaroth/selvedge), pinned to a tag. TokenGauge
+drives the same machinery, and it lived in both repositories as two copies of
+1,400 lines until it did not.
+
+What stays here is `crates/tailgauge/src/project.rs`: the binary's name, the
+repository its releases come from, and the three frontends it ships. To work on
+both at once, copy `.cargo/config.toml.example` to `.cargo/config.toml`; it is
+gitignored, and `Cargo.lock` still records the tag.
+
 ### TypeScript
 
 The GNOME extension is TypeScript, checked under `strict`, and is the only thing here that needs a Node toolchain. It is typed against [`@girs/gnome-shell`](https://www.npmjs.com/package/@girs/gnome-shell), pinned to the newest shell the extension supports.

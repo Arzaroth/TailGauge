@@ -2,3 +2,6 @@ build/
 *.shell-extension.zip
 node_modules/
 /target
+
+# Local selvedge checkout, for working on both at once. See README.
+/.cargo/config.toml
