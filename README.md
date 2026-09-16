@@ -69,10 +69,10 @@ tailgauge ctl version             # which version is installed
 ```
 
 Everything TailGauge shells out to is one binary with a subcommand per job -
-`ctl`, `watch`, `notify`, `send`, `receive`, `file-select`, `copy`, `update`.
-The installer also drops a symlink per subcommand beside it, so the older
-spelling `tailgauge-ctl toggle` still resolves: the binary reads the name it
-was invoked as.
+`ctl`, `watch`, `notify`, `send`, `receive`, `file-select`, `copy`. Updating is
+a flag rather than a subcommand, `tailgauge --update`. The installer drops a
+symlink per subcommand beside the binary, so the older spelling `tailgauge-ctl
+toggle` still resolves: the binary reads the name it was invoked as.
 
 Run from a key binding there is no terminal to print on, so `up` opens the login page itself and a failure arrives as a notification instead.
 
@@ -95,7 +95,9 @@ The three frontends are QML and JavaScript their desktops install; the binary is
 **Neither store can install the binary or the systemd unit** - the KDE Store ships a kpackage, EGO ships an extension zip. A store-installed TailGauge is the panel only: status, toggle, connections, exit nodes, machines and copy actions all work; **Taildrop send does not appear**, because the panel checks for `tailgauge` on `PATH` before offering it. Install it from the release archive to get it back:
 
 ```bash
-curl -fsSL https://github.com/Arzaroth/TailGauge/releases/latest/download/tailgauge-v0.5.0-linux-x86_64.tar.gz | tar -xz
+tag=$(curl -fsSL https://api.github.com/repos/Arzaroth/TailGauge/releases/latest |
+      sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p')
+curl -fsSL "https://github.com/Arzaroth/TailGauge/releases/download/$tag/tailgauge-$tag-linux-x86_64.tar.gz" | tar -xz
 install -m 755 tailgauge ~/.local/bin/
 ```
 

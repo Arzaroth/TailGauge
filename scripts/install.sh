@@ -85,7 +85,11 @@ command -v cargo >/dev/null 2>&1 || {
 bindir="$HOME/.local/bin"
 mkdir -p "$bindir"
 install -m 755 "$root/target/release/tailgauge" "$bindir/tailgauge"
-# No `update` alias: updating is a flag on the binary, not a subcommand.
+# No `update` alias: updating is a flag on the binary, not a subcommand. An
+# install from before that carries the old symlink, and the binary answers
+# `tailgauge-update` with a usage error, so the key binding that used to run it
+# breaks quietly. Take it with us.
+rm -f "$bindir/tailgauge-update"
 for alias in ctl watch notify send receive file-select copy; do
   ln -sfn tailgauge "$bindir/tailgauge-$alias"
 done

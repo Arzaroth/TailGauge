@@ -7,9 +7,10 @@ All notable changes to this project are documented here.
 ### Added
 
 - **One binary, `tailgauge`, replaces the eight shell helpers.** A subcommand
-  per job - `ctl`, `watch`, `notify`, `send`, `receive`, `file-select`, `copy`,
-  `update` - and a symlink per subcommand beside it, so `tailgauge-ctl toggle`
-  on a key binding still resolves: the binary reads the name it was invoked as.
+  per job - `ctl`, `watch`, `notify`, `send`, `receive`, `file-select`, `copy` -
+  and a symlink per subcommand beside it, so `tailgauge-ctl toggle` on a key
+  binding still resolves: the binary reads the name it was invoked as. Updating
+  is the one job that is a flag rather than a subcommand, so it has no symlink.
   969 lines of bash are gone, including a `tailscale status --json` parsed with
   `sed` and an exit-node table sliced with `awk`.
 
