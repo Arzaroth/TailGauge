@@ -295,7 +295,11 @@ class TailGaugeIndicator extends PanelMenu.Button {
         (this._scroll as unknown as Loose)._delegate = this._scrolled;
         this._menu.box.add_child(this._scroll);
 
-        for (const id of ['update', 'self', 'connections', 'exitNodes', 'machines']) {
+        // Every section the binary emits, in the order it emits them. A
+        // section with no slot here is dropped by _rebuildSections, which is
+        // how provider switching and network selection went missing on GNOME
+        // while their actions sat in the dispatch unreachable.
+        for (const id of Panel.SECTION_IDS) {
             const header = new PopupMenu.PopupSeparatorMenuItem('');
             const section = new PopupMenu.PopupMenuSection();
             this._scrolled.addMenuItem(header);
