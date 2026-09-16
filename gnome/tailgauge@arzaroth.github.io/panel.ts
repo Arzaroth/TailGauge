@@ -130,6 +130,12 @@ export interface Ui {
 }
 
 /// An empty panel, for the moment before the first answer arrives.
+/// The sections `panel_spec` emits, in order. The extension builds one slot
+/// per id, and drops any section it has no slot for.
+export const SECTION_IDS = [
+    'update', 'providers', 'self', 'connections', 'exitNodes', 'networks', 'machines',
+];
+
 export function emptyPanel(): Panel {
     return {
         bar: {connected: false, warning: false, crossed: true, tooltip: []},
