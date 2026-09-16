@@ -122,7 +122,14 @@ IP             HOSTNAME                      COUNTRY        CITY           STATU
 
     #[test]
     fn a_short_row_is_not_a_slice_out_of_bounds() {
-        let table = format!("{TABLE}100.100.0.4\n");
-        assert!(first_active_host(&table).is_some());
+        // Nothing selected, so the loop reaches the truncated row and slices
+        // it. With Paris still selected it returned before ever getting there,
+        // and the test passed without touching the boundary it names.
+        let table = format!("{}100.100.0.4\n", TABLE.replace("selected", "-"));
+        assert_eq!(first_active_host(&table), None);
+
+        let mut selected_short = TABLE.replace("selected", "-");
+        selected_short.push_str("100.100.0.5    short-row.mullvad.ts.net\n");
+        assert_eq!(first_active_host(&selected_short), None, "no STATUS column");
     }
 }

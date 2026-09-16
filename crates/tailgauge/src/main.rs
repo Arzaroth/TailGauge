@@ -120,11 +120,13 @@ enum Command {
     Send {
         /// A row's payload instead of a name, so the address is the model's
         /// answer rather than the caller's guess.
-        #[arg(long, conflicts_with = "machine")]
+        #[arg(long)]
         peer: Option<String>,
-        #[arg(required_unless_present = "peer")]
-        machine: Option<String>,
-        files: Vec<String>,
+        /// MACHINE then the files, or just the files when --peer names the
+        /// machine. One list, because clap would otherwise read the first file
+        /// of a `--peer` call as the machine and refuse the command.
+        #[arg(value_name = "MACHINE|FILES", required_unless_present = "peer")]
+        target: Vec<String>,
     },
 
     /// Save incoming Taildrop files and announce each one.
@@ -280,22 +282,21 @@ fn main() -> ExitCode {
             ExitCode::from(watch::run(Duration::from_secs(timeout_seconds)).code())
         }
 
-        Command::Send {
-            peer,
-            machine,
-            files,
-        } => {
+        Command::Send { peer, target } => {
             if !tailscale::installed() {
                 eprintln!("tailgauge: the tailscale CLI is not on PATH");
                 return ExitCode::FAILURE;
             }
-            let machine = match peer.as_deref().map(ctl::address_of) {
+            let (machine, files) = match peer.as_deref().map(ctl::address_of) {
                 Some(Err(why)) => {
                     eprintln!("tailgauge: {why}");
                     return ExitCode::FAILURE;
                 }
-                Some(Ok(address)) => address,
-                None => machine.unwrap_or_default(),
+                Some(Ok(address)) => (address, target),
+                None => {
+                    let mut rest = target.into_iter();
+                    (rest.next().unwrap_or_default(), rest.collect())
+                }
             };
             if machine.is_empty() {
                 eprintln!("tailgauge: nothing to send to");
@@ -698,6 +699,30 @@ mod tests {
         };
         assert_eq!(name, None);
         assert_eq!(peer.as_deref(), Some(r#"{"id":"n1"}"#));
+    }
+
+    #[test]
+    fn a_peer_payload_can_still_name_the_files_to_send() {
+        // The frontends send with --peer and no files, so the chooser opens.
+        // A caller naming both used to be refused: the first file bound to the
+        // machine positional, which --peer conflicted with.
+        let cli = parse(&["tailgauge-send", "--peer", r#"{"id":"n1"}"#, "a.md", "b.md"]);
+        let Some(Command::Send { peer, target }) = cli.command else {
+            panic!("not a send command")
+        };
+        assert_eq!(peer.as_deref(), Some(r#"{"id":"n1"}"#));
+        assert_eq!(target, ["a.md", "b.md"]);
+
+        // Without --peer the first positional is still the machine.
+        let cli = parse(&["tailgauge-send", "box", "a.md"]);
+        let Some(Command::Send { peer, target }) = cli.command else {
+            panic!("not a send command")
+        };
+        assert_eq!(peer, None);
+        assert_eq!(target, ["box", "a.md"]);
+
+        // And naming nothing at all is still a usage error.
+        assert!(Cli::try_parse_from(["tailgauge", "send"]).is_err());
     }
 
     #[test]
