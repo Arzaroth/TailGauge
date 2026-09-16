@@ -19,6 +19,10 @@ All notable changes to this project are documented here.
   answered to, and removes itself. Updating is `tailgauge --update` from then
   on.
 
+  A panel still on 0.4.0 - which is what a store-installed widget stays on,
+  since that updater only touches what it installed itself - sees the pending
+  migration in its own update row and can finish it from there.
+
 ## [0.5.0]
 
 ### Added

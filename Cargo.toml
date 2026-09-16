@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/tailgauge-core", "crates/tailgauge"]
 
 [workspace.package]
-version = "0.5.0"
+version = "0.5.1"
 edition = "2024"
 # let-chains, used in the parsers and the panel, are stable from 1.88.
 rust-version = "1.88"
