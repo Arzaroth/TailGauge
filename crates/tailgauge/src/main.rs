@@ -648,6 +648,18 @@ mod tests {
             .collect()
     }
 
+    /// The installer writes these on a fresh install, and selvedge rewrites
+    /// `ALIASES` on `--update`: a name in one list only is a symlink that one
+    /// way of installing has and the other does not.
+    #[test]
+    fn the_installer_and_the_updater_write_the_same_aliases() {
+        let installer: Vec<String> = installer_aliases()
+            .iter()
+            .map(|alias| format!("tailgauge-{alias}"))
+            .collect();
+        assert_eq!(installer, project::ALIASES);
+    }
+
     #[test]
     fn every_alias_the_installer_writes_is_a_subcommand() {
         let aliases = installer_aliases();
