@@ -5,16 +5,16 @@ account switching, exit nodes including Mullvad regions, machine browsing with
 copy actions, and Taildrop file sending.
 
 Omarchy ships its own `omarchy.tailscale` widget, which is where all of this
-came from. This one is the same panel rebuilt on TailGauge's shared model, so it
+came from. This one draws the panel the `tailgauge` binary resolves, so it
 carries what the Plasma and GNOME frontends carry and moves when they do: the
 local machine as a row of its own, offline machines, the owner of each machine,
 a machine search, and an update banner. Both can sit in the bar at once; drop
 theirs with `omarchy plugin disable omarchy.tailscale`.
 
-The QML is strictly a display. `Model.js` - the shared model, copied in by the
-build - decides which sections exist, what every row says and where the cursor
-can land; `Service.qml` drives the `tailscale` CLI and the `tailgauge-*`
-helpers. Nothing here re-derives panel content.
+The QML is strictly a display. `Service.qml` runs `tailgauge panel --json`,
+which decides which sections exist, what every row says and where the cursor
+can land, and sends every action back through the same binary
+(`tailgauge ctl`, `copy`, `send`). Nothing here re-derives panel content.
 
 ## Install
 
@@ -24,8 +24,8 @@ From a checkout:
 scripts/install.sh --omarchy
 ```
 
-That builds the plugin, installs the helpers into `~/.local/bin`, enables the
-Taildrop receive service, copies this folder to
+That builds the plugin, installs the `tailgauge` binary into `~/.local/bin`,
+enables the Taildrop receive service, copies this folder to
 `~/.config/omarchy/plugins/arzaroth.tailgauge/`, and enables the widget. Pass
 `--placement=left|center|right` to choose a bar section; without it the
 manifest's `right` applies. Add `--no-taildrop` to skip the receive service.
@@ -46,7 +46,7 @@ manifest's `right` applies. Add `--no-taildrop` to skip the receive service.
   sort to the bottom and say so. Past eight machines the section grows a search
   field.
 - **Update banner** - when a newer TailGauge release is out, with an install
-  button when `tailgauge-update` can apply it in place.
+  button that runs `tailgauge --update`.
 
 ## Interactions
 
@@ -87,7 +87,5 @@ qs log --pid "$(pgrep -f 'quickshell -n -p /usr/share/omarchy/shell')" -t 50
 ```
 
 Symlinks are refused anywhere inside a plugin folder, so the installer copies
-this directory rather than linking it, and `scripts/build.sh` copies the
-JavaScript it compiles from `shared/model.ts` in as `Model.js`. `Model.js` is
-build output, not a source file. **Edit `shared/model.ts`, never the copy.**
-Re-run `scripts/install.sh --omarchy` to push local edits.
+this directory rather than linking it. Re-run `scripts/install.sh --omarchy` to
+push local edits.

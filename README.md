@@ -132,7 +132,7 @@ Tagging `vX.Y.Z` publishes:
 - `tailgauge-vX.Y.Z-omarchy-plugin.tar.gz` - unpacks into `~/.config/omarchy/plugins/`
 - `tailgauge-vX.Y.Z-linux-x86_64.tar.gz`, `-linux-aarch64.tar.gz` - the binary, the three frontend payloads under `frontends/`, and the systemd unit. This is what `--update` and `--install-frontend` download.
 
-The distribution tests in `crates/tailgauge/src/update.rs` fail the build if those names stop matching what the updater asks for - the asset name is spelled by the updater's own `arch_target()`, so the test compares the workflow against the running code rather than against a second copy of the name. The three manifests and `Cargo.toml` all declare the version, and a tag that disagrees with any of them refuses to publish.
+The distribution tests in `crates/tailgauge/src/project.rs` fail the build if those names stop matching what the updater asks for - the asset name is spelled by selvedge's own `arch_target()`, so the test compares the workflow against the running code rather than against a second copy of the name. The three manifests and `Cargo.toml` all declare the version, and a tag that disagrees with any of them refuses to publish.
 
 ## The parity rule
 
