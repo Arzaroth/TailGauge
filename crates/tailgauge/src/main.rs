@@ -631,8 +631,7 @@ mod tests {
 
     /// The installer writes one symlink per alias, and a symlink whose name is
     /// not a subcommand is a command that exits 2 however it is invoked.
-    #[test]
-    fn every_alias_the_installer_writes_is_a_subcommand() {
+    fn installer_aliases() -> Vec<String> {
         let installer = std::fs::read_to_string(
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/install.sh"),
         )
@@ -641,12 +640,17 @@ mod tests {
             .lines()
             .find(|l| l.contains("for alias in"))
             .expect("the alias loop");
-        let aliases: Vec<&str> = line
-            .trim()
+        line.trim()
             .trim_start_matches("for alias in ")
             .trim_end_matches("; do")
             .split_whitespace()
-            .collect();
+            .map(String::from)
+            .collect()
+    }
+
+    #[test]
+    fn every_alias_the_installer_writes_is_a_subcommand() {
+        let aliases = installer_aliases();
         assert!(aliases.len() >= 7, "found {aliases:?}");
 
         for alias in aliases {
