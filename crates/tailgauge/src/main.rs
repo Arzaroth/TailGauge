@@ -629,8 +629,6 @@ mod tests {
         assert_eq!(spliced(&[]), [] as [&str; 0]);
     }
 
-    /// The installer writes one symlink per alias, and a symlink whose name is
-    /// not a subcommand is a command that exits 2 however it is invoked.
     fn installer_aliases() -> Vec<String> {
         let installer = std::fs::read_to_string(
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/install.sh"),
@@ -653,13 +651,18 @@ mod tests {
     /// way of installing has and the other does not.
     #[test]
     fn the_installer_and_the_updater_write_the_same_aliases() {
-        let installer: Vec<String> = installer_aliases()
+        let mut installer: Vec<String> = installer_aliases()
             .iter()
             .map(|alias| format!("tailgauge-{alias}"))
             .collect();
-        assert_eq!(installer, project::ALIASES);
+        let mut updater = project::ALIASES.to_vec();
+        installer.sort();
+        updater.sort();
+        assert_eq!(installer, updater);
     }
 
+    /// The installer writes one symlink per alias, and a symlink whose name is
+    /// not a subcommand is a command that exits 2 however it is invoked.
     #[test]
     fn every_alias_the_installer_writes_is_a_subcommand() {
         let aliases = installer_aliases();
