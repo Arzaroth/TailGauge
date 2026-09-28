@@ -57,7 +57,8 @@ git grep -n -F '<old x.y.z>' -- ':!CHANGELOG.md'
 
 Every step CI runs, in the same order. The release workflow runs none of the
 frontend or helper checks, so this is the last chance before the tag publishes.
-Run it in bash with `shopt -s globstar nullglob`.
+Run it in bash with `shopt -s globstar nullglob`; every line exits non-zero on
+failure.
 
 ```bash
 # binary
@@ -67,20 +68,25 @@ cargo test --locked
 
 # frontends
 pnpm install --frozen-lockfile && pnpm build
-/usr/lib/qt6/bin/qmllint build/org.tailgauge.plasmoid/contents/ui/*.qml build/arzaroth.tailgauge/*.qml 2>&1 | grep '\[syntax\]'   # any output is a failure
+! /usr/lib/qt6/bin/qmllint build/org.tailgauge.plasmoid/contents/ui/*.qml build/arzaroth.tailgauge/*.qml 2>&1 | grep '\[syntax\]'
 pnpm typecheck
 tests/qml/run.sh
 node --import ./tests/gnome/register.js --test 'tests/gnome/**/*.test.js'
-for f in build/tailgauge@arzaroth.github.io/*.js; do node --input-type=module --check <"$f"; done
-for f in gnome/**/metadata.json plasma/**/metadata.json omarchy/**/manifest.json; do node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$f"; done
+fail=0; for f in build/tailgauge@arzaroth.github.io/*.js; do node --input-type=module --check <"$f" || fail=1; done; (( !fail ))
+fail=0; for f in gnome/**/metadata.json plasma/**/metadata.json omarchy/**/manifest.json; do node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$f" || fail=1; done; (( !fail ))
 glib-compile-schemas --strict --dry-run gnome/tailgauge@arzaroth.github.io/schemas
 python3 -c "import xml.dom.minidom, sys; xml.dom.minidom.parse(sys.argv[1])" plasma/org.tailgauge.plasmoid/contents/config/main.xml
-# versions agree: the git grep in step 3 covers CI's "Check the versions agree"
+fail=0; for v in "$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)" \
+  "$(node -p 'require("./plasma/org.tailgauge.plasmoid/metadata.json").KPlugin.Version')" \
+  "$(node -p 'require("./gnome/tailgauge@arzaroth.github.io/metadata.json")["version-name"]')" \
+  "$(node -p 'require("./omarchy/arzaroth.tailgauge/manifest.json").version')"; do
+  [[ $v == x.y.z ]] || { echo "declares $v, not x.y.z"; fail=1; }
+done; (( !fail ))
 
 # helpers
-for f in scripts/*.sh scripts/compat/*; do bash -n "$f" && [[ -x $f ]] || echo "FAIL $f"; done
+fail=0; for f in scripts/*.sh scripts/compat/*; do bash -n "$f" && [[ -x $f ]] || { echo "FAIL $f"; fail=1; }; done; (( !fail ))
 shellcheck --severity=warning scripts/*.sh scripts/compat/*
-systemd-analyze verify --user systemd/tailgauge-receive.service 2>&1 | grep -iE 'Unknown (key|section)|Failed to parse'   # any output is a failure
+! systemd-analyze verify --user systemd/tailgauge-receive.service 2>&1 | grep -iE 'Unknown (key|section)|Failed to parse'
 ```
 
 `qmllint` and the `qml` runtime (Qt 6 declarative dev tools) and `shellcheck`
