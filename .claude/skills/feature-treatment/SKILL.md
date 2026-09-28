@@ -19,7 +19,7 @@ directory resets between calls, so every git and gh command below runs with a
 ## 1. Rebase onto master
 
 ```bash
-cd ~/repos/TailGauge.worktrees/<branch> && git fetch origin && git rebase origin/master
+cd ~/repos/TailGauge.worktrees/'<branch>' && git fetch origin && git rebase origin/master
 ```
 
 Resolve conflicts if any (the **resolving-merge-conflicts** skill). The branch
@@ -109,8 +109,8 @@ runs them on the PR. Check the file count stays under the limit:
 ## 6. PR and merge
 
 ```bash
-cd ~/repos/TailGauge.worktrees/<branch> && git push -u --force-with-lease origin <branch>
-gh pr create --base master --head <branch> --title "<what it does, in plain words>" --body "..."
+cd ~/repos/TailGauge.worktrees/'<branch>' && git push -u --force-with-lease origin '<branch>'
+gh pr create --base master --head '<branch>' --title "<what it does, in plain words>" --body "..."
 ```
 
 `--force-with-lease` because the rebase in step 1 may have rewritten a branch
@@ -133,7 +133,7 @@ fix-only.
 ## 8. Clean up
 
 ```bash
-wt remove <branch>
+wt remove '<branch>'
 ```
 
 ## Done when
