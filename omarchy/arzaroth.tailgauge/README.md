@@ -1,8 +1,8 @@
 # TailGauge for Omarchy
 
-A bar widget for the Omarchy 4 Quickshell shell: connection state, on/off,
-account switching, exit nodes including Mullvad regions, machine browsing with
-copy actions, and Taildrop file sending.
+A bar widget for the Omarchy 4 Quickshell shell, for Tailscale and NetBird:
+connection state, on/off, account switching, exit nodes including Mullvad
+regions, machine browsing with copy actions, and Taildrop file sending.
 
 Omarchy ships its own `omarchy.tailscale` widget, which is where all of this
 came from. This one draws the panel the `tailgauge` binary resolves, so it
@@ -13,8 +13,9 @@ theirs with `omarchy plugin disable omarchy.tailscale`.
 
 The QML is strictly a display. `Service.qml` runs `tailgauge panel --json`,
 which decides which sections exist, what every row says and where the cursor
-can land, and sends every action back through the same binary
-(`tailgauge ctl`, `copy`, `send`). Nothing here re-derives panel content.
+can land, and every action goes back through the same binary
+(`tailgauge ctl`, `copy`, `send`); only links leave through `xdg-open`. Nothing
+here re-derives panel content.
 
 ## Install
 
@@ -34,7 +35,7 @@ manifest's `right` applies. Add `--no-taildrop` to skip the receive service.
 
 - **Hero** - the machine name, the connection state, and the on/off switch. The
   switch flips optimistically the instant you click it, then reconciles with the
-  next `tailscale status`.
+  next panel the binary returns.
 - **This device** - your own machine, with the same copy actions its peers get.
 - **Connections** - Tailscale profiles, when more than one is signed in. Offers
   to `pkexec tailscale set --operator=$USER` when the daemon refuses profile
@@ -50,7 +51,8 @@ manifest's `right` applies. Add `--no-taildrop` to skip the receive service.
 
 ## Interactions
 
-- Bar icon: left = panel, right = toggle Tailscale, middle = refresh.
+- Bar icon: left = panel, right = switch provider (when both Tailscale and
+  NetBird are installed), middle = refresh.
 - Panel: `j`/`k` or arrows move the cursor, Enter activates, `t` toggles, `r`
   refreshes, `c` / `n` / `d` copy the selected machine's IP, name and MagicDNS
   name, `s` sends files to it, Tab moves to the neighbouring bar panel, Esc
@@ -63,7 +65,7 @@ Widget settings live inline on its entry in `~/.config/omarchy/shell.json`:
 
 | Key | Default | What it does |
 |---|---|---|
-| `refreshIntervalSec` | `30` | Floor under the poll when the panel is closed. An open panel polls every 3s, and `tailgauge-watch` reports changes within a second either way |
+| `refreshIntervalSec` | `30` | Floor under the poll when the panel is closed. An open panel polls every 3s, and `tailgauge watch` reports changes within a second either way |
 
 Numbers need `--json`, or they land in `shell.json` as strings:
 
