@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.6.1]
+
 ### Fixed
 
 - **The GNOME menu shows its sections on GNOME 45.** Every section, from the
