@@ -6,9 +6,10 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
-- **The GNOME menu shows its rows on GNOME 45.** Networks, exit nodes and
-  machines sat in a scroll view that GNOME 45 drew one pixel tall, so the menu
-  held only the status line, Refresh and Settings. GNOME 46 and later were
+- **The GNOME menu shows its sections on GNOME 45.** Every section, from the
+  update banner and the provider switcher down to the machines, sat in a scroll
+  view that GNOME 45 drew one pixel tall, so the menu held only the on/off
+  switch, the status line, Refresh and Settings. GNOME 46 and later were
   unaffected.
 
 ## [0.6.0]
