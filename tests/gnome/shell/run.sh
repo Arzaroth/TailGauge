@@ -14,9 +14,9 @@
 #
 # The panel defaults to tests/qml/fixtures/panel.json. --live serves what the
 # installed `tailgauge panel --json` prints instead. --gnome picks the shell
-# (45-50, default 50) through the Fedora release that shipped it. The monitor
+# (45 or later, default 50) through the Fedora release that shipped it. The monitor
 # defaults to 1280x720, small enough that the fixture's menu has to scroll.
-# Screenshots and logs land in --out, created private to you, or in a fresh
+# Screenshots and logs land in --out, readable by you alone, or in a fresh
 # temporary directory.
 set -euo pipefail
 
@@ -35,7 +35,7 @@ while (($#)); do
     --gnome) gnome="$2"; shift ;;
     --monitor) monitor="$2"; shift ;;
     --out) out="$2"; shift ;;
-    -h|--help) sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
   shift
@@ -102,7 +102,7 @@ fi
 
 if [[ $out != "$work" ]]; then
   for f in version.txt probe.txt shell.log mock.log top.png bottom.png done; do
-    if [[ -f $work/$f ]]; then cp "$work/$f" "$out/"; else rm -f "$out/$f"; fi
+    if [[ -f $work/$f ]]; then (umask 077 && cp "$work/$f" "$out/"); else rm -f "$out/$f"; fi
   done
 fi
 
