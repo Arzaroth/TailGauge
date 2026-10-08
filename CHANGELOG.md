@@ -12,6 +12,14 @@ All notable changes to this project are documented here.
   switch, the status line, Refresh and Settings. GNOME 46 and later were
   unaffected.
 
+### Distribution
+
+- **The metadata states the licence the project has always had.** `Cargo.toml`
+  said `GPL-3.0-or-later` while `LICENSE` and the README said MIT, so a licence
+  scanner or a packager reading the metadata was told the code is copyleft. It
+  is dual MIT OR WTFPL now, everywhere, and the release archives and the
+  Omarchy plugin carry the licence and `NOTICE` files, which they had left out.
+
 ## [0.6.0]
 
 ### Added
