@@ -93,6 +93,10 @@ shellcheck --severity=warning scripts/*.sh scripts/compat/*
 are often not installed: say which step was skipped rather than implying it
 passed.
 
+Not in CI, so not in this list: if the GNOME extension changed since the last
+tag, also run `tests/gnome/shell/run.sh --gnome 45` and `--gnome 50` (podman or
+docker). Nothing else loads `extension.js`.
+
 ## 5. Commit, tag, push
 
 ```bash

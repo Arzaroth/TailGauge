@@ -224,11 +224,14 @@ cargo build --release               # the binary
 pnpm build                          # compile the extension and assemble build/
 pnpm typecheck                      # tsc over the extension, emitting nothing
 scripts/install.sh                  # build and install for the running desktop
+tests/gnome/shell/run.sh --gnome 45 # the extension's menu in a real GNOME Shell
 ```
 
 Almost everything is a cargo test. `crates/tailgauge-core/tests/specification.rs` says what the panel should do, against captures of what a real daemon said; `parity.rs` reads the three frontends' sources and fails the build when one of them starts deciding something the panel already decided.
 
 The Node toolchain exists to compile the GNOME extension and nothing else. It is managed with [pnpm](https://pnpm.io), pinned by the `packageManager` field and `pnpm-lock.yaml`; `scripts/build.sh` falls back to `npm install` when pnpm is absent, so installing from a clone needs nothing beyond Node. That fallback is best-effort: npm cannot read `pnpm-lock.yaml`, so it may compile with a different TypeScript patch than CI did.
+
+The node tests in `tests/gnome` load `panel.js` and `provider.js`, never `extension.js`, so only a real shell shows how the menu is drawn. `tests/gnome/shell/run.sh` runs the built extension in a headless GNOME Shell under podman or docker, screenshots the menu, and fails when it throws, runs off the monitor, or its scroll view is drawn empty or cannot reach its last row. `--gnome 45` through `50` picks the shell, and GNOME 45 is the one that differs: its `St.ScrollView` is an `St.Bin`. It is local and opt-in, not part of CI, since it pulls a Fedora image.
 
 CI runs `cargo fmt`, `clippy -D warnings` and `cargo test` on x86_64 and aarch64, `qmllint` for QML syntax on both QML frontends, `tsc` and `node --check` on the extension, and a check that the three manifests and `Cargo.toml` declare the same version. Tagging `vX.Y.Z` builds and publishes the plasmoid package, the GNOME extension zip, the Omarchy plugin tarball and a binary archive per architecture.
 

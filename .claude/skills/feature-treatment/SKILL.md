@@ -63,7 +63,9 @@ feature (4-6 is typical):
   newer than the lowest `shell-version` in the extension's metadata, which still
   typechecks because `@girs/gnome-shell` is pinned to the newest),
   async/process footguns in the binary, and whether the tests cover the new
-  branches: a `specification.rs` case against a real capture, an e2e run against
+  branches - for a change to `gnome/.../extension.ts`, a run of
+  `tests/gnome/shell/run.sh` at `--gnome 45` and `--gnome 50`, since the node
+  tests never load it: a `specification.rs` case against a real capture, an e2e run against
   the fake `tailscale` / `netbird` on an isolated PATH, the QML harness fixtures
   in `tests/qml`, the node tests in `tests/gnome`.
 
