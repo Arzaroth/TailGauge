@@ -61,6 +61,8 @@ function box(vertical: boolean, props: Loose = {}): St.BoxLayout {
 
 // St.ScrollView took its content through add_actor until GNOME 46 turned it
 // into a property, and only gained an adjustment of its own in that release.
+// A GNOME 45 ScrollView is an St.Bin and so has a `child` too, but setting it
+// skips the hook that wires the scrollbars: the section drew 1px tall there.
 function scrollView(child: Clutter.Actor, props: Loose = {}): St.ScrollView {
     const view = new St.ScrollView({
         hscrollbar_policy: St.PolicyType.NEVER,
@@ -68,10 +70,10 @@ function scrollView(child: Clutter.Actor, props: Loose = {}): St.ScrollView {
         ...props,
     });
     const loose = view as unknown as Loose;
-    if ('child' in loose)
-        loose.child = child;
-    else
+    if (typeof loose.add_actor === 'function')
         loose.add_actor(child);
+    else
+        loose.child = child;
     return view;
 }
 
