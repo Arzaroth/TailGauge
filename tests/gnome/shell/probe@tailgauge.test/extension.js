@@ -70,7 +70,7 @@ export default class Probe extends Extension {
                 record(`monitor: ${monitor.width}x${monitor.height}`);
                 record(`popup: y=${popup.y} height=${popup.height}`);
                 record(`scroll view: height=${scroll.height} ${scroll.style ?? ''}`);
-                record(`sections: natural=${natural} rows=${sections.get_n_children()}`);
+                record(`sections: natural=${natural}`);
                 record(`scroll: upper=${adjustment.upper} page=${adjustment.page_size}`);
                 if (popup.y + popup.height > monitor.y + monitor.height)
                     record('error: the menu runs off the bottom of the monitor');
