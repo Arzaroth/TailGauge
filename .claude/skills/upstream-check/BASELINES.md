@@ -7,17 +7,19 @@ Rewritten at the end of every `upstream-check` run.
 | Upstream | Baseline | Notes |
 | --- | --- | --- |
 | basecamp/omarchy | `b679363b` on `quattro` (2026-09-14) | Their `omarchy.tailscale` widget is still at `1.0.0`; local omarchy is `4.0.3-1` |
-| tailscale/tailscale | CLI `1.102.4` | `test/fixtures/` is still captured from `1.102.3`; no CLI surface changed between the two |
+| tailscale/tailscale | CLI `1.102.4` | `crates/tailgauge-core/tests/fixtures/` is still captured from `1.102.3`; no CLI surface changed between the two |
 
 Checked against TailGauge at `75bdbfa` (0.3.4).
 
 ## Where we forked from
 
 - Omarchy: the port landed 2026-08-29 (`982b01b`), against omarchy
-  `4.0.0.alpha` and `omarchy.tailscale` 1.0.0. `shared/model.ts` is their
+  `4.0.0.alpha` and `omarchy.tailscale` 1.0.0. `shared/model.ts` was their
   `Model.js` of that date plus our own additions; `bin/tailgauge-send` and
-  `bin/tailgauge-receive` are their `omarchy-tailscale-*` scripts with the file
-  chooser and notifier swapped for desktop-neutral ones.
+  `bin/tailgauge-receive` were their `omarchy-tailscale-*` scripts with the file
+  chooser and notifier swapped for desktop-neutral ones. Both have since been
+  ported to Rust: the parsers are `crates/tailgauge-core/src/`, Taildrop is
+  `crates/tailgauge/src/send.rs` and `receive.rs`.
 - The Omarchy frontend (`omarchy/arzaroth.tailgauge`) landed 2026-09-02 against
   the same shell. It is a third-party plugin and shares no files with theirs
   except the dot-grid icon.
@@ -82,8 +84,8 @@ client, so the CLI prints a version-skew warning. It cannot reach a parser -
 
 ## Known one-way differences, ours ahead, not to be "fixed" toward upstream
 
-- The panel is resolved in `shared/model.ts` and rendered identically by three
-  frontends. Upstream assembles its panel in QML.
+- The panel is resolved in `crates/tailgauge-core` (`panel_spec`) and rendered
+  identically by every frontend. Upstream assembles its panel in QML.
 - Our panel has a This device section, offline machines, the owner on every
   machine row, a machine search past eight machines, and an update banner.
   None of those exist upstream.
