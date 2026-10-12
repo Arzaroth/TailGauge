@@ -59,6 +59,14 @@ test('handing it new view state asks again with it', () => {
     assert.equal(svc.ui.phraseIndex, 3);
 });
 
+test('view state handed over mid-request is asked for once that request lands', () => {
+    const {svc} = service({answerFirst: false});
+    svc.ui = {phraseIndex: 4, mullvadPickerOpen: true};
+    assert.equal(askedWith().phraseIndex, undefined, 'the request in flight still has the old state');
+    Gio.__find('panel').answer(PANEL, '', 0);
+    assert.equal(askedWith().phraseIndex, 4);
+});
+
 test('an answer lands, and the derived properties follow it', () => {
     const {svc} = service();
     assert.equal(svc.panel.header.title, 'workstation');
