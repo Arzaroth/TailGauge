@@ -70,17 +70,11 @@ fn probe() -> Vec<ProviderState> {
 fn statuses(installed: &[&'static ProviderDescriptor]) -> Vec<(&'static str, core::StatusResult)> {
     let handles: Vec<_> = installed
         .iter()
-        .map(|provider| {
-            let id = provider.id;
-            let argv = provider.status();
+        .map(|&provider| {
             thread::spawn(move || {
+                let argv = provider.status();
                 let raw = proc::output(&argv[0], &argv[1..]).unwrap_or_default();
-                let parsed = if id == "netbird" {
-                    core::parse_netbird_status(&raw)
-                } else {
-                    core::parse_status(&raw)
-                };
-                (id, parsed)
+                (provider.id, provider.parse_status(&raw))
             })
         })
         .collect();

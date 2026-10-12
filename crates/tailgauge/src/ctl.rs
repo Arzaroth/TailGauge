@@ -63,11 +63,7 @@ fn announce(urgency: &str, summary: &str, body: &str) {
 fn read(provider: &ProviderDescriptor) -> core::StatusResult {
     let argv = provider.status();
     let raw = proc::output(&argv[0], &argv[1..]).unwrap_or_default();
-    if provider.id == "netbird" {
-        core::parse_netbird_status(&raw)
-    } else {
-        core::parse_status(&raw)
-    }
+    provider.parse_status(&raw)
 }
 
 pub fn status(provider: &ProviderDescriptor) -> Outcome {

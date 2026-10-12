@@ -113,6 +113,15 @@ impl ProviderDescriptor {
         argv(&[self.cli, "status", "--json"])
     }
 
+    /// What `status()` printed, through the parser for this provider's shape.
+    pub fn parse_status(&self, raw: &str) -> crate::status::StatusResult {
+        if self.id == "netbird" {
+            crate::netbird::parse_netbird_status(raw)
+        } else {
+            crate::status::parse_status(raw)
+        }
+    }
+
     pub fn up(&self) -> Vec<String> {
         argv(&[self.cli, "up"])
     }
