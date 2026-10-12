@@ -1,17 +1,20 @@
-//! `tailgauge watch` - block until tailscaled reports a state change.
+//! `tailgauge watch` - block until a VPN daemon reports a state change.
 //!
 //! The panels chain this ahead of a refresh, so a change made anywhere - tsui,
 //! the CLI, another desktop - shows up at once instead of waiting for the next
-//! poll.
+//! poll. Tailscale pushes its changes on the IPN bus; every other installed
+//! provider, and a Tailscale without the bus, is polled.
 
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
-use std::sync::mpsc;
+use std::sync::mpsc::{self, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::tailscale;
 use selvedge::proc;
+use tailgauge_core::providers::{PROVIDERS, ProviderDescriptor};
+use tailgauge_core::status::StatusResult;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Outcome {
@@ -19,7 +22,7 @@ pub enum Outcome {
     Changed,
     /// The wait expired with nothing to report.
     Expired,
-    /// No usable tailscale.
+    /// No usable VPN CLI.
     Unusable,
 }
 
@@ -42,8 +45,14 @@ const INTERESTING: &[&str] = &[
     "\"BackendState\"",
 ];
 
+const TAILSCALE: &str = "tailscale";
+
 pub fn run(timeout: Duration) -> Outcome {
-    if !tailscale::installed() {
+    let installed: Vec<&'static ProviderDescriptor> = PROVIDERS
+        .iter()
+        .filter(|p| p.supported && proc::has(p.cli))
+        .collect();
+    if installed.is_empty() {
         return Outcome::Unusable;
     }
 
@@ -51,16 +60,40 @@ pub fn run(timeout: Duration) -> Outcome {
     // its own wait, and starting the fallback on a fresh timeout would make a
     // frontend that asked for 300 seconds wait nearly 600.
     let deadline = Instant::now() + timeout;
-    if supports_watch_ipn() {
-        match watch_ipn(remaining(deadline)) {
-            // A bus that hangs up immediately is not a state change; fall back
-            // rather than spinning on it.
-            Outcome::Unusable => {}
-            settled => return settled,
+    let (tx, rx) = mpsc::channel();
+
+    let mut polled = installed.clone();
+    let mut bus = None;
+    if installed.iter().any(|p| p.id == TAILSCALE) && supports_watch_ipn() {
+        bus = watch_ipn(tx.clone());
+        if bus.is_some() {
+            polled.retain(|p| p.id != TAILSCALE);
         }
     }
+    poll(polled, deadline, tx.clone());
 
-    poll_fallback(deadline)
+    loop {
+        match rx.recv_timeout(remaining(deadline)) {
+            // A bus that hangs up is not a state change; poll in its place
+            // rather than spinning on it.
+            Ok(Outcome::Unusable) => {
+                if let Some(child) = bus.take() {
+                    reap(child);
+                }
+                let tailscale = installed.iter().copied().filter(|p| p.id == TAILSCALE);
+                poll(tailscale.collect(), deadline, tx.clone());
+            }
+            Ok(settled) => return settle(bus, settled),
+            Err(_) => return settle(bus, Outcome::Expired),
+        }
+    }
+}
+
+fn settle(bus: Option<Child>, outcome: Outcome) -> Outcome {
+    if let Some(child) = bus {
+        reap(child);
+    }
+    outcome
 }
 
 /// What is left of the wait, never negative: `Instant - Instant` panics when
@@ -70,33 +103,32 @@ fn remaining(deadline: Instant) -> Duration {
 }
 
 fn supports_watch_ipn() -> bool {
-    if proc::run_quiet("tailscale", ["debug", "watch-ipn", "--help"]) {
+    if proc::run_quiet(TAILSCALE, ["debug", "watch-ipn", "--help"]) {
         return true;
     }
-    proc::run("tailscale", ["debug", "--help"]).is_ok_and(|out| {
+    proc::run(TAILSCALE, ["debug", "--help"]).is_ok_and(|out| {
         let text = String::from_utf8_lossy(&out.stdout) + String::from_utf8_lossy(&out.stderr);
         text.contains("watch-ipn")
     })
 }
 
 /// The IPN bus is the cheap path: tailscaled pushes a notification on every
-/// state and prefs change, so this sits idle until something happens.
-fn watch_ipn(timeout: Duration) -> Outcome {
-    let Ok(mut child) = Command::new("tailscale")
+/// state and prefs change, so this sits idle until something happens. It sends
+/// `Changed` on one of those, `Unusable` when the stream ends without one.
+fn watch_ipn(tx: Sender<Outcome>) -> Option<Child> {
+    let mut child = Command::new(TAILSCALE)
         .args(["debug", "watch-ipn"])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-    else {
-        return Outcome::Unusable;
-    };
+        .ok()?;
 
     let Some(stdout) = child.stdout.take() else {
-        return reap(child, Outcome::Unusable);
+        reap(child);
+        return None;
     };
 
-    let (tx, rx) = mpsc::channel();
     thread::spawn(move || {
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
             if INTERESTING.iter().any(|key| line.contains(key)) {
@@ -104,43 +136,50 @@ fn watch_ipn(timeout: Duration) -> Outcome {
                 return;
             }
         }
-        // The stream ended without saying anything: a bus we cannot use.
         let _ = tx.send(Outcome::Unusable);
     });
-
-    let settled = match rx.recv_timeout(timeout) {
-        Ok(outcome) => outcome,
-        Err(mpsc::RecvTimeoutError::Timeout) => Outcome::Expired,
-        Err(mpsc::RecvTimeoutError::Disconnected) => Outcome::Unusable,
-    };
-    reap(child, settled)
+    Some(child)
 }
 
-fn reap(mut child: Child, outcome: Outcome) -> Outcome {
+fn reap(mut child: Child) {
     let _ = child.kill();
     let _ = child.wait();
-    outcome
 }
 
-/// Older daemons have no watch-ipn, and a broken bus should not turn the panel
-/// into a busy loop. Comparing only the fields the panel renders keeps this
-/// from firing on netmap churn.
-fn poll_fallback(deadline: Instant) -> Outcome {
-    let before = fingerprint();
-    loop {
-        let left = remaining(deadline);
-        if left.is_zero() {
-            return Outcome::Expired;
-        }
-        thread::sleep(Duration::from_secs(2).min(left));
-        if fingerprint() != before {
-            return Outcome::Changed;
-        }
+/// For a provider with no bus, or a daemon too old to have one. Comparing only
+/// the fields the panel renders keeps this from firing on netmap churn.
+fn poll(providers: Vec<&'static ProviderDescriptor>, deadline: Instant, tx: Sender<Outcome>) {
+    if providers.is_empty() {
+        return;
     }
+    thread::spawn(move || {
+        let before = fingerprint(&providers);
+        loop {
+            let left = remaining(deadline);
+            if left.is_zero() {
+                return;
+            }
+            thread::sleep(Duration::from_secs(2).min(left));
+            if fingerprint(&providers) != before {
+                let _ = tx.send(Outcome::Changed);
+                return;
+            }
+        }
+    });
 }
 
-fn fingerprint() -> Option<String> {
-    tailscale::status().as_ref().map(fingerprint_of)
+fn fingerprint(providers: &[&ProviderDescriptor]) -> Vec<Option<String>> {
+    providers
+        .iter()
+        .map(|provider| {
+            if provider.id == TAILSCALE {
+                return tailscale::status().as_ref().map(fingerprint_of);
+            }
+            let argv = provider.status();
+            let raw = proc::output(&argv[0], &argv[1..])?;
+            Some(fingerprint_of_status(&provider.parse_status(&raw)))
+        })
+        .collect()
 }
 
 fn fingerprint_of(status: &serde_json::Value) -> String {
@@ -154,6 +193,13 @@ fn fingerprint_of(status: &serde_json::Value) -> String {
     )
 }
 
+fn fingerprint_of_status(status: &StatusResult) -> String {
+    match status {
+        StatusResult::Ok(ok) => format!("{}|{}|{}", ok.daemon_state, ok.running, ok.needs_login),
+        StatusResult::Unavailable(_) => "unavailable".into(),
+        StatusResult::Error(_) => "error".into(),
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
