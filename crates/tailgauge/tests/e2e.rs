@@ -69,11 +69,12 @@ impl Machine {
                     f = fixtures().display()
                 ),
                 // NetBird with no bus to watch: idle until `connected`
-                // appears in its home. Each status read leaves `read`.
+                // appears in its home. Each status read leaves `read` once it
+                // has answered.
                 "netbird-switching" => format!(
                     "#!/bin/sh\ncase \"$1 $2\" in\n\
-                     'status --json') : > \"$HOME/read\"; if [ -e \"$HOME/connected\" ]; then /bin/cat '{f}/netbird-status.json'; \
-                     else /bin/cat '{f}/netbird-status-idle.json'; fi ;;\n\
+                     'status --json') if [ -e \"$HOME/connected\" ]; then /bin/cat '{f}/netbird-status.json'; \
+                     else /bin/cat '{f}/netbird-status-idle.json'; fi; : > \"$HOME/read\" ;;\n\
                      *) exit 1 ;;\nesac\n",
                     f = fixtures().display()
                 ),
