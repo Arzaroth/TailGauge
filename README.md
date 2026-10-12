@@ -218,6 +218,8 @@ Plasma stores these in the widget's own configuration, GNOME in `org.gnome.shell
 
 ## Development
 
+How TailGauge works, in depth, is in [brain/BRAIN.md](brain/BRAIN.md); the rules a change can break are in [CLAUDE.md](CLAUDE.md).
+
 ```bash
 cargo test                          # the panel, the parsers, the parity rules, distribution
 cargo build --release               # the binary

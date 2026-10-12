@@ -29,6 +29,8 @@ file costs a whole patch release.
 - **README.md** and **omarchy/arzaroth.tailgauge/README.md**: update whatever
   the release makes wrong (a new subcommand, flag, setting, provider, asset, or
   CI step).
+- **brain/**: a doc the release makes wrong (the **brain** skill). Normally
+  fixed on the feature branch, so this too is a completeness check.
 - If the sweep changes anything, commit it on `master` first as
   `[master] docs: ...`, separate from the release commit.
 
