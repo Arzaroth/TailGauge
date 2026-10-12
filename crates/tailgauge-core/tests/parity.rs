@@ -434,3 +434,47 @@ fn the_gnome_extension_has_a_slot_for_every_section_the_panel_emits() {
         "panel.ts must list every section the panel emits, in the order it emits them"
     );
 }
+
+fn between<'a>(source: &'a str, start: &str, end: &str) -> &'a str {
+    let (_, rest) = source
+        .split_once(start)
+        .unwrap_or_else(|| panic!("no {start:?}"));
+    rest.split_once(end).map_or(rest, |(body, _)| body)
+}
+
+/// The bar describes the machine, so a click on it that toggled a connection
+/// would act on a provider the icon is not about.
+#[test]
+fn no_click_on_the_bar_icon_toggles_a_connection() {
+    let handlers = [
+        (
+            "plasma",
+            repo_file("plasma/org.tailgauge.plasmoid/contents/ui/CompactRep.qml"),
+            "onClicked:",
+            "\n    }",
+        ),
+        (
+            "gnome",
+            repo_file("gnome/tailgauge@arzaroth.github.io/extension.ts"),
+            "'button-press-event'",
+            "});",
+        ),
+        (
+            "omarchy",
+            repo_file("omarchy/arzaroth.tailgauge/Panel.qml"),
+            "onPressed: function (buttonCode)",
+            "\n    }",
+        ),
+    ];
+    for (name, source, start, end) in &handlers {
+        let handler = between(source, start, end);
+        assert!(
+            !handler.contains("toggleTailscale"),
+            "{name}: a click on the bar icon toggles the connection"
+        );
+        assert!(
+            handler.contains("cycleProvider"),
+            "{name}: a click on the bar icon no longer cycles the provider"
+        );
+    }
+}
