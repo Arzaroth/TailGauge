@@ -89,7 +89,17 @@ impl Machine {
 
     /// Run the shipped binary as a panel would, with only our fakes visible.
     fn run(&self, args: &[&str]) -> (i32, String, String) {
-        let out = Command::new(env!("CARGO_BIN_EXE_tailgauge"))
+        let out = self.command(args).output().expect("the binary runs");
+        (
+            out.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&out.stdout).into_owned(),
+            String::from_utf8_lossy(&out.stderr).into_owned(),
+        )
+    }
+
+    fn command(&self, args: &[&str]) -> Command {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_tailgauge"));
+        command
             .args(args)
             // Nothing but the fakes. Leaving the system directories on would
             // let a real tailscale on the machine running these tests answer
@@ -99,14 +109,8 @@ impl Machine {
             .env("HOME", &self.home)
             .env("XDG_CACHE_HOME", self.home.join("cache"))
             .env("XDG_DATA_HOME", self.home.join("data"))
-            .env("XDG_CONFIG_HOME", self.home.join("config"))
-            .output()
-            .expect("the binary runs");
-        (
-            out.status.code().unwrap_or(-1),
-            String::from_utf8_lossy(&out.stdout).into_owned(),
-            String::from_utf8_lossy(&out.stderr).into_owned(),
-        )
+            .env("XDG_CONFIG_HOME", self.home.join("config"));
+        command
     }
 
     fn panel(&self, ui: &str) -> Value {
