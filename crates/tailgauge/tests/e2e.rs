@@ -54,12 +54,26 @@ impl Machine {
                 // A daemon that is installed but answering nothing, which is
                 // what a stopped service looks like.
                 "tailscale-down" => "#!/bin/sh\nexit 1\n".to_string(),
+                // `up` prints its login URL and then waits for the login, as
+                // the real one does; it notes whether the page was opened
+                // while it was still waiting.
+                "tailscale-login" => format!(
+                    "#!/bin/sh\ncase \"$1\" in\n\
+                     up) echo 'To authenticate, visit:' >&2\n\
+                         echo '\thttps://login.tailscale.com/a/e2e' >&2\n\
+                         i=0\n\
+                         while [ ! -e \"$HOME/opened\" ] && [ $i -lt 50 ]; do /bin/sleep 0.1; i=$((i+1)); done\n\
+                         [ -e \"$HOME/opened\" ] && : > \"$HOME/opened-while-waiting\" ;;\n\
+                     status) /bin/cat '{f}/status.json' ;;\n\
+                     *) exit 1 ;;\nesac\n",
+                    f = fixtures().display()
+                ),
+                "xdg-open" => "#!/bin/sh\necho \"$1\" > \"$HOME/opened\"\n".to_string(),
                 other => panic!("no fake {other}"),
             };
-            let name = if *cli == "tailscale-down" {
-                "tailscale"
-            } else {
-                cli
+            let name = match *cli {
+                "tailscale-down" | "tailscale-login" => "tailscale",
+                other => other,
             };
             let path = home.join("bin").join(name);
             std::fs::write(&path, script).expect("the fake CLI");
@@ -349,6 +363,21 @@ fn ctl_drives_whichever_provider_is_asked_for() {
     let (code, _, stderr) = machine.run(&["ctl", "--provider", "netbird", "exit-nodes"]);
     assert_eq!(code, 1);
     assert!(stderr.contains("NetBird has no exit nodes"), "{stderr}");
+}
+
+#[test]
+fn ctl_up_from_a_key_binding_opens_the_login_page_while_up_waits() {
+    let machine = Machine::with(&["tailscale-login", "xdg-open"]);
+    let (code, _, stderr) = machine.run(&["ctl", "up"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(
+        std::fs::read_to_string(machine.home.join("opened")).expect("the page was opened"),
+        "https://login.tailscale.com/a/e2e\n"
+    );
+    assert!(
+        machine.home.join("opened-while-waiting").exists(),
+        "the login page opened only after `tailscale up` gave up waiting for it"
+    );
 }
 
 #[test]
