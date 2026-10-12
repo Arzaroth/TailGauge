@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.6.2]
+
 ### Fixed
 
 - **A middle click on the GNOME icon switches provider instead of turning the
