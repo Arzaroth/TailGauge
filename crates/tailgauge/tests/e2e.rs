@@ -69,10 +69,10 @@ impl Machine {
                     f = fixtures().display()
                 ),
                 // NetBird with no bus to watch: idle until `connected`
-                // appears in its home.
+                // appears in its home. Each status read leaves `read`.
                 "netbird-switching" => format!(
                     "#!/bin/sh\ncase \"$1 $2\" in\n\
-                     'status --json') if [ -e \"$HOME/connected\" ]; then /bin/cat '{f}/netbird-status.json'; \
+                     'status --json') : > \"$HOME/read\"; if [ -e \"$HOME/connected\" ]; then /bin/cat '{f}/netbird-status.json'; \
                      else /bin/cat '{f}/netbird-status-idle.json'; fi ;;\n\
                      *) exit 1 ;;\nesac\n",
                     f = fixtures().display()
@@ -401,7 +401,14 @@ fn watch_wakes_on_a_netbird_change() {
         .command(&["watch", "20"])
         .spawn()
         .expect("the watcher runs");
-    std::thread::sleep(std::time::Duration::from_millis(500));
+    let started = std::time::Instant::now();
+    while !machine.home.join("read").exists() {
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(10),
+            "the watcher never read NetBird's status"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
     std::fs::write(machine.home.join("connected"), "").expect("the daemon connects");
 
     let started = std::time::Instant::now();
