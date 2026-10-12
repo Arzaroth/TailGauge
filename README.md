@@ -54,7 +54,7 @@ On Xorg, restart the shell with `Alt+F2` `r`. On Wayland, log out and back in.
 
 ## Outside the panel
 
-The Plasma and GNOME panels have no IPC and need none: they block on `tailscale debug watch-ipn`, so anything that changes tailscaled's state shows up in them within a second, whoever changed it. `tailgauge ctl` drives the daemon from a key binding or a script, and the Omarchy widget additionally answers to `omarchy-shell arzaroth.tailgauge toggle` the way its first-party neighbours do.
+The Plasma and GNOME panels have no IPC and need none: they block on `tailgauge watch`, which listens on tailscaled's IPN bus and polls any other VPN it finds, so a change shows up in them within a second or two, whoever made it. `tailgauge ctl` drives the daemon from a key binding or a script, and the Omarchy widget additionally answers to `omarchy-shell arzaroth.tailgauge toggleTailscale` the way its first-party neighbours do.
 
 ```bash
 tailgauge ctl status              # exits 0 connected, 3 not
@@ -69,14 +69,14 @@ tailgauge ctl version             # which version is installed
 ```
 
 Everything TailGauge shells out to is one binary with a subcommand per job -
-`ctl`, `watch`, `notify`, `send`, `receive`, `file-select`, `copy`. Updating is
+`ctl`, `watch`, `notify`, `send`, `receive`, `file-select`, `copy`, `tui`. Updating is
 a flag rather than a subcommand, `tailgauge --update`. The installer drops a
 symlink per subcommand beside the binary, so the older spelling `tailgauge-ctl
 toggle` still resolves: the binary reads the name it was invoked as.
 
 Run from a key binding there is no terminal to print on, so `up` opens the login page itself and a failure arrives as a notification instead.
 
-**GNOME**: *Settings* in the panel menu has a **Shortcut** row. It is empty until you set one, and it toggles Tailscale in the running extension, so it works on a store install with nothing on `PATH`.
+**GNOME**: *Settings* in the panel menu has a **Shortcut** row. It is empty until you set one, and it toggles the VPN the panel is showing.
 
 **Plasma**: bind it as a custom command in *System Settings > Keyboard > Shortcuts > Add > Command*, with `tailgauge ctl toggle` - `~/.local/bin/tailgauge` if that directory is not on the session's `PATH`. The widget's own popup is bindable without any of this, from *Configure Keyboard Shortcuts* in its context menu.
 
@@ -204,13 +204,13 @@ The GNOME extension is TypeScript, checked under `strict`, and is the only thing
 | Refresh interval | 30s | How often the panel is re-read when nothing has signalled a change |
 | Show the machine name | off | Plasma and GNOME: puts the machine name next to the panel icon |
 | Recent Mullvad regions | - | Shortlist behind the exit node list, cleared from GNOME's preferences |
-| Toggle shortcut | none | GNOME only: a global key that turns Tailscale on and off. Plasma binds `tailgauge-ctl toggle` in System Settings instead |
+| Toggle shortcut | none | GNOME only: a global key that turns the shown VPN on and off. Plasma binds `tailgauge-ctl toggle` in System Settings instead |
 
 Plasma stores these in the widget's own configuration, GNOME in `org.gnome.shell.extensions.tailgauge`, and Omarchy inline on the widget's entry in `~/.config/omarchy/shell.json`.
 
 ## Differences between the frontends
 
-- **The bar icon never toggles a connection.** It describes the machine rather than one provider, so a click that turned something off would act on a provider you cannot see and leave the icon lit while the other stayed up. **Right click** on Omarchy and **middle click** on Plasma cycle which provider the panel is about, and do nothing when only one is installed; **middle click** on Omarchy refreshes. **Right click** on Plasma and GNOME opens the desktop's own context menu, which still carries the toggle and refresh as entries.
+- **The bar icon never toggles a connection.** It describes the machine rather than one provider, so a click that turned something off would act on a provider you cannot see and leave the icon lit while the other stayed up. **Right click** on Omarchy and **middle click** on Plasma and GNOME cycle which provider the panel is about, and do nothing when only one is installed; **middle click** on Omarchy refreshes. **Right click** on Plasma opens the desktop's own context menu, which still carries the toggle and refresh as entries; on GNOME it opens the panel, as a left click does.
 - **GNOME** uses native `PopupMenu` rows rather than a custom keyboard-driven panel, so arrows, Enter and type-ahead behave the way every other extension does. Machines and the Mullvad picker are submenus; the copy actions live inside a machine's submenu.
 - **Clipboard** goes through `tailgauge copy` on all three, which picks `wl-copy` / `xclip` / `xsel`, so the copy actions also work in an X11 session.
 - **No IPC on Plasma and GNOME**. `tailgauge-ctl toggle` stands in there, but it drives tailscaled rather than the panel: nothing talks to a running widget. The Omarchy widget has the shell's IPC and uses it.
