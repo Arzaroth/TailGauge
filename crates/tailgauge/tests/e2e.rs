@@ -68,11 +68,21 @@ impl Machine {
                      *) exit 1 ;;\nesac\n",
                     f = fixtures().display()
                 ),
+                // NetBird with no bus to watch: idle until `connected`
+                // appears in its home.
+                "netbird-switching" => format!(
+                    "#!/bin/sh\ncase \"$1 $2\" in\n\
+                     'status --json') if [ -e \"$HOME/connected\" ]; then /bin/cat '{f}/netbird-status.json'; \
+                     else /bin/cat '{f}/netbird-status-idle.json'; fi ;;\n\
+                     *) exit 1 ;;\nesac\n",
+                    f = fixtures().display()
+                ),
                 "xdg-open" => "#!/bin/sh\necho \"$1\" > \"$HOME/opened\"\n".to_string(),
                 other => panic!("no fake {other}"),
             };
             let name = match *cli {
                 "tailscale-down" | "tailscale-login" => "tailscale",
+                "netbird-switching" => "netbird",
                 other => other,
             };
             let path = home.join("bin").join(name);
@@ -382,6 +392,38 @@ fn ctl_up_from_a_key_binding_opens_the_login_page_while_up_waits() {
         machine.home.join("opened-while-waiting").exists(),
         "the login page opened only after `tailscale up` gave up waiting for it"
     );
+}
+
+#[test]
+fn watch_wakes_on_a_netbird_change() {
+    let machine = Machine::with(&["netbird-switching"]);
+    let mut watch = machine
+        .command(&["watch", "20"])
+        .spawn()
+        .expect("the watcher runs");
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    std::fs::write(machine.home.join("connected"), "").expect("the daemon connects");
+
+    let started = std::time::Instant::now();
+    let code = loop {
+        if let Some(status) = watch.try_wait().expect("the watcher is waited on") {
+            break status.code();
+        }
+        if started.elapsed() > std::time::Duration::from_secs(10) {
+            let _ = watch.kill();
+            panic!("a NetBird that connected did not wake the watcher");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    };
+    assert_eq!(code, Some(0));
+}
+
+#[test]
+fn watch_on_a_quiet_netbird_expires_rather_than_giving_up() {
+    // 1 makes a frontend back off for 30 seconds; 2 re-arms it.
+    let machine = Machine::with(&["netbird"]);
+    let (code, _, stderr) = machine.run(&["watch", "1"]);
+    assert_eq!(code, 2, "{stderr}");
 }
 
 #[test]

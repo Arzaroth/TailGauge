@@ -243,6 +243,23 @@ mod tests {
     }
 
     #[test]
+    fn a_netbird_that_connects_moves_its_fingerprint() {
+        let fixture = |name: &str| {
+            std::fs::read_to_string(
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("../tailgauge-core/tests/fixtures")
+                    .join(name),
+            )
+            .expect("the capture")
+        };
+        let netbird = tailgauge_core::providers::provider_by_id("netbird").expect("netbird");
+        assert_ne!(
+            fingerprint_of_status(&netbird.parse_status(&fixture("netbird-status-idle.json"))),
+            fingerprint_of_status(&netbird.parse_status(&fixture("netbird-status.json")))
+        );
+    }
+
+    #[test]
     fn netmap_churn_is_not_a_change() {
         // The peers move constantly. Fingerprinting them would turn the
         // fallback into a busy loop that refreshes the panel every two seconds.
