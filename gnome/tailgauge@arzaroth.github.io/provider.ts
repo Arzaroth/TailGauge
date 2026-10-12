@@ -65,6 +65,7 @@ export const ProviderService = GObject.registerClass({
     declare settingExitNodeId: string;
     declare selectingNetworkId: string;
     declare _uiState: Panel.Ui;
+    declare _uiPending: boolean;
 
     get installed(): boolean {
         return this.panel.header.toggleVisible;
@@ -102,6 +103,7 @@ export const ProviderService = GObject.registerClass({
         this.settingExitNodeId = '';
         this.selectingNetworkId = '';
         this._uiState = {};
+        this._uiPending = false;
 
         this._settingsChangedId = settings.connect('changed::refresh-interval',
             () => this._armPoll());
@@ -129,7 +131,11 @@ export const ProviderService = GObject.registerClass({
     /// picker, the expanded row. Assigning it re-asks.
     set ui(value: Panel.Ui) {
         this._uiState = value;
-        this.refresh();
+        // A panel already in flight was asked with the old state.
+        if (this._cancellables.has('panel'))
+            this._uiPending = true;
+        else
+            this.refresh();
     }
 
     get ui(): Panel.Ui {
@@ -162,6 +168,10 @@ export const ProviderService = GObject.registerClass({
     refresh(): void {
         this._run('panel', ['tailgauge', 'panel', '--json', '--ui', JSON.stringify(this._ui())],
             (status, stdout, stderr) => {
+                if (this._uiPending) {
+                    this._uiPending = false;
+                    this.refresh();
+                }
                 if (status !== 0) {
                     this.lastError = stderr.trim() || 'The panel could not be read';
                     return;
