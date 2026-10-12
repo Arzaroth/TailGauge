@@ -29,8 +29,10 @@ In order, each an `exitNode` row with `action: setExitNode`, `hint`
 1. Every tailnet exit node.
 2. The **recent shortlist**, `recent_mullvad_nodes(regions, recentRegions, 5)`:
    the region in use first, then remembered regions still on offer, at most 5.
-   A region key is `mullvad_region_key` (`country\ncity`); a remembered key
-   matching no region is skipped.
+   A region key is `mullvad_region_key` (`country\ncity`). A remembered key
+   that matches no region's full key falls back to the first region in that
+   country (`mullvad_region_node`), so a country-only key still yields a node;
+   one matching neither is skipped.
 3. The **picker**, a `mullvad:add` row ("Choose Mullvad region",
    `kind: mullvadPicker`, `action: togglePicker`, `expanded` from
    `mullvadPickerOpen`, `searchPlaceholder` "Search regions"). Its children are
@@ -68,7 +70,7 @@ active region only.
 
 ## Sources
 
-- `crates/tailgauge-core/src/exit_nodes.rs` (`parse_exit_node_list`, `mullvad_region_options`, `mullvad_region_key`, `recent_mullvad_nodes`, `push_recent_mullvad`, `mullvad_region_search_key`)
+- `crates/tailgauge-core/src/exit_nodes.rs` (`parse_exit_node_list`, `mullvad_region_options`, `mullvad_region_key`, `recent_mullvad_nodes`, `mullvad_region_node`, `push_recent_mullvad`, `mullvad_region_search_key`)
 - `crates/tailgauge-core/src/panel.rs` (`exit_nodes_section`, `exit_node_rows`, `exit_node_row`, `exit_node_target`, `peer_address`)
 - `crates/tailgauge/src/ctl.rs` (`exit_node`, `target_of`, `requested_node`), `crates/tailgauge/src/tailscale.rs` (`current_exit_node`)
 - `gnome/tailgauge@arzaroth.github.io/provider.ts` (`rememberMullvadRegion`, `setExitNode`), `plasma/org.tailgauge.plasmoid/contents/ui/main.qml` (`persistRecentMullvad`), `omarchy/arzaroth.tailgauge/Panel.qml`

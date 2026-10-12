@@ -31,11 +31,14 @@ in the provider's own `up` / `down` argv ([../architecture/providers.md](../arch
 
 - **Attended** (stdout is a terminal): `up` runs the provider's `up` with the
   terminal's stdio, so the CLI prints its own login URL.
-- **Unattended** (key binding, frontend): `first_login_url` runs `up` to
-  completion, reading stdout and stderr in two threads and keeping the first
-  `https://` token (`login_url`); once `up` has exited it notifies "Authorize
-  this device" and `xdg-open`s the URL. Then it re-reads status, and if the
-  provider is not running posts a critical "Could not turn X on".
+- **Unattended** (key binding, frontend): `run_opening_login` runs `up`,
+  reading stdout and stderr in two threads for the first `https://` token
+  (`login_url`). As soon as one appears it notifies "Authorize this device" /
+  "Opening the <provider label> login page" and `xdg-open`s the URL, while `up`
+  keeps waiting for the login to finish; it then waits for `up` to exit. Then
+  it re-reads status, and if the provider is not running posts a critical
+  "Could not turn X on" (e2e
+  `ctl_up_from_a_key_binding_opens_the_login_page_while_up_waits`).
 - `down` runs `<cli> down`; failure is a critical notification. `toggle` reads
   status and calls exactly one of them. `status` exits 0 connected, 3 not
   (`idle_line`: "Needs login", "Disconnected", or the daemon's own state word).
@@ -45,11 +48,12 @@ in the provider's own `up` / `down` argv ([../architecture/providers.md](../arch
 ## Desktop bindings
 
 - Plasma: bind `tailgauge ctl toggle` as a custom command. GNOME: the
-  `toggle-shortcut` setting (`Main.wm.addKeybinding`) toggles inside the
-  extension, and a **middle click on the GNOME indicator** also toggles.
+  `toggle-shortcut` setting (`Main.wm.addKeybinding`) calls the extension's
+  `toggleTailscale`, which still spawns `tailgauge ctl` and needs the binary.
   Omarchy: `omarchy-shell arzaroth.tailgauge toggleTailscale` (IPC also has
-  `up`, `down`, `status`, `diagnose`). On Plasma and Omarchy the bar icon never
-  toggles ([netbird.md](netbird.md)).
+  `up`, `down`, `status`, `diagnose`). On no desktop does the bar icon toggle;
+  its middle click (Plasma, GNOME) or right click (Omarchy) cycles the provider
+  ([netbird.md](netbird.md), `no_click_on_the_bar_icon_toggles_a_connection`).
 - The panels watch `tailgauge watch`, so a change made by `ctl`, the CLI or
   another desktop shows up without IPC.
 
@@ -57,7 +61,7 @@ in the provider's own `up` / `down` argv ([../architecture/providers.md](../arch
 
 - `crates/tailgauge-core/src/panel.rs` (`panel_header`, `toggle_hint`, `ACTIVE_PHRASES`, `panel_status`)
 - `crates/tailgauge/src/gather.rs` (`Ui.active`, `panel_state`)
-- `crates/tailgauge/src/ctl.rs` (`up`, `down`, `toggle`, `status`, `first_login_url`, `login_url`, `announce`, `attended`, `EXIT_DISCONNECTED`)
-- `gnome/tailgauge@arzaroth.github.io/provider.ts` (`_showOptimistically`, `_desired`, `loginOrUp`, `down`, `_ctl`), `extension.ts` (`BUTTON_MIDDLE`, `toggle-shortcut`)
+- `crates/tailgauge/src/ctl.rs` (`up`, `down`, `toggle`, `status`, `run_opening_login`, `login_url`, `announce`, `attended`, `EXIT_DISCONNECTED`)
+- `gnome/tailgauge@arzaroth.github.io/provider.ts` (`_showOptimistically`, `_desired`, `loginOrUp`, `down`, `_ctl`), `extension.ts` (`BUTTON_MIDDLE`, `_cycleProvider`, `toggle-shortcut`, `toggle`)
 - `plasma/org.tailgauge.plasmoid/contents/ui/ProviderService.qml`, `omarchy/arzaroth.tailgauge/Service.qml`, `omarchy/arzaroth.tailgauge/Panel.qml` (`IpcHandler`)
-- `crates/tailgauge-core/tests/specification.rs` (`the_header_reflects_every_connection_state`, `the_toggle_hint_names_the_provider_it_will_act_on`), `crates/tailgauge/tests/e2e.rs`
+- `crates/tailgauge-core/tests/specification.rs` (`the_header_reflects_every_connection_state`, `the_toggle_hint_names_the_provider_it_will_act_on`), `crates/tailgauge-core/tests/parity.rs` (`no_click_on_the_bar_icon_toggles_a_connection`), `crates/tailgauge/tests/e2e.rs` (`ctl_up_from_a_key_binding_opens_the_login_page_while_up_waits`)

@@ -14,17 +14,14 @@ CLIs, polls every installed one, and returns the whole panel: sections, rows,
 labels, visibility, cursor order. The frontends draw it. Strings are English,
 written once in the core.
 
-**Why.** Three frontends each ran four CLI calls and parsed them three ways
-through a shared TypeScript model, and they disagreed. Moving the model into
-Rust (0.5.0) took 2,830 lines of service code out of the frontends, made a
-panel one process spawn, and measured faster on a 52-machine tailnet than the
-calls it replaced. There were never any translations, so `_()` and `i18n()`
-resolved to their own arguments while Omarchy drew the raw strings.
-
-**Rejected.**
-- *A shared JS/TS model imported by each frontend*: QML and GJS import it
-  differently, and nothing stopped a frontend from deciding on its own.
-- *Per-desktop translation of panel strings*: no translations ever existed.
+**Why.** A panel was four CLI calls parsed three different ways, one per
+frontend, feeding `shared/model.ts`. Resolving it in the binary (0.5.0) made it
+one process spawn, removed 2,830 lines of service code, and measured faster on
+a live 52-machine tailnet than the calls alone; nothing changed on screen. The
+panel is decided in one place, which is what made the TUI (0.6.0) one more
+thing that draws it. The strings are English because no translations ever
+existed: `_()` and `i18n()` resolved to their own arguments while Omarchy drew
+the raw strings.
 
 **Consequences.** A frontend filters search lists itself, because a keystroke
 cannot wait on a process; it hands back only what it alone knows (`--ui`).
@@ -35,7 +32,7 @@ cannot wait on a process; it hands back only what it alone knows (`--ui`).
 
 **Decision.** The bar icon and tooltip describe every installed provider at
 once, and a click on it never toggles a connection. Right click on Omarchy and
-middle click on Plasma cycle which provider the panel is about.
+middle click on Plasma and GNOME cycle which provider the panel is about.
 
 **Why.** When the icon toggled, a click turned off a provider you could not see
 and left the icon lit while the other stayed up (0.4.0).
@@ -44,23 +41,24 @@ and left the icon lit while the other stayed up (0.4.0).
 - *Toggle the active provider*: acts on something the icon does not show.
 
 **Consequences.** `gather` polls every installed provider, not just the active
-one. GNOME's middle click still calls `toggleTailscale`: that is drift from
-this decision, not part of it. See
+one. `no_click_on_the_bar_icon_toggles_a_connection` holds the click handlers
+on all three desktops to it (GNOME's middle click toggled until that test
+existed). See
 [architecture/frontends.md](architecture/frontends.md).
 
 ### 0003 A provider's commands live in the registry
 
 **Decision.** Every argv a provider is driven with is a method on its
-`ProviderDescriptor`, gated by its capabilities. Frontends call
-`tailgauge ctl --provider ID ...` and never name a provider binary.
+`ProviderDescriptor`. Frontends call `tailgauge ctl --provider ID ...` and never
+name a provider binary. Which provider has which command is decided in
+`providers.rs` (the optional methods check `self.id` today); capabilities
+decide which sections the panel shows.
 
 **Why.** Each service used to spell `tailscale` into its commands, which is how
 a panel could show one provider and drive another (0.4.0).
 
 **Rejected.**
 - *Each frontend spelling its own argv*: the incident above, three times over.
-- *Branching on the provider's name*: a capability says what a provider can do;
-  a name check goes stale when the next provider arrives.
 
 See [architecture/providers.md](architecture/providers.md).
 
@@ -70,8 +68,10 @@ See [architecture/providers.md](architecture/providers.md).
   [features/connection.md](features/connection.md).
 - **No control is gated on `busy`.** A background poll is always running; a
   switch disabled for it is a switch that cannot be clicked.
-- **Search keys come lowercased from the core.** A frontend that lowercased its
-  own haystack swallowed keys and looked case-sensitive. See
+- **Search keys come lowercased from the core.** Since 0.5.0 each searchable
+  row carries its `searchKey`, so the panel call no longer takes the queries
+  and a keystroke no longer rebuilds the panel; a frontend only tests the
+  substring. See
   [features/machines.md](features/machines.md).
 - **GNOME draws native `PopupMenu` rows** and ignores `panel.navigation`, so
   arrows, Enter and type-ahead behave as in every other extension. See
@@ -100,8 +100,8 @@ bindings and scripts written against `tailgauge-ctl toggle` must keep working.
 - *Keeping the shell helpers*: the parsing they did is what the core exists for.
 - *Dropping the old names*: breaks every existing key binding.
 
-**Consequences.** `ALIASES` and the alias loop in `install.sh` must list the
-same names. See [architecture/binary.md](architecture/binary.md).
+**Consequences.** `ALIASES` (`project.rs`), the alias loop in `install.sh` and
+`ALIASES=(...)` in `scripts/compat/tailgauge-update` must list the same names. See [architecture/binary.md](architecture/binary.md).
 
 - **Updating is a flag, not a subcommand.** A subcommand would want a
   `tailgauge-update` alias, which is the name of the old shell updater; the
@@ -148,5 +148,17 @@ See [architecture/distribution.md](architecture/distribution.md).
 - **Receive claims each file with a hard link into a staging directory.** No
   check-then-rename race, and it stays on one filesystem. See
   [features/taildrop.md](features/taildrop.md).
-- **The GNOME toggle shortcut runs in the extension, with no default.** It
-  works on a store install with nothing on `PATH`, and collides with nothing.
+- **The GNOME toggle shortcut is bound in the extension, with no default.** It
+  collides with nothing. It still needs the binary: the key calls
+  `toggleTailscale`, which spawns `tailgauge ctl` and does nothing until the
+  binary has answered a panel. See [features/keyboard.md](features/keyboard.md).
+
+## Sources
+
+- `CHANGELOG.md` (0.4.0, 0.5.0, 0.5.1, 0.6.0)
+- `crates/tailgauge-core/src/panel.rs`, `crates/tailgauge-core/src/providers.rs`
+- `crates/tailgauge-core/tests/parity.rs`
+- `crates/tailgauge/src/main.rs` (`splice_alias`), `crates/tailgauge/src/project.rs`
+- `crates/tailgauge/src/watch.rs`
+- `scripts/install.sh`, `scripts/compat/tailgauge-update`
+- `gnome/tailgauge@arzaroth.github.io/extension.ts`, `gnome/tailgauge@arzaroth.github.io/provider.ts`

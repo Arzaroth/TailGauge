@@ -27,7 +27,7 @@ no flag prints help and exits 2 (`Action::Nothing`).
 | --- | --- | --- |
 | `panel [--json] [--ui '<json>']` | gather every installed provider and print `panel_spec` as JSON (`run_panel`); `--ui` defaults to `{}`, `--json` is accepted and ignored | 0, 1 on bad `--ui` |
 | `ctl [--provider ID] <action>` | drive the daemon, see below | per action |
-| `watch [TIMEOUT=300]` | block until tailscaled reports a change ([providers.md](providers.md)) | 0 changed, 2 expired, 1 unusable |
+| `watch [TIMEOUT=300]` | block until any installed supported provider reports a change ([providers.md](providers.md)) | 0 changed, 2 expired, 1 no supported VPN CLI installed |
 | `send [--peer JSON] MACHINE\|FILES...` | Taildrop send, opening a chooser when no file is named | 0 sent or nothing picked, 1 failed |
 | `receive [--once] [DIR]` | Taildrop receive loop, the systemd unit's `ExecStart` | 0 / 1 |
 | `tui` | the panel in a terminal ([../features/tui.md](../features/tui.md)) | 0 / 1 |
@@ -49,10 +49,14 @@ rest as argv[1], so the symlink and the subcommand share one parser. A bare
 `tailgauge-` is left alone. There is no `tailgauge-panel` symlink, and the old
 `tailgauge-update` is in `project::TAILGAUGE.legacy` because updating is a flag.
 
-- `ALIASES` in `project.rs` (what selvedge rewrites on `--update`) and the
-  `for alias in` loop in `scripts/install.sh` must match:
-  `the_installer_and_the_updater_write_the_same_aliases`,
-  `every_alias_the_installer_writes_is_a_subcommand`.
+- The alias list lives in three places that must match: `ALIASES` in
+  `project.rs` (what selvedge rewrites on `--update`), the `for alias in` loop
+  in `scripts/install.sh`, and `ALIASES=(...)` in
+  `scripts/compat/tailgauge-update` (the bootstrap a 0.4.0 install updates
+  through). The first two are compared exactly
+  (`the_installer_and_the_updater_write_the_same_aliases`,
+  `every_alias_the_installer_writes_is_a_subcommand`); the bootstrap only by a
+  substring check in `the_bootstrap_downloads_an_archive_the_release_publishes`.
 
 ## `ctl`
 
@@ -80,7 +84,9 @@ capability fails before anything spawns
 **Attended or not.** `attended()` is stdout being a terminal and
 `take_over_terminal()` not having been called (the TUI calls it so a daemon's
 chatter does not land on its frame). Unattended, failures become
-notifications through `announce`, `up` scrapes the login URL, and `authorize`
+notifications through `announce`, `up` scrapes the login URL and opens it as
+soon as it is printed while `up` keeps waiting (`run_opening_login`,
+[../features/connection.md](../features/connection.md)), and `authorize`
 detaches pkexec's stdio.
 
 ## Helpers
@@ -113,7 +119,7 @@ detaches pkexec's stdio.
 ## Sources
 
 - `crates/tailgauge/src/main.rs` (`Cli`, `Action`, `resolve`, `Command`, `CtlAction`, `EXIT_NO_CHOOSER`, `resolve_provider`, `run_panel`, `splice_alias`, `settle`, `report`)
-- `crates/tailgauge/src/ctl.rs` (`EXIT_DISCONNECTED`, `Outcome`, `attended`, `take_over_terminal`, `announce`, `target_of`, `address_of`, `requested_node`, `authorize_command`)
+- `crates/tailgauge/src/ctl.rs` (`EXIT_DISCONNECTED`, `Outcome`, `attended`, `take_over_terminal`, `announce`, `read`, `run_opening_login`, `login_url`, `target_of`, `address_of`, `requested_node`, `authorize_command`)
 - `crates/tailgauge/src/notify.rs` (`Notification`, `run`, `spawn_actionable`, `await_action`), `copy.rs` (`candidates`), `file_select.rs` (`order`, `Picked`)
-- `crates/tailgauge/src/project.rs` (`TAILGAUGE`, `ALIASES`), `scripts/install.sh` (alias loop), `systemd/tailgauge-receive.service`
-- `crates/tailgauge/tests/e2e.rs`
+- `crates/tailgauge/src/project.rs` (`TAILGAUGE`, `ALIASES`), `scripts/install.sh` (alias loop), `scripts/compat/tailgauge-update` (`ALIASES`), `systemd/tailgauge-receive.service`
+- `crates/tailgauge/tests/e2e.rs` (`ctl_up_from_a_key_binding_opens_the_login_page_while_up_waits`)

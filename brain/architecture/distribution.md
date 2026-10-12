@@ -12,11 +12,14 @@ payloads, and selvedge doing the fetching and replacing.
   pointing at `tailgauge`. `main::splice_alias` reads `argv[0]` and inserts the
   name after `tailgauge-` as the subcommand, so key bindings on the old shell
   helpers (`tailgauge-ctl toggle`) keep working with one parser.
-- The list is written twice: the `for alias in` loop of `install.sh` and
+- The list is written three times: the `for alias in` loop of `install.sh`,
   `ALIASES` in `crates/tailgauge/src/project.rs` (selvedge rewrites those on
-  `--update`). `the_installer_and_the_updater_write_the_same_aliases` (in
-  `main.rs`) and `every_alias_names_a_subcommand_the_binary_has` keep them equal
-  and real. A new subcommand needs both.
+  `--update`), and `ALIASES=(...)` in `scripts/compat/tailgauge-update` (the
+  bootstrap). `the_installer_and_the_updater_write_the_same_aliases` (in
+  `main.rs`) and `every_alias_names_a_subcommand_the_binary_has` keep the first
+  two equal and real; the bootstrap is held only by a substring check in
+  `the_bootstrap_downloads_an_archive_the_release_publishes`. A new subcommand
+  needs all three.
 - `tailgauge-update` is a **legacy** name (`TAILGAUGE.legacy`): updating is a
   flag, so the binary answers that name with a usage error. Both `install.sh`
   and selvedge's update delete it. `a_legacy_name_is_not_also_an_alias`.

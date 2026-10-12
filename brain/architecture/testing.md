@@ -21,15 +21,15 @@ rows. It resolves panels from captures in `tests/fixtures/`: `status.json`,
 `exit-nodes.txt`, `accounts.json` (Tailscale) and `netbird-status.json`,
 `netbird-status-idle.json`, `netbird-networks.txt`, at a fixed `NOW`. When a
 CLI's shape changes, update the capture first; a suite passing against a stale
-capture is how a parser breaks silently. The file's header still describes it
-as a port of `test/model.test.ts` beside a differential harness; both are gone.
+capture is how a parser breaks silently.
 
 ## Parity (`crates/tailgauge-core/tests/parity.rs`)
 
 Source-grepping guards over the Plasma, GNOME and Omarchy sources (not the TUI):
 no user-visible string written in a frontend, no re-derived section visibility,
 exit-node list, copy options, status precedence or search haystack, no provider
-binary named in an argv, a GNOME slot for every section. Details and the full
+binary named in an argv, a GNOME slot for every section, no bar-icon click that
+toggles a connection. Details and the full
 list in [panel-spec.md](panel-spec.md).
 
 ## The binary (`crates/tailgauge/tests/e2e.rs` and inner tests)
@@ -92,8 +92,8 @@ geometry to `probe.txt` and screenshots top and bottom. Fails when the probe
 never finishes, records `error:`, or the shell log shows a JS error from the
 extension. Flags: `--live` (serve the installed `tailgauge panel --json`),
 `--json FILE`, `--gnome N` (45 or later, default 50), `--monitor WxH`, `--out
-DIR`. Exists because GNOME 45 drew every section one pixel tall (fixed in
-0.6.1) and no other test could see it. Run at 45 and 50 after any
+DIR`. Exists because GNOME 45 drew every section one pixel tall and no other
+test could see it. Run at 45 and 50 after any
 `extension.ts` change.
 
 ## Sources

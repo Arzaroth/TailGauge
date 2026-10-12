@@ -23,7 +23,10 @@ Each has one service file that owns the subprocesses (`ProviderService.qml`,
   is `_ui()`: shown provider, `busy`, `updating`, `version`, `actionStatus`,
   `lastError`, the in-flight ids, `active` only while an optimistic toggle is
   pending, merged with the view's `ui` (`recentRegions`, `mullvadPickerOpen`,
-  `expandedPeerId`, `phraseIndex`). Assigning `ui` re-asks at once. The answer
+  `expandedPeerId`, `phraseIndex`). Assigning `ui` re-asks at once (`onUiChanged`
+  on the QML services, the `set ui` accessor in `provider.ts`). GNOME's
+  `_pushUi` always sends `mullvadPickerOpen: true` and never sends
+  `expandedPeerId`. The answer
   is push-assigned to `panel`; output without a `header` is ignored and the last
   good panel stays.
 - **Acts** only through the binary: `_ctl(kind, action, extra)` builds
@@ -60,13 +63,15 @@ It draws `panel.bar` (connected, crossed, warning badge) and its tooltip is
 | | Left | Middle | Right |
 | --- | --- | --- | --- |
 | Plasma (`CompactRep.qml`) | open / close the popup | cycle provider (`root.cycleProvider`) | Plasma's applet menu: `toggleHint` entry and Refresh (`Plasmoid.contextualActions`) |
-| GNOME (`extension.ts`) | open the menu (`PanelMenu.Button`) | `toggleTailscale()` on the active provider | opens the menu |
+| GNOME (`extension.ts`) | open the menu (`PanelMenu.Button`) | cycle provider (`_cycleProvider`) | opens the menu |
 | Omarchy (`Panel.qml` `BarIconButton`) | open / close the panel | refresh | cycle provider |
 
 Cycling walks the rows of the `providers` section and does nothing with fewer
-than two. GNOME's middle click is the one place a bar click still turns a
-connection on or off; it has done so since the first GNOME port, while Plasma
-and Omarchy stopped in 0.4.0.
+than two. No bar click turns a connection on or off:
+`no_click_on_the_bar_icon_toggles_a_connection` (`parity.rs`) reads each
+desktop's click handler and fails if it calls `toggleTailscale` or stops
+calling `cycleProvider`. GNOME's middle click toggled the active provider until
+that test existed.
 
 ## Plasma
 
@@ -117,13 +122,15 @@ and Omarchy stopped in 0.4.0.
   (`refresh-interval`, `show-status-in-panel`, `toggle-shortcut`,
   `active-provider`, `recent-mullvad-regions`), edited in `prefs.ts` (Adwaita:
   name in panel, refresh interval, shortcut capture, clear recent regions). The
-  toggle shortcut is registered with `Main.wm.addKeybinding` and toggles
-  in-process, so it works on an EGO install with nothing on PATH.
+  toggle shortcut is registered with `Main.wm.addKeybinding` and calls the
+  indicator's `toggle()`, which is `toggleTailscale()`: that returns early
+  unless the binary has answered a panel, then spawns `tailgauge ctl` through
+  `_ctl`. Without the binary the key does nothing.
 - Shell differences, probed at run time rather than by version number: `box()`
   sets `orientation` where GNOME 48 dropped `vertical`; `scrollView()` uses
   `add_actor` on GNOME 45, where `St.ScrollView` is an `St.Bin` without a
   `vadjustment`, and `child` from 46 on (setting `child` on 45 drew the section
-  one pixel tall, the 0.6.1 fix). `tests/gnome/shell/run.sh --gnome 45` checks
+  one pixel tall, the GNOME 45 scroll fix). `tests/gnome/shell/run.sh --gnome 45` checks
   this in a real headless shell; it is local, not CI.
 - Build: `tsc -p tsconfig.gnome.json` emits to `build/.ts/gnome`;
   `scripts/build.sh` copies the `.js` over the `.ts` into
@@ -142,7 +149,8 @@ and Omarchy stopped in 0.4.0.
   visibility and row count as JSON.
 - `Service.qml` runs one `Process` per command kind (an `Action` component
   that clears its in-flight id on exit) and `execDetached` for copy, send and
-  `xdg-open`. Its `busy` covers `actionProc`, `switchProc` and `exitNodeProc`.
+  `xdg-open`. Its `busy` covers `actionProc`, `switchProc`, `exitNodeProc`,
+  `selectNetworkProc` and `operatorProc`.
   It reads its version from `manifest.json` with a `FileView` and refreshes
   once that loads.
 - Settings live inline on the widget's entry in `~/.config/omarchy/shell.json`;
@@ -172,8 +180,8 @@ a command. It has no watcher and no settings file. See
 ## Sources
 
 - `plasma/org.tailgauge.plasmoid/contents/ui/{main,CompactRep,FullRep,PanelRowView,ProviderService,ConfigGeneral}.qml`, `plasma/org.tailgauge.plasmoid/contents/config/main.xml`, `plasma/org.tailgauge.plasmoid/metadata.json`
-- `gnome/tailgauge@arzaroth.github.io/panel.ts` (`SECTION_IDS`, `emptyPanel`), `provider.ts` (`ProviderService`, `_ui`, `_ctl`, `_showOptimistically`, `_watch`, `_armPoll`), `extension.ts` (`box`, `scrollView`, `TailGaugeIndicator`, `_signatureOf`, `_applySearch`, `_onMenuKey`, `_dispatch`), `prefs.ts`, `metadata.json`, `schemas/org.gnome.shell.extensions.tailgauge.gschema.xml`
+- `gnome/tailgauge@arzaroth.github.io/panel.ts` (`SECTION_IDS`, `emptyPanel`), `provider.ts` (`ProviderService`, `ui` accessor, `_ui`, `_ctl`, `toggleTailscale`, `_showOptimistically`, `_watch`, `_armPoll`), `extension.ts` (`box`, `scrollView`, `TailGaugeIndicator`, `_cycleProvider`, `_pushUi`, `toggle`, `_signatureOf`, `_applySearch`, `_onMenuKey`, `_dispatch`), `prefs.ts`, `metadata.json`, `schemas/org.gnome.shell.extensions.tailgauge.gschema.xml`
 - `omarchy/arzaroth.tailgauge/{Panel,Service}.qml` (`IpcHandler`, `diagnose`, `persistSetting`, `cycleProvider`), `omarchy/arzaroth.tailgauge/manifest.json`
 - `crates/tailgauge/src/tui.rs`, `crates/tailgauge/src/copy.rs`
 - `scripts/build.sh`, `tsconfig.gnome.json`, `tests/qml/run.sh`, `tests/gnome/shell/run.sh`
-- `crates/tailgauge-core/tests/parity.rs`, `crates/tailgauge/tests/e2e.rs` (`every_command_the_frontends_invoke_exists`)
+- `crates/tailgauge-core/tests/parity.rs` (`no_click_on_the_bar_icon_toggles_a_connection`), `tests/gnome/provider.test.js`, `crates/tailgauge/tests/e2e.rs` (`every_command_the_frontends_invoke_exists`)
