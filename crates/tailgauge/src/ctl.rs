@@ -125,11 +125,12 @@ pub fn up(provider: &ProviderDescriptor) -> Outcome {
 
     // Bound to a key there is no terminal for `tailscale up` to print its
     // login URL on, so it is scraped out of the stream the way the panels do.
-    if let Some(url) = first_login_url(&argv) {
+    // `up` waits for the login to finish, so the page opens while it waits.
+    run_opening_login(&argv, |url| {
         announce(
             "normal",
             "Authorize this device",
-            "Opening the Tailscale login page",
+            &format!("Opening the {} login page", provider.label),
         );
         let _ = Command::new("xdg-open")
             .arg(url)
@@ -137,7 +138,7 @@ pub fn up(provider: &ProviderDescriptor) -> Outcome {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn();
-    }
+    });
 
     if matches!(read(provider), core::StatusResult::Ok(status) if status.running) {
         return Outcome::Ok;
@@ -150,16 +151,18 @@ pub fn up(provider: &ProviderDescriptor) -> Outcome {
     Outcome::Failed(format!("could not turn {} on", provider.label))
 }
 
-/// Run `tailscale up` to completion, returning the first login URL it printed
-/// on either stream.
-fn first_login_url(argv: &[String]) -> Option<String> {
-    let mut child = Command::new(&argv[0])
+/// Run `tailscale up` to completion, handing the first login URL it prints on
+/// either stream to `open` as soon as it appears.
+fn run_opening_login(argv: &[String], open: impl FnOnce(String)) {
+    let Ok(mut child) = Command::new(&argv[0])
         .args(&argv[1..])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .ok()?;
+    else {
+        return;
+    };
 
     let (tx, rx) = mpsc::channel();
     for stream in [
@@ -180,9 +183,10 @@ fn first_login_url(argv: &[String]) -> Option<String> {
     }
     drop(tx);
 
-    let first = rx.iter().next();
+    if let Some(url) = rx.iter().next() {
+        open(url);
+    }
     let _ = child.wait();
-    first
 }
 
 fn readable(pipe: impl std::io::Read + Send + 'static) -> BufReader<Box<dyn std::io::Read + Send>> {
