@@ -57,7 +57,9 @@ manifest's `right` applies. Add `--no-taildrop` to skip the receive service.
   refreshes, `c` / `n` / `d` copy the selected machine's IP, name and MagicDNS
   name, `s` sends files to it, Tab moves to the neighbouring bar panel, Esc
   closes.
-- IPC: `omarchy-shell arzaroth.tailgauge <open|close|toggle|refresh|up|down|toggleTailscale|status>`.
+- IPC: `omarchy-shell arzaroth.tailgauge <open|close|show|hide|toggle|refresh|up|down|toggleTailscale|status|diagnose>`.
+  `toggle` opens or closes the panel; `toggleTailscale` turns the VPN on or off;
+  `diagnose` prints what the panel believes, as JSON.
 
 ## Settings
 
