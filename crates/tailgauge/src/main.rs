@@ -108,10 +108,10 @@ enum Command {
         action: CtlAction,
     },
 
-    /// Block until tailscaled reports a state change.
+    /// Block until an installed VPN daemon reports a state change.
     ///
-    /// Exits 0 when something moved, 2 when the wait expired, 1 when tailscale
-    /// is unusable.
+    /// Exits 0 when something moved, 2 when the wait expired, 1 when no VPN
+    /// CLI is installed.
     Watch {
         #[arg(default_value_t = 300)]
         timeout_seconds: u64,
@@ -197,11 +197,11 @@ enum CtlAction {
     ///
     /// Exits 0 when connected and 3 when it is not, so it can gate a script.
     Status,
-    /// Turn Tailscale off if it is on, on if it is off.
+    /// Turn the VPN off if it is on, on if it is off.
     Toggle,
-    /// Turn Tailscale on, opening the login page if it needs one.
+    /// Turn the VPN on, opening the login page if it needs one.
     Up,
-    /// Turn Tailscale off.
+    /// Turn the VPN off.
     Down,
     /// Print the current exit node, or route through NAME; "off" clears it.
     ExitNode {
