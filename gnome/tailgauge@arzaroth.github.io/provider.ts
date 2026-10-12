@@ -64,9 +64,7 @@ export const ProviderService = GObject.registerClass({
     declare switchingAccountId: string;
     declare settingExitNodeId: string;
     declare selectingNetworkId: string;
-    /// What the extension, not the daemon, decides: the hero phrase, the
-    /// picker, the expanded row. Assigning it re-asks.
-    declare ui: Panel.Ui;
+    declare _uiState: Panel.Ui;
 
     get installed(): boolean {
         return this.panel.header.toggleVisible;
@@ -103,7 +101,7 @@ export const ProviderService = GObject.registerClass({
         this.switchingAccountId = '';
         this.settingExitNodeId = '';
         this.selectingNetworkId = '';
-        this.ui = {};
+        this._uiState = {};
 
         this._settingsChangedId = settings.connect('changed::refresh-interval',
             () => this._armPoll());
@@ -125,6 +123,17 @@ export const ProviderService = GObject.registerClass({
 
     get attentive(): boolean {
         return this._attentive;
+    }
+
+    /// What the extension, not the daemon, decides: the hero phrase, the
+    /// picker, the expanded row. Assigning it re-asks.
+    set ui(value: Panel.Ui) {
+        this._uiState = value;
+        this.refresh();
+    }
+
+    get ui(): Panel.Ui {
+        return this._uiState;
     }
 
     // ---- asking -----------------------------------------------------------
