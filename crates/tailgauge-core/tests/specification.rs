@@ -1,12 +1,5 @@
-//! The specification, ported from `test/model.test.ts`.
-//!
-//! The differential harness proves the Rust agrees with the TypeScript, but it
-//! dies with the TypeScript. These are the tests that say what the panel
-//! *should* do, against the same fixtures, so that deleting `shared/model.ts`
-//! deletes a second implementation rather than the specification.
-//!
-//! Kept in the order and the wording of the file they came from, so the two
-//! can be read side by side while both exist.
+//! The specification: what the panel should do, resolved from captures of
+//! what a real daemon said.
 
 use std::path::PathBuf;
 use std::sync::LazyLock;
