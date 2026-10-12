@@ -4,7 +4,7 @@ Tailscale in your **KDE Plasma 6**, **GNOME Shell** and **Omarchy** panel: conne
 
 It started as a port of the first-party `omarchy.tailscale` panel plugin that ships with [Omarchy 4 (Quattro)](https://github.com/basecamp/omarchy), moved off Hyprland/Quickshell onto the two big desktops. The Omarchy widget then came back: the same panel, rebuilt on this repository's shared model, for the shell it came from. The code has since been rewritten in Rust; [NOTICE](NOTICE) records the lineage.
 
-There is no daemon and no service to run. All three frontends drive the `tailscale` CLI directly and share one data model.
+There is no daemon and no service to run. All three frontends ask one binary, `tailgauge`, which drives the VPN CLI (Tailscale, or NetBird) and decides the whole panel.
 
 ## Features
 
@@ -23,7 +23,7 @@ There is no daemon and no service to run. All three frontends drive the `tailsca
 - `tailscale` on `PATH`
 - KDE Plasma 6.0+, GNOME Shell 45+, or Omarchy 4 (Quattro)
 - `zenity` or `kdialog` for the Taildrop file chooser
-- `wl-clipboard`, `xclip`, or `xsel` for the Plasma copy actions (GNOME uses `St.Clipboard`)
+- `wl-clipboard`, `xclip`, or `xsel` for the copy actions
 - Taildrop enabled for the tailnet, to send files
 
 ## Install
@@ -92,7 +92,7 @@ The three frontends are QML and JavaScript their desktops install; the binary is
 | GitHub releases | everything, the binary included | `tailgauge --update` |
 | Distro package | everything, as one unit | the package manager |
 
-**Neither store can install the binary or the systemd unit** - the KDE Store ships a kpackage, EGO ships an extension zip. A store-installed TailGauge is the panel only: status, toggle, connections, exit nodes, machines and copy actions all work; **Taildrop send does not appear**, because the panel checks for `tailgauge` on `PATH` before offering it. Install it from the release archive to get it back:
+**Neither store can install the binary or the systemd unit** - the KDE Store ships a kpackage, EGO ships an extension zip. Every frontend asks `tailgauge panel` for what to draw, so **a store-installed widget needs the binary beside it**, or it has nothing to show. Install it from the release archive:
 
 ```bash
 tag=$(curl -fsSL https://api.github.com/repos/Arzaroth/TailGauge/releases/latest |
@@ -201,7 +201,7 @@ The GNOME extension is TypeScript, checked under `strict`, and is the only thing
 
 | Setting | Default | What it does |
 |---|---|---|
-| Refresh interval | 30s | How often `tailscale status --json` is re-read |
+| Refresh interval | 30s | How often the panel is re-read when nothing has signalled a change |
 | Show the machine name | off | Plasma and GNOME: puts the machine name next to the panel icon |
 | Recent Mullvad regions | - | Shortlist behind the exit node list, cleared from GNOME's preferences |
 | Toggle shortcut | none | GNOME only: a global key that turns Tailscale on and off. Plasma binds `tailgauge-ctl toggle` in System Settings instead |
@@ -212,7 +212,7 @@ Plasma stores these in the widget's own configuration, GNOME in `org.gnome.shell
 
 - **The bar icon never toggles a connection.** It describes the machine rather than one provider, so a click that turned something off would act on a provider you cannot see and leave the icon lit while the other stayed up. **Right click** on Omarchy and **middle click** on Plasma cycle which provider the panel is about, and do nothing when only one is installed; **middle click** on Omarchy refreshes. **Right click** on Plasma and GNOME opens the desktop's own context menu, which still carries the toggle and refresh as entries.
 - **GNOME** uses native `PopupMenu` rows rather than a custom keyboard-driven panel, so arrows, Enter and type-ahead behave the way every other extension does. Machines and the Mullvad picker are submenus; the copy actions live inside a machine's submenu.
-- **Clipboard** goes through `St.Clipboard` on GNOME and a helper that picks `wl-copy` / `xclip` / `xsel` on Plasma, so the copy actions also work in an X11 session.
+- **Clipboard** goes through `tailgauge copy` on all three, which picks `wl-copy` / `xclip` / `xsel`, so the copy actions also work in an X11 session.
 - **No IPC on Plasma and GNOME**. `tailgauge-ctl toggle` stands in there, but it drives tailscaled rather than the panel: nothing talks to a running widget. The Omarchy widget has the shell's IPC and uses it.
 - **A machine's copy actions** are a popup menu on Plasma and a submenu on GNOME. Both list the same options in the same order, because the binary resolves them once.
 
