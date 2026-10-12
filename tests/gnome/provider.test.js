@@ -52,6 +52,13 @@ test('what it asks with is the state only this side knows', () => {
     assert.equal(ui.busy, false);
 });
 
+test('handing it new view state asks again with it', () => {
+    const {svc} = service();
+    svc.ui = {phraseIndex: 3, mullvadPickerOpen: true};
+    assert.equal(askedWith().phraseIndex, 3);
+    assert.equal(svc.ui.phraseIndex, 3);
+});
+
 test('an answer lands, and the derived properties follow it', () => {
     const {svc} = service();
     assert.equal(svc.panel.header.title, 'workstation');
