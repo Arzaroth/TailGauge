@@ -299,6 +299,15 @@ mod tests {
     }
 
     #[test]
+    fn the_node_manifest_states_the_licence_the_crates_do() {
+        let manifest: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(repo_root().join("package.json")).expect("package.json"),
+        )
+        .expect("package.json is JSON");
+        assert_eq!(manifest["license"], env!("CARGO_PKG_LICENSE"));
+    }
+
+    #[test]
     fn every_alias_names_a_subcommand_the_binary_has() {
         // An alias the parser does not answer to is a helper that vanished.
         // Updating is a flag, so it is deliberately absent from the set.
