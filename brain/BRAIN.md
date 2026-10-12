@@ -75,7 +75,7 @@ use the indexes.
 | How is a Mullvad exit node set, and where does the shortlist live? | [features/exit-nodes.md](features/exit-nodes.md) |
 | How does search work without rebuilding the panel? | [features/machines.md](features/machines.md), [architecture/panel-spec.md](architecture/panel-spec.md) |
 | Why does `tailgauge-ctl` still work? Where is a subcommand's alias? | [architecture/binary.md](architecture/binary.md), [architecture/distribution.md](architecture/distribution.md) |
-| Why is Taildrop send missing on a store install? | [features/taildrop.md](features/taildrop.md), [architecture/distribution.md](architecture/distribution.md) |
+| Why is a store-installed widget empty? | [architecture/distribution.md](architecture/distribution.md) |
 | How does `--update` keep the binary and the widgets on one release? | [features/updates.md](features/updates.md), [architecture/distribution.md](architecture/distribution.md) |
 | Why is `helpers.tar.gz` still published? | [architecture/distribution.md](architecture/distribution.md) |
 | What does CI run? How do I cut a release? | [operations.md](operations.md) |

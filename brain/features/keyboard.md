@@ -1,8 +1,9 @@
 # Keyboard
 
 Driving the panel without a pointer: one traversal order from the binary, six
-single-letter actions shared by the three desktops, and a global toggle key on
-GNOME and Plasma. The TUI has its own keys ([tui.md](tui.md)).
+single-letter actions shared by the three desktops, and an optional global
+connection-toggle key on GNOME. Plasma has none: its widget shortcut only opens
+the popup, and a custom command on `tailgauge ctl toggle` stands in. The TUI has its own keys ([tui.md](tui.md)).
 
 ## The letters
 
@@ -63,8 +64,11 @@ Search fields and their empty-result rows are not stops. Tests:
   nothing) in `org.gnome.shell.extensions.tailgauge`, set from the **Shortcut**
   row in `prefs.ts` (`captureShortcut`: needs a modifier, Backspace clears, Esc
   cancels). `enable()` registers it with `Main.wm.addKeybinding` in `NORMAL` and
-  `OVERVIEW` modes, calling the indicator's `toggle()` in-process, so it works
-  without the binary on `PATH`.
+  `OVERVIEW` modes, calling the indicator's `toggle()`. The binding is
+  in-process but the toggle is not: `toggle()` calls `toggleTailscale()`, which
+  returns early unless the binary has answered a panel and otherwise spawns
+  `tailgauge ctl` through `_ctl`, so without the binary on `PATH` the key does
+  nothing.
 - **Plasma**: the applet's standard *Configure Keyboard Shortcuts* opens the
   popup, with no code here. To toggle without opening it, bind `tailgauge ctl
   toggle` as a custom command in System Settings.
@@ -80,5 +84,5 @@ Search fields and their empty-result rows are not stops. Tests:
 - `crates/tailgauge-core/src/panel.rs` (`panel_navigation`, `NavEntry`, `panel_row_at`)
 - `plasma/org.tailgauge.plasmoid/contents/ui/FullRep.qml` (`moveCursor`, `activateCursor`, `dispatch`, `Keys.onPressed`)
 - `omarchy/arzaroth.tailgauge/Panel.qml` (`KeyboardPanel`, `PanelKeyCatcher`, `onTextKey`, `moveCursor`)
-- `gnome/tailgauge@arzaroth.github.io/extension.ts` (`_onMenuKey`, `_focusedRow`, `TailGaugeExtension.enable`), `prefs.ts` (`captureShortcut`), `schemas/org.gnome.shell.extensions.tailgauge.gschema.xml` (`toggle-shortcut`)
+- `gnome/tailgauge@arzaroth.github.io/extension.ts` (`_onMenuKey`, `_focusedRow`, `toggle`, `TailGaugeExtension.enable`), `provider.ts` (`toggleTailscale`, `_ctl`), `prefs.ts` (`captureShortcut`), `schemas/org.gnome.shell.extensions.tailgauge.gschema.xml` (`toggle-shortcut`)
 - `README.md` (Features, Outside the panel), `omarchy/arzaroth.tailgauge/README.md`

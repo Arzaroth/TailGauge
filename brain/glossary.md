@@ -17,14 +17,18 @@ that blur it. Back to the root map: [BRAIN.md](BRAIN.md).
   frontend's `activeProviderId` or the first drivable one. The bar icon is not
   about it; it describes the machine. Avoid: current, selected VPN.
 - **Capability** - a per-provider flag (`Capability`: exit nodes, Mullvad, file
-  send, accounts, networks) that decides which sections and commands exist. A
-  missing capability means no section and no argv, never a name check.
-  Avoid: feature, permission, support level.
+  send, accounts, networks, connection quality) that decides which sections the
+  panel shows for the active provider. Which commands a provider has is decided
+  by the argv methods in `providers.rs` (by id today); `ctl` also checks the
+  exit-node and accounts capabilities before some actions. Avoid:
+  feature, permission, support level.
 - **Daemon state** - the provider daemon's own state (`daemonState`, from
   Tailscale's `BackendState`): `Running`, `Stopped`, `NeedsLogin`... Avoid:
   backend state (the old field name), status.
-- **Watch** - `tailgauge watch`, which blocks on `tailscale debug watch-ipn`
-  and exits 0 on a change, 2 on expiry, 1 when unusable. See
+- **Watch** - `tailgauge watch`, which blocks until any installed supported
+  provider changes (Tailscale on `tailscale debug watch-ipn` when it has it,
+  the rest polled every 2 s) and exits 0 on a change, 2 on expiry, 1 when no
+  supported VPN CLI is installed. See
   [architecture/providers.md](architecture/providers.md). Avoid: listener,
   subscription.
 
@@ -41,9 +45,10 @@ that blur it. Back to the root map: [BRAIN.md](BRAIN.md).
   when `visible`. Avoid: group, card, submenu (GNOME draws some as submenus).
 - **Row** - one fully formed line in a section: label, sublabel, icon, state,
   actions, copy options, payload. Avoid: item, entry.
-- **Parity** - the rule that the three desktops draw the same panel and decide
-  nothing it already decided, enforced by `parity.rs`. Avoid: consistency,
-  sync.
+- **Parity** - the rule that a user-facing feature lands on all four surfaces
+  (Plasma, GNOME, Omarchy and the TUI, which is exempt from the desktops'
+  layout) and that none decides anything the panel already decided, enforced
+  on the desktops by `parity.rs`. Avoid: consistency, sync.
 - **Ui blob** - the `--ui` JSON a frontend sends with every call: the state
   only it knows (`gather::Ui`). Avoid: options, frontend state file.
 - **Optimistic toggle** - the switch position a frontend shows after a click,
@@ -83,14 +88,16 @@ that blur it. Back to the root map: [BRAIN.md](BRAIN.md).
 ## The binary and distribution
 
 - **Alias** - a `tailgauge-<sub>` symlink beside the binary that
-  `splice_alias` turns into a subcommand. Listed in `ALIASES` and in
-  `install.sh`. See [architecture/binary.md](architecture/binary.md). Avoid:
+  `splice_alias` turns into a subcommand. Listed in `ALIASES`, in
+  `install.sh` and in the bootstrap's `ALIASES=(...)`. See [architecture/binary.md](architecture/binary.md). Avoid:
   helper, wrapper.
 - **Helpers** - the pre-0.5 shell scripts the binary replaced, and the
   `helpers.tar.gz` release asset that still carries the **bootstrap**
-  (`scripts/compat/tailgauge-update`) for 0.4.0 installs. See
-  [architecture/distribution.md](architecture/distribution.md). Avoid: compat
-  updater.
+  (`scripts/compat/tailgauge-update`) for 0.4.0 installs. Also
+  `PanelState::helpers`, the flag that gates Taildrop send, which the binary
+  always sets to true. See
+  [architecture/distribution.md](architecture/distribution.md),
+  [features/taildrop.md](features/taildrop.md). Avoid: compat updater.
 - **Attended** - `ctl` run with a terminal on stdout (and the TUI not holding
   the screen): it prints. Unattended, it opens the login page itself and
   reports failure as a notification. Avoid: interactive.

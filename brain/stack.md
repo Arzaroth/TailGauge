@@ -14,8 +14,9 @@ Sources of truth: `Cargo.toml` (workspace), `crates/*/Cargo.toml`, `Cargo.lock`,
   with `File::try_lock`). No `rust-toolchain.toml` and no toolchain action: CI
   and the release build use the runner's preinstalled stable, always with
   `--locked`. Workspace `resolver = "2"`, one version for every crate
-  (`[workspace.package] version`, 0.6.1 at the time of writing), licence
-  `MIT OR WTFPL`.
+  (`[workspace.package] version`), licence `MIT OR WTFPL`, which
+  `package.json` states too
+  (`the_node_manifest_states_the_licence_the_crates_do` in `project.rs`).
 - **Two crates**:
   - `tailgauge-core`: the provider registry, the CLI parsers and `panel_spec`.
     Depends on `chrono`, `serde`, `serde_json` and nothing else; it shells out to
@@ -39,7 +40,9 @@ Sources of truth: `Cargo.toml` (workspace), `crates/*/Cargo.toml`, `Cargo.lock`,
   `npm install --no-package-lock` when pnpm is absent, which re-resolves the
   ranges and may pick a different TypeScript patch.
 - **glib** tools: `glib-compile-schemas` is a build requirement, not a test one
-  (`scripts/build.sh` refuses to package the extension without it).
+  (`scripts/build.sh` refuses to package the extension without it), and a
+  runtime one for `--update` and `--install-frontend gnome`, where selvedge
+  compiles the schemas in staging (`gsettings_schemas: true` in `project.rs`).
 
 ## Binary dependencies
 
@@ -59,9 +62,13 @@ Sources of truth: `Cargo.toml` (workspace), `crates/*/Cargo.toml`, `Cargo.lock`,
 ## Working on selvedge locally
 
 Copy `.cargo/config.toml.example` to `.cargo/config.toml` (gitignored). It
-`[patch]`es the selvedge git URL to `../selvedge`; `Cargo.lock` still records
-the tag, so a release built from a clean tree is unaffected. Moving the pin is a
-`Cargo.toml` tag edit plus `cargo update -p selvedge`.
+`[patch]`es the selvedge git URL to `../selvedge`, but the patch only takes
+effect when the local checkout's version matches what `Cargo.lock` resolves.
+Otherwise cargo warns "patch ... was not used" and adds a `[[patch.unused]]`
+entry to `Cargo.lock`. Making it apply takes `cargo update -p selvedge`, which
+rewrites the lock's selvedge entry to the local path: never commit that lock.
+Moving the pin is a `Cargo.toml` tag edit plus `cargo update -p selvedge` with
+no `.cargo/config.toml` in place.
 
 ## External programs (runtime, never linked)
 
@@ -71,6 +78,8 @@ the tag, so a release built from a clean tree is unaffected. Moving the pin is a
   Taildrop and notifications ([features/taildrop.md](features/taildrop.md)).
 - `kpackagetool6`, `gnome-extensions`, `omarchy-plugin-validate` /
   `omarchy-plugin-enable`: only `scripts/install.sh` calls these.
+- `glib-compile-schemas`: `--update` and `--install-frontend gnome` (through
+  selvedge).
 
 ## Packaging
 
@@ -82,6 +91,7 @@ macOS build. See [operations.md](operations.md).
 ## Sources
 
 - `Cargo.toml` (`[workspace.package]`, `[workspace.dependencies]`), `Cargo.lock` (`selvedge`, `self_update`, `ratatui`, `clap`)
+- `crates/tailgauge/src/project.rs` (`gsettings_schemas`, `the_node_manifest_states_the_licence_the_crates_do`)
 - `crates/tailgauge-core/Cargo.toml`, `crates/tailgauge/Cargo.toml`
 - `.cargo/config.toml.example`, `.gitignore`
 - `package.json` (`packageManager`, `scripts`, `devDependencies`), `pnpm-lock.yaml`, `tsconfig.base.json`, `tsconfig.gnome.json`

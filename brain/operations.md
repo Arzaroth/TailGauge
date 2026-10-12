@@ -16,7 +16,10 @@ a PR. Run it in bash with `shopt -s globstar nullglob`.
 | `frontends` | `pnpm install --frozen-lockfile`; `scripts/build.sh`; `qmllint` over `build/org.tailgauge.plasmoid/contents/ui/*.qml build/arzaroth.tailgauge/*.qml` (a `[syntax]` line fails, the exit code does not); `pnpm typecheck`; `tests/qml/run.sh`; `node --import ./tests/gnome/register.js --test 'tests/gnome/**/*.test.js'`; `node --input-type=module --check` per built extension `.js`; JSON parse of every manifest; `glib-compile-schemas --strict --dry-run` on the gschema and an XML parse of Plasma's `main.xml`; the four versions agree (plasmoid `KPlugin.Version`, GNOME `version-name`, Omarchy `version`, `Cargo.toml`) |
 | `helpers` | `bash -n`, `shellcheck --severity=warning` and an executable-bit check on `scripts/*.sh scripts/compat/*`; `systemd-analyze verify --user` on the Taildrop unit (only a parse error fails) |
 
-- Every glob step fails on an empty match ("the glob has gone stale").
+- The QML lint, the GNOME extension check, the manifest check and the shell
+  syntax check fail on an empty glob ("the glob has gone stale"). The helpers
+  job's ShellCheck and "scripts are executable" steps have no such guard: under
+  `nullglob` an empty match passes them silently.
 - Not in CI, run by hand: `tests/gnome/shell/run.sh --gnome 45` and
   `--gnome 50` whenever `extension.ts` changed, since nothing else loads it
   ([architecture/testing.md](architecture/testing.md)).
@@ -36,8 +39,12 @@ a PR. Run it in bash with `shopt -s globstar nullglob`.
   `XDG_CURRENT_DESKTOP`. It runs `build.sh`, `cargo build --release --locked`,
   installs `~/.local/bin/tailgauge`, removes a stale `tailgauge-update`, writes
   the `tailgauge-<alias>` symlinks, then the Taildrop unit (unless
-  `--no-taildrop`), then each desktop payload (staged and swapped, so a failed
-  copy keeps the old one). `--placement` is Omarchy only.
+  `--no-taildrop`), then each desktop payload: Plasma through `kpackagetool6`
+  (`-u` when installed, `-i` otherwise); GNOME through `gnome-extensions install
+  --force` on the zip, falling back to a stage-and-swap that moves the old copy
+  aside so a failed copy keeps it; Omarchy copied to a staging directory, then
+  the old plugin `rm -rf`'d and the new one `mv`'d in. `--placement` is Omarchy
+  only.
 - Taildrop unit: `systemd/tailgauge-receive.service`, a user unit
   (`ExecStart=%h/.local/bin/tailgauge receive`, `Restart=always`,
   `WantedBy=graphical-session.target`). Installed and enabled by
@@ -99,10 +106,10 @@ The `upstream-check` skill reviews basecamp/omarchy (the plugin TailGauge was
 ported from, and the `shell/Ui` components the Omarchy widget imports) and
 tailscale/tailscale (the CLI output the parsers read), against
 `.claude/skills/upstream-check/BASELINES.md`, which each run rewrites (last:
-2026-09-14, omarchy `b679363b`, Tailscale CLI 1.102.4). The skill still names
-pre-Rust paths (`shared/model.ts`, `test/fixtures/`, `bin/tailgauge-*`); the
-parsers now live in `crates/tailgauge-core/src/` and the captures in
-`crates/tailgauge-core/tests/fixtures/`.
+2026-09-14, omarchy `b679363b`, Tailscale CLI 1.102.4). It points at the Rust
+parsers in `crates/tailgauge-core/src/` (`status`, `accounts`, `exit_nodes`,
+`peer`), the captures in `crates/tailgauge-core/tests/fixtures/`, and Taildrop
+in `crates/tailgauge/src/send.rs` / `receive.rs`.
 
 ## Logs
 

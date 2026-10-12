@@ -79,14 +79,19 @@ TailGauge runs no service of its own (the Taildrop receiver unit is optional
 and unrelated to drawing). Every frontend owns three clocks, the same on all
 three desktops:
 
-- **Watch.** `tailgauge watch 300` blocks on `tailscale debug watch-ipn` until a
-  line carries `"State"`, `"Prefs"`, `"LoginFinished"` or `"BackendState"`
-  (`watch::INTERESTING`), exiting 0 on a change, 2 on expiry, 1 when tailscale is
-  unusable. Without watch-ipn it polls a fingerprint (backend state plus exit
-  node ID) every 2s, under one deadline for the whole call. Frontends refresh on
-  0, re-arm after 250 ms on 0 or 2, and back off 30 s otherwise. This is why a
-  change made by `tailgauge ctl`, the tailscale CLI or another desktop shows up
-  at once, and why no IPC is needed on Plasma and GNOME.
+- **Watch.** `tailgauge watch 300` covers every installed supported provider,
+  all under one deadline for the whole call. Tailscale rides the IPN bus when
+  `tailscale debug watch-ipn` exists: it wakes on a line carrying `"State"`,
+  `"Prefs"`, `"LoginFinished"` or `"BackendState"` (`watch::INTERESTING`). Every
+  other installed provider, and Tailscale without the bus (or once the bus
+  hangs up), is polled every 2 s on a fingerprint: for Tailscale `fingerprint_of`
+  on the raw JSON (`BackendState` plus `ExitNodeStatus.ID`), for the rest
+  `fingerprint_of_status` on the parsed status (daemon state, running,
+  needs-login), so netmap churn never wakes it. It exits 0 on the first change,
+  2 when the deadline passes, and 1 only when no supported VPN CLI is installed.
+  Frontends refresh on 0, re-arm after 250 ms on 0 or 2, and back off 30 s
+  otherwise. This is why a change made by `tailgauge ctl`, a VPN CLI or another
+  desktop shows up at once, and why no IPC is needed on Plasma and GNOME.
 - **Poll.** The floor under the watcher: `refreshIntervalSec` /
   `refresh-interval` (default 30, minimum 5), tightened to 3 s while the panel
   is on screen (the `attentive` flag, which parity requires every frontend to
@@ -97,10 +102,12 @@ three desktops:
 The TUI has no watcher: it re-gathers every 3 s (`tui::TICK`) and 600 ms after a
 command (`tui::SETTLE`).
 
-`ProviderDescriptor::watch` returns `tailgauge watch` for Tailscale and `None`
-for NetBird, but nothing outside its own test reads it: all three frontends arm
-`tailgauge watch 300` whichever provider is shown. On a NetBird-only machine the
-watch exits 1 and the panel lives on the poll.
+All three frontends arm `tailgauge watch 300` whichever provider is shown. On a
+NetBird-only machine the watch polls NetBird and exits 0 on a change or 2 on
+expiry (e2e `watch_wakes_on_a_netbird_change`,
+`watch_on_a_quiet_netbird_expires_rather_than_giving_up`).
+`ProviderDescriptor::watch` still returns `tailgauge watch` for Tailscale and
+`None` for NetBird; nothing reads it but its own test.
 
 ## What lives where
 
@@ -129,8 +136,9 @@ watch exits 1 and the panel lives on the poll.
   literal `'tailgauge', 'panel', '--json'` in each; e2e
   `every_command_the_frontends_invoke_exists` checks every subcommand a
   frontend spells exists.
-- **The binary must be on PATH.** Every frontend prefixes `PATH` with
-  `$HOME/.local/bin:$HOME/bin:/usr/local/bin` (session PATHs often lack them).
+- **The binary must be on PATH.** Plasma and GNOME prefix `PATH` with
+  `$HOME/.local/bin:$HOME/bin:/usr/local/bin` (session PATHs often lack them);
+  Omarchy spawns `tailgauge` from the session PATH as it is.
   A store install (KDE Store kpackage, EGO zip) cannot put it there; the core
   hides Taildrop's send action unless `PanelState::helpers` is set, which the
   binary always sets since it is the one answering.
@@ -148,8 +156,8 @@ watch exits 1 and the panel lives on the poll.
 - `crates/tailgauge-core/src/lib.rs`, `crates/tailgauge-core/src/providers.rs` (`PROVIDERS`, `ProviderDescriptor::watch`)
 - `crates/tailgauge/src/main.rs` (`Command::Panel`, `run_panel`, `splice_alias`)
 - `crates/tailgauge/src/gather.rs` (`Ui`, `probe`, `statuses`, `extras`, `update_info`, `panel_state`, `resolve_options`)
-- `crates/tailgauge/src/watch.rs` (`run`, `INTERESTING`, `watch_ipn`, `poll_fallback`, `fingerprint_of`)
+- `crates/tailgauge/src/watch.rs` (`run`, `INTERESTING`, `watch_ipn`, `poll`, `fingerprint`, `fingerprint_of`, `fingerprint_of_status`)
 - `crates/tailgauge/src/tui.rs` (`TICK`, `SETTLE`), `crates/tailgauge/src/copy.rs`, `crates/tailgauge/src/project.rs`
 - `plasma/org.tailgauge.plasmoid/contents/ui/ProviderService.qml`, `gnome/tailgauge@arzaroth.github.io/provider.ts`, `omarchy/arzaroth.tailgauge/Service.qml` (the three clocks)
-- `crates/tailgauge-core/tests/parity.rs`, `crates/tailgauge/tests/e2e.rs` (`the_panel_never_waits_on_github`, `every_command_the_frontends_invoke_exists`)
+- `crates/tailgauge-core/tests/parity.rs`, `crates/tailgauge/tests/e2e.rs` (`the_panel_never_waits_on_github`, `every_command_the_frontends_invoke_exists`, `watch_wakes_on_a_netbird_change`, `watch_on_a_quiet_netbird_expires_rather_than_giving_up`)
 - `systemd/tailgauge-receive.service`, `scripts/build.sh`, `scripts/install.sh`, `scripts/compat/tailgauge-update`

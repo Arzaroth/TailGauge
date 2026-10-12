@@ -20,13 +20,18 @@ and the parsers live in `tailgauge-core` and shell out to nothing; the binary
 | `capabilities` | exit nodes, Mullvad, file send, accounts, connection quality | networks, connection quality |
 
 - **Row order is preference order.** With several installed and no choice made,
-  the first `supported` one wins (`DEFAULT_PROVIDER_ID` is `tailscale`).
+  the first `supported` installed one in registry order wins, else the first
+  installed (`active_provider`). `DEFAULT_PROVIDER_ID` (`tailscale`) matters
+  only on the legacy `providers: None` path of `installed_providers`.
 - **`Capabilities` / `Capability`** name each feature; `Capabilities::has` takes
   the enum so a typo is a build error. `provider_supports(state, capability)` is
   what `panel.rs` gates sections on, always against the *active* provider.
   `connection_quality` is declared but nothing reads it yet.
 - **The argv is a method, not data.** `status()`, `up()`, `down()` exist for
-  every provider; `exit_node_list()`, `accounts()`, `switch_account()`,
+  every provider, and `parse_status(raw)` picks the parser for what `status()`
+  printed (`parse_netbird_status` for NetBird, `status::parse_status`
+  otherwise). The optional methods are gated on `self.id` in `providers.rs`,
+  not on capabilities: `exit_node_list()`, `accounts()`, `switch_account()`,
   `set_exit_node()`, `watch()` return `Some` only for Tailscale, `networks()`
   and `select_network()` only for NetBird. A provider without a feature has no
   argv for it, so nothing can fire one CLI's command at another's daemon
@@ -41,7 +46,7 @@ and the parsers live in `tailgauge-core` and shell out to nothing; the binary
 | set exit node | `tailscale set --exit-node=<target>` (empty clears) | - |
 | profiles | `tailscale switch --list --json`, `tailscale switch <id>` | - |
 | networks | - | `netbird networks list`, `netbird networks select\|deselect <id>` |
-| watch | `tailgauge watch <timeout>` | - |
+| watch (`watch()`, read only by its own test) | `tailgauge watch <timeout>` | - |
 
 ## Detection and the active provider
 
@@ -57,7 +62,8 @@ and the parsers live in `tailgauge-core` and shell out to nothing; the binary
   `next_provider` wraps through it and is `None` with fewer than two.
   `provider_ready` gates every poll and the header toggle.
 - `provider_label` falls back to "TailGauge"; `provider_label_list()` builds
-  "No supported VPN CLI on PATH. Looked for Tailscale, NetBird."
+  "Tailscale, NetBird", which `panel::panel_status` and `bar::bar_tooltip` put
+  into "No supported VPN CLI on PATH. Looked for Tailscale, NetBird."
 - `parse_provider_probe` reads `which` stdout (absolute paths only, misses go
   to stderr). The binary no longer spawns `which`: `gather::probe` asks
   `selvedge::proc::has` per `cli`, so the parser survives only for its tests.
@@ -122,8 +128,8 @@ them ([testing.md](testing.md)). A new CLI shape starts as a new capture here.
 
 1. `probe()`: one `ProviderState` per registry row (`proc::has(cli)`).
 2. `statuses()`: **every installed provider** is asked for status at once, one
-   thread each, so the bar can say what all of them are doing. The parser is
-   picked by `id == "netbird"`.
+   thread each, so the bar can say what all of them are doing, each answer read
+   by `provider.parse_status`.
 3. The active provider's status fills `running`, `needs_login`, self, peers,
    `own_exit_nodes`, `file_sharing`. `state.active = ui.active.unwrap_or(running)`
    is the optimistic toggle (`the_optimistic_toggle_is_absent_rather_than_false`).
@@ -140,40 +146,59 @@ them ([testing.md](testing.md)). A new CLI shape starts as a new capture here.
 
 ## Freshness: `tailgauge watch`
 
-`watch.rs` blocks until tailscaled reports a change; exit 0 changed, 2 expired,
-1 unusable (`Outcome::code`). It runs `tailscale debug watch-ipn` when
-`supports_watch_ipn()` and wakes only on lines containing an `INTERESTING` key
-(`"State"`, `"Prefs"`, `"LoginFinished"`, `"BackendState"`), never on netmap
-churn. Without the bus it polls `tailscale status --json` every 2s, comparing
-`fingerprint_of` (BackendState plus `ExitNodeStatus.ID`). One deadline covers
-both paths. Frontends refresh on 0, re-arm after 250ms on 0 or 2, and back off
-30s on anything else (`WATCH_REARM_MS`, `WATCH_BACKOFF_MS` in GNOME's
-`provider.ts`); a poll timer stays underneath as the floor.
+`watch.rs` blocks until any installed supported provider reports a change;
+exit 0 changed, 2 expired, 1 only when no supported VPN CLI is installed
+(`Outcome::code`). Every source reports into one channel under one deadline:
 
-`tailscale.rs` is the binary's direct Tailscale reader for `watch` and
-`ctl`: `installed`, `status`, `backend_state`, and `current_exit_node`, which
+- **Tailscale on the bus.** When Tailscale is installed and
+  `supports_watch_ipn()`, `watch_ipn` runs `tailscale debug watch-ipn` and wakes
+  only on lines containing an `INTERESTING` key (`"State"`, `"Prefs"`,
+  `"LoginFinished"`, `"BackendState"`), never on netmap churn. A bus that hangs
+  up is not a change: Tailscale moves to the poll for what is left of the
+  deadline.
+- **Everything else polled.** `poll` re-reads every other installed provider
+  (and Tailscale without the bus) every 2 s and compares a `fingerprint`:
+  Tailscale keeps `fingerprint_of` on the raw JSON (`BackendState` plus
+  `ExitNodeStatus.ID`); any other provider runs `status()` through
+  `parse_status` and compares `fingerprint_of_status` (daemon state, running,
+  needs-login), so a NetBird-only machine waits and wakes like a Tailscale one
+  (`a_netbird_that_connects_moves_its_fingerprint`, e2e
+  `watch_wakes_on_a_netbird_change`,
+  `watch_on_a_quiet_netbird_expires_rather_than_giving_up`).
+
+`ProviderDescriptor::watch` is not consulted: it still returns `None` for
+NetBird and is read only by its own test. Frontends refresh on 0, re-arm after
+250 ms on 0 or 2, and back off 30 s on anything else (`WATCH_REARM_MS`,
+`WATCH_BACKOFF_MS` in GNOME's `provider.ts`); a poll timer stays underneath as
+the floor.
+
+`tailscale.rs` is the binary's direct Tailscale reader for `watch`, `ctl` and
+the Taildrop subcommands in `main.rs`: `installed`, `status`, `backend_state`, and `current_exit_node`, which
 slices `exit-node list` with its own `first_active_host` (a second column
 slicer beside core's).
 
 ## Adding a provider
 
 1. Add a `PROVIDERS` row with its `cli`, `capabilities`, icon and glyph, and
-   teach each argv method its spelling (`None` for what it lacks).
+   teach each argv method its spelling (`None` for what it lacks; the optional
+   ones check `self.id`).
 2. Write the parser (a `StatusResult` producer) and capture real output into
    `tests/fixtures/`; pin it in `specification.rs` and `e2e.rs`.
-3. Dispatch it: `gather::statuses` and `ctl::read` both branch on
-   `id == "netbird"`, so a third provider means turning that branch into a
-   match (the registry comment says "nothing else names a provider"; these two
-   do).
+3. Dispatch it in `ProviderDescriptor::parse_status`, which branches on
+   `id == "netbird"` today; a third shape turns that branch into a match.
+   `gather::statuses`, `ctl::read` and `watch`'s poll all call it, so nothing
+   else changes. `watch` then polls the new provider on `fingerprint_of_status`
+   with no further work.
 4. Ship its mark in each frontend and run the parity tests: no frontend may
    name a provider binary in an argv (`no_frontend_names_a_provider_binary_in_an_argv`).
 
 ## Sources
 
-- `crates/tailgauge-core/src/providers.rs` (`PROVIDERS`, `ProviderDescriptor`, `Capabilities`, `Capability`, `installed_providers`, `active_provider`, `drivable_providers`, `next_provider`, `provider_ready`, `provider_supports`, `parse_provider_probe`, `login_plan`)
+- `crates/tailgauge-core/src/providers.rs` (`PROVIDERS`, `ProviderDescriptor`, `Capabilities`, `Capability`, `installed_providers`, `active_provider`, `drivable_providers`, `next_provider`, `provider_ready`, `provider_supports`, `parse_status`, `parse_provider_probe`, `provider_label_list`, `login_plan`)
 - `crates/tailgauge-core/src/status.rs` (`parse_status`, `peer_from_status`, `FILE_SHARING_CAP`), `peer.rs` (`Peer`, `collate`, `non_zero_time`, `is_mullvad_host`)
 - `crates/tailgauge-core/src/netbird.rs` (`parse_netbird_status`, `parse_netbird_networks`, `network_subtitle`), `exit_nodes.rs` (`parse_exit_node_list`), `accounts.rs` (`parse_accounts`, `first_of`), `bar.rs` (`summarize_provider`), `panel_state.rs` (`PanelState`, `ProviderState`)
 - `crates/tailgauge-core/tests/fixtures/`, `crates/tailgauge-core/tests/specification.rs`, `crates/tailgauge/tests/e2e.rs`
 - `crates/tailgauge/src/gather.rs` (`Ui`, `probe`, `statuses`, `extras`, `panel_state`, `resolve_options`)
-- `crates/tailgauge/src/watch.rs` (`Outcome`, `INTERESTING`, `watch_ipn`, `poll_fallback`, `fingerprint_of`), `crates/tailgauge/src/tailscale.rs` (`current_exit_node`, `first_active_host`)
+- `crates/tailgauge-core/src/panel.rs` (`panel_status`), `bar.rs` (`bar_tooltip`)
+- `crates/tailgauge/src/ctl.rs` (`read`), `crates/tailgauge/src/watch.rs` (`Outcome`, `INTERESTING`, `run`, `watch_ipn`, `poll`, `fingerprint`, `fingerprint_of`, `fingerprint_of_status`, `a_netbird_that_connects_moves_its_fingerprint`), `crates/tailgauge/src/tailscale.rs` (`current_exit_node`, `first_active_host`)
 - `gnome/tailgauge@arzaroth.github.io/provider.ts` (`_watch`, `WATCH_TIMEOUT_SEC`)

@@ -86,7 +86,9 @@ codepoint, what Omarchy draws), `action`, `current`, `busy`, `bold`,
   that order, each only when non-empty.
 - **`busy`** names the command a row waits on: `switchingAccountId`,
   `settingExitNodeId`, `selectingNetworkId` from the `--ui` state, matched
-  against the row's id.
+  against the raw source id (`account.id`, the exit node's or Mullvad region's
+  `id`, `network.id`), not the row id (`account:<id>`). The `update` row is
+  busy while `updating`, the `auth` row while `busy`.
 - **`children`**: a peer's detail rows (`peer_detail_rows`, `detail:<field>`,
   `navigable: false`, only fields the provider actually reported; `Last seen`
   only when there is no handshake; `Added` when fewer than three rows) and the
@@ -129,7 +131,8 @@ short, listed set of progress and failure words, enforced by `parity.rs`.
 
 `fmt.rs` holds the wording helpers the panel uses (`format_bytes`,
 `format_since`, `is_profiles_access_denied`) plus `elide_status`, `first_url`,
-`shell_quote` and `shell_command`, which only their own unit tests call now.
+`shell_quote` and `shell_command`, which no production code calls now: only
+`fmt.rs`'s own unit tests, and `specification.rs` for `shell_command`.
 
 ## The guards
 
@@ -156,6 +159,7 @@ when a decision leaks into a desktop:
 | `no_frontend_names_a_provider_binary_in_an_argv` | `"tailscale",` or `'netbird',` style argv literals |
 | `every_frontend_draws_the_header_controls_it_is_handed` | a frontend that never reads `header.actions` |
 | `the_gnome_extension_has_a_slot_for_every_section_the_panel_emits` | `SECTION_IDS` in `panel.ts` differing from what `panel_spec` emits, in order |
+| `no_click_on_the_bar_icon_toggles_a_connection` | a bar-icon click handler (Plasma `CompactRep.qml` `onClicked`, GNOME `extension.ts` `'button-press-event'`, Omarchy `Panel.qml` `onPressed`) that calls `toggleTailscale` or no longer calls `cycleProvider` |
 
 `crates/tailgauge-core/tests/specification.rs` says what the panel should do,
 case by case (111 tests, ported from the former `model.test.ts` and kept in its
