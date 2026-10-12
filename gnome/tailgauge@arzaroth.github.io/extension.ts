@@ -828,9 +828,8 @@ export default class TailGaugeExtension extends Extension {
         this._indicator = new Indicator(this);
         Main.panel.addToStatusArea(this.uuid, this._indicator as unknown as PanelMenu.Button);
 
-        // The shortcut goes through the running extension rather than through
-        // the binary, because a store install has nothing on PATH. The setting
-        // is empty by default, so this registers nothing until asked.
+        // The setting is empty by default, so this registers nothing until
+        // asked.
         this._settings = this.getSettings();
         Main.wm.addKeybinding('toggle-shortcut', this._settings,
             Meta.KeyBindingFlags.NONE,
