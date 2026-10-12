@@ -4,6 +4,34 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A middle click on the GNOME icon switches provider instead of turning the
+  VPN off.** Plasma and Omarchy stopped toggling from the bar icon in 0.4.0,
+  because the icon describes the whole machine and the click acted on a
+  provider it was not showing; GNOME kept doing it. It now cycles the provider
+  the panel is about, as Plasma does, and a test fails if any desktop's icon
+  toggles a connection again.
+
+- **`tailgauge ctl up` from a key binding opens the login page while there is
+  still a login to do.** It found the URL in what `tailscale up` printed but
+  opened it only once `up` had exited, and `up` exits once the login is done.
+  The notification also said Tailscale when it was turning NetBird on.
+
+- **The panels notice a NetBird change without waiting for their poll.**
+  `tailgauge watch` only knew tailscaled's bus: on a NetBird-only machine it
+  gave up and the panel backed off to its refresh interval, and with both
+  installed a NetBird change waited for it too. It now polls every other VPN
+  it finds for the state the panel draws.
+
+- **GNOME rotates the header phrase every tick.** Each tick handed the service
+  a new phrase that was only asked for on the next poll.
+
+### Distribution
+
+- **`package.json` states the MIT OR WTFPL licence too.** 0.6.1 corrected the
+  crates and left the Node manifest saying `GPL-3.0-or-later`.
+
 ## [0.6.1]
 
 ### Fixed
