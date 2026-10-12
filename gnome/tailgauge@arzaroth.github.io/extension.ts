@@ -242,7 +242,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
 
         this.connect('button-press-event', (_actor, event) => {
             if (event.get_button() === Clutter.BUTTON_MIDDLE) {
-                this._service.toggleTailscale();
+                this._cycleProvider();
                 return Clutter.EVENT_STOP;
             }
             return Clutter.EVENT_PROPAGATE;
@@ -262,6 +262,16 @@ class TailGaugeIndicator extends PanelMenu.Button {
     // its own.
     _panel(): Panel.Panel {
         return this._service.panel;
+    }
+
+    // The switcher section is the drivable providers, in order, so the next one
+    // is the row after the current one.
+    _cycleProvider(): void {
+        const rows = this._panel().sections.find(s => s.id === 'providers')?.rows ?? [];
+        if (rows.length < 2)
+            return;
+        const at = rows.findIndex(row => row.current);
+        this._service.switchProvider(rows[(at + 1) % rows.length].payload);
     }
 
     // What only this side decides. Assigning it makes the service re-ask, so a
