@@ -92,6 +92,9 @@ skill scoped to this branch; the essentials:
 - `README.md`: any section can be the one a change makes wrong, from
   Requirements (a new provider CLI) and Install (installer flags) through
   Distribution (updater flags, release assets) to Development.
+- `brain/`: the leaf docs the change makes wrong, plus `glossary.md`,
+  `decisions.md` and the indexes where it adds a term, a decision or a doc
+  (the **brain** skill), and a `CLAUDE.md` rule for any new incident.
 - `omarchy/arzaroth.tailgauge/README.md` documents the Omarchy widget on its
   own: its panel, interactions and settings.
 - A new setting lands in six places: `gnome/.../schemas` and a row in
