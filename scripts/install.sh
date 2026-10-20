@@ -1,6 +1,10 @@
 #!/bin/bash
-# Usage: scripts/install.sh [--plasma] [--gnome] [--omarchy] [--no-taildrop]
-#                           [--placement=left|center|right]
+# Usage: curl -fsSL https://raw.githubusercontent.com/Arzaroth/TailGauge/master/scripts/install.sh | bash
+#        ... | bash -s -- [options]
+#        scripts/install.sh [options]          (from a clone: builds it instead)
+#
+# Options: [--plasma] [--gnome] [--omarchy] [--no-frontend] [--no-taildrop]
+#          [--placement=left|center|right] [--version vX.Y.Z]
 # With no target flag, installs for whichever desktop is running.
 
 set -euo pipefail
@@ -11,10 +15,12 @@ PLUGIN_ID="arzaroth.tailgauge"
 
 usage() {
   cat <<'EOF'
-usage: install.sh [--plasma] [--gnome] [--omarchy] [--no-taildrop]
-                  [--placement=left|center|right]
+usage: install.sh [--plasma] [--gnome] [--omarchy] [--no-frontend] [--no-taildrop]
+                  [--placement=left|center|right] [--version vX.Y.Z]
 
-With no target flag, installs for whichever desktop is running.
+Piped from curl, installs a GitHub release (the latest unless --version names
+one). Run from a clone, builds the checkout instead; --version still fetches
+the release. With no target flag, installs for whichever desktop is running.
 EOF
 }
 
@@ -23,9 +29,62 @@ die() {
   exit 1
 }
 
+# The checkout this script sits in, or nothing when it arrived on stdin or was
+# saved somewhere on its own.
+checkout() {
+  local self="${BASH_SOURCE[0]:-}" dir
+  [[ -n $self && -f $self ]] || return 0
+  dir="$(cd "$(dirname "$(readlink -f "$self")")/.." && pwd)"
+  if [[ -f $dir/Cargo.toml && -d $dir/crates/tailgauge ]]; then
+    echo "$dir"
+  fi
+}
+
+# Downloads the release archive for this machine into $1, checked against the
+# release's SHA256SUMS, and unpacks it into $1/release.
+fetch_release() {
+  local tmp="$1" tag="$2" repo="${TAILGAUGE_REPO:-Arzaroth/TailGauge}"
+  local base="${TAILGAUGE_DOWNLOAD_BASE:-}" arch latest pattern archive expected actual
+
+  [[ $(uname -s) == Linux ]] || die "there is no release for $(uname -s)"
+  case "$(uname -m)" in
+  x86_64 | amd64) arch=x86_64 ;;
+  aarch64 | arm64) arch=aarch64 ;;
+  *) die "there is no release for $(uname -m)" ;;
+  esac
+  command -v curl >/dev/null 2>&1 || die "curl is required to download the release"
+
+  if [[ -z $tag && -z $base ]]; then
+    latest=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$repo/releases/latest")
+    tag="${latest##*/}"
+    [[ $tag == v* ]] || die "could not find the latest release of $repo"
+  fi
+  case "$base" in
+  "") base="https://github.com/$repo/releases/download/$tag" ;;
+  /*) base="file://$base" ;;
+  esac
+
+  curl -fsSL "$base/SHA256SUMS" -o "$tmp/SHA256SUMS" ||
+    die "no SHA256SUMS in $base - releases before 0.7.0 install from a clone"
+  pattern="tailgauge-${tag:-v[0-9][^ ]*}-linux-$arch\.tar\.gz"
+  archive=$(sed -n "s/^[0-9a-f]*  \($pattern\)$/\1/p" "$tmp/SHA256SUMS")
+  [[ -n $archive ]] || die "no linux-$arch archive in $base"
+  [[ $(wc -l <<<"$archive") -eq 1 ]] || die "several linux-$arch archives in $base: pick one with --version"
+
+  echo "Downloading $archive"
+  curl -fsSL "$base/$archive" -o "$tmp/$archive"
+  expected=$(grep "  $archive\$" "$tmp/SHA256SUMS" | cut -d' ' -f1)
+  actual=$(sha256sum "$tmp/$archive" | cut -d' ' -f1)
+  [[ -n $expected && $expected == "$actual" ]] || die "$archive does not match its SHA256SUMS entry"
+
+  mkdir -p "$tmp/release"
+  tar -xzf "$tmp/$archive" -C "$tmp/release"
+  "$tmp/release/tailgauge" --version >/dev/null 2>&1 || die "the downloaded binary does not run on this system"
+}
+
 main() {
-  local want_plasma=false want_gnome=false want_omarchy=false
-  local want_taildrop=true explicit=false placement=""
+  local want_plasma=false want_gnome=false want_omarchy=false want_frontend=true
+  local want_taildrop=true explicit=false placement="" tag=""
 
   while (($# > 0)); do
     case "$1" in
@@ -41,8 +100,14 @@ main() {
       want_omarchy=true
       explicit=true
       ;;
+    --no-frontend) want_frontend=false ;;
     --placement=*) placement="${1#*=}" ;;
     --no-taildrop) want_taildrop=false ;;
+    --version)
+      (($# >= 2)) || die "--version needs a tag"
+      tag="v${2#v}"
+      shift
+      ;;
     -h | --help)
       usage
       exit 0
@@ -55,13 +120,18 @@ main() {
     shift
   done
 
-  if ! $explicit; then
+  if ! $want_frontend; then
+    if $explicit; then
+      echo "install: --no-frontend and a desktop flag contradict each other" >&2
+      exit 2
+    fi
+  elif ! $explicit; then
     case "${XDG_CURRENT_DESKTOP:-}" in
     *KDE* | *plasma*) want_plasma=true ;;
     *GNOME*) want_gnome=true ;;
     *Hyprland* | *omarchy*) want_omarchy=true ;;
     *)
-      echo "install: could not detect the desktop, pass --plasma, --gnome or --omarchy" >&2
+      echo "install: could not detect the desktop, pass --plasma, --gnome, --omarchy or --no-frontend" >&2
       exit 2
       ;;
     esac
@@ -78,17 +148,29 @@ main() {
   command -v tailscale >/dev/null 2>&1 ||
     echo "install: warning - the tailscale CLI is not on PATH; the widget will show 'Not installed'" >&2
 
-  local root binary plasmoid extension extension_zip plugin unit
-  root="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
-  "$root/scripts/build.sh" >/dev/null
-  command -v cargo >/dev/null 2>&1 || die "cargo is required to build the tailgauge binary - https://rustup.rs"
-  (cd "$root" && cargo build --release --locked)
-  binary="$root/target/release/tailgauge"
-  plasmoid="$root/build/$PLASMOID_ID"
-  extension="$root/build/$EXTENSION_UUID"
-  extension_zip="$root/build/$EXTENSION_UUID.shell-extension.zip"
-  plugin="$root/build/$PLUGIN_ID"
-  unit="$root/systemd/tailgauge-receive.service"
+  local root binary plasmoid extension extension_zip="" plugin unit tmp
+  root="$(checkout)"
+  if [[ -n $root && -z $tag ]]; then
+    "$root/scripts/build.sh" >/dev/null
+    command -v cargo >/dev/null 2>&1 || die "cargo is required to build the tailgauge binary - https://rustup.rs"
+    (cd "$root" && cargo build --release --locked)
+    binary="$root/target/release/tailgauge"
+    plasmoid="$root/build/$PLASMOID_ID"
+    extension="$root/build/$EXTENSION_UUID"
+    extension_zip="$root/build/$EXTENSION_UUID.shell-extension.zip"
+    plugin="$root/build/$PLUGIN_ID"
+    unit="$root/systemd/tailgauge-receive.service"
+  else
+    tmp=$(mktemp -d)
+    # shellcheck disable=SC2064 # expanded now: $tmp is local to main.
+    trap "rm -rf '$tmp'" EXIT
+    fetch_release "$tmp" "$tag"
+    binary="$tmp/release/tailgauge"
+    plasmoid="$tmp/release/frontends/plasma/$PLASMOID_ID"
+    extension="$tmp/release/frontends/gnome/$EXTENSION_UUID"
+    plugin="$tmp/release/frontends/omarchy/$PLUGIN_ID"
+    unit="$tmp/release/systemd/tailgauge-receive.service"
+  fi
 
   # ---- the binary ---------------------------------------------------------
   # One executable with a subcommand per job, and a symlink per subcommand
@@ -105,7 +187,7 @@ main() {
   for alias in ctl watch notify send receive file-select copy tui; do
     ln -sfn tailgauge "$bindir/tailgauge-$alias"
   done
-  echo "Installed tailgauge into $bindir"
+  echo "Installed $("$bindir/tailgauge" --version) into $bindir"
 
   case ":$PATH:" in
   *":$bindir:"*) ;;
@@ -151,7 +233,7 @@ main() {
 
   # ---- GNOME --------------------------------------------------------------
   if $want_gnome; then
-    if command -v gnome-extensions >/dev/null 2>&1 && [[ -f $extension_zip ]]; then
+    if command -v gnome-extensions >/dev/null 2>&1 && [[ -n $extension_zip && -f $extension_zip ]]; then
       gnome-extensions install --force "$extension_zip"
     else
       # Stage and swap, so an install that fails halfway leaves the extension
@@ -228,4 +310,5 @@ main() {
   fi
 }
 
+# Last, so a download cut short runs nothing at all.
 main "$@"
