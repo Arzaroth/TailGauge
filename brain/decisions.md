@@ -143,6 +143,27 @@ See [architecture/distribution.md](architecture/distribution.md).
   GitHub; the frontends refresh the cache every six hours. See
   [features/updates.md](features/updates.md).
 
+### 0006 One installer, which builds in a clone and fetches when piped
+
+**Decision.** `scripts/install.sh` is both the `curl | bash` installer and the
+developer's install-from-checkout. Where its sources come from is the only
+thing that differs; every install step after that is shared.
+
+**Why.** The desktop steps (kpackagetool6, the GNOME stage-and-swap, Omarchy's
+validate, enable and placement, the Taildrop unit) are most of the script, and
+two copies would drift the way the alias lists did. The release archive already
+carries every payload in selvedge's layout, so the piped path needs a download
+and nothing else.
+
+**Rejected.**
+- *A second, release-only script* (TokenGauge's shape): two copies of the
+  desktop steps.
+- *Install the binary, then `tailgauge --install-frontend`*: downloads the
+  archive twice, and selvedge copies a payload without enabling the Omarchy
+  plugin or the unit.
+
+See [architecture/distribution.md](architecture/distribution.md#installsh).
+
 ## Taildrop
 
 - **Receive claims each file with a hard link into a staging directory.** No

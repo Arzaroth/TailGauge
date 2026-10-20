@@ -4,6 +4,20 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Installing is one `curl ... | bash`.** `scripts/install.sh`, piped from
+  `raw.githubusercontent.com`, downloads the latest release archive for the
+  machine, checks it against the new `SHA256SUMS` asset and installs the binary,
+  the Taildrop unit and the widget for the running desktop. `--version` pins a
+  release, `--no-frontend` installs only the binary beside a store-installed
+  widget. Run from a clone, it still builds the checkout.
+
+### Distribution
+
+- **Each release publishes `SHA256SUMS`.** Releases before this one have none,
+  so the piped installer cannot install them.
+
 ## [0.6.2]
 
 ### Fixed

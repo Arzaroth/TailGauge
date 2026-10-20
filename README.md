@@ -29,12 +29,22 @@ There is no daemon and no service to run. All three frontends ask one binary, `t
 ## Install
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/Arzaroth/TailGauge/master/scripts/install.sh | bash
+```
+
+That installs the latest release: it downloads the archive for your architecture, checks it against the release's `SHA256SUMS`, and installs the binary into `~/.local/bin` with the widget for the running desktop. Options go after `bash -s --`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Arzaroth/TailGauge/master/scripts/install.sh | bash -s -- --omarchy --placement=left
+```
+
+Pass `--plasma`, `--gnome` or `--omarchy` to force a desktop, `--no-frontend` for the binary alone, `--no-taildrop` to skip the receive service, and `--version vX.Y.Z` to pin a release (0.7.0 or later). From a clone, the same script builds the checkout instead:
+
+```bash
 git clone https://github.com/Arzaroth/TailGauge
 cd TailGauge
 scripts/install.sh
 ```
-
-The installer detects the running desktop. Pass `--plasma`, `--gnome` or `--omarchy` to force one, and `--no-taildrop` to skip the receive service.
 
 **Plasma**: adds the widget to your library. Add it from *Add Widgets*. QML changes need the shell reloaded, and the unit name depends on how the session started it:
 
@@ -90,15 +100,11 @@ The three frontends are QML and JavaScript their desktops install; the binary is
 | [extensions.gnome.org](https://extensions.gnome.org) | the GNOME extension | the Extensions app applies them on next session |
 | GitHub releases | the Omarchy widget | `tailgauge --update`; there is no plugin store to go through |
 | GitHub releases | everything, the binary included | `tailgauge --update` |
-| Distro package | everything, as one unit | the package manager |
 
-**Neither store can install the binary or the systemd unit** - the KDE Store ships a kpackage, EGO ships an extension zip. Every frontend asks `tailgauge panel` for what to draw, so **a store-installed widget needs the binary beside it**, or it has nothing to show. Install it from the release archive:
+**Neither store can install the binary or the systemd unit** - the KDE Store ships a kpackage, EGO ships an extension zip. Every frontend asks `tailgauge panel` for what to draw, so **a store-installed widget needs the binary beside it**, or it has nothing to show. Install it alone, leaving the store's widget where it is:
 
 ```bash
-tag=$(curl -fsSL https://api.github.com/repos/Arzaroth/TailGauge/releases/latest |
-      sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p')
-curl -fsSL "https://github.com/Arzaroth/TailGauge/releases/download/$tag/tailgauge-$tag-linux-x86_64.tar.gz" | tar -xz
-install -m 755 tailgauge ~/.local/bin/
+curl -fsSL https://raw.githubusercontent.com/Arzaroth/TailGauge/master/scripts/install.sh | bash -s -- --no-frontend
 ```
 
 ### Updating
@@ -130,7 +136,8 @@ Tagging `vX.Y.Z` publishes:
 - `tailgauge-vX.Y.Z-plasmoid.plasmoid` - `kpackagetool6 -t Plasma/Applet -i`, and the KDE Store upload
 - `tailgauge-vX.Y.Z-gnome-shell-extension.zip` - `gnome-extensions install`, and the EGO upload
 - `tailgauge-vX.Y.Z-omarchy-plugin.tar.gz` - unpacks into `~/.config/omarchy/plugins/`
-- `tailgauge-vX.Y.Z-linux-x86_64.tar.gz`, `-linux-aarch64.tar.gz` - the binary, the three frontend payloads under `frontends/`, and the systemd unit. This is what `--update` and `--install-frontend` download.
+- `tailgauge-vX.Y.Z-linux-x86_64.tar.gz`, `-linux-aarch64.tar.gz` - the binary, the three frontend payloads under `frontends/`, and the systemd unit. This is what `install.sh`, `--update` and `--install-frontend` download.
+- `SHA256SUMS` - the checksum of every asset above, which `install.sh` checks a download against before running it
 
 The distribution tests in `crates/tailgauge/src/project.rs` fail the build if those names stop matching what the updater asks for - the asset name is spelled by selvedge's own `arch_target()`, so the test compares the workflow against the running code rather than against a second copy of the name. The three manifests and `Cargo.toml` all declare the version, and a tag that disagrees with any of them refuses to publish.
 
@@ -161,7 +168,7 @@ gnome/                   the GNOME Shell extension (GJS, TypeScript)
 omarchy/                 the Omarchy 4 bar widget (Quickshell QML)
 systemd/                 the Taildrop receive user unit
 scripts/build.sh         compiles the extension, then assembles build/
-scripts/install.sh       builds, then installs the binary, unit and packages
+scripts/install.sh       installs a release (piped) or builds the checkout (in a clone)
 ```
 
 ### The two crates

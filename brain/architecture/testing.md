@@ -9,6 +9,7 @@ the last is local and opt-in. No coverage tooling or floor exists in this repo.
 | `specification.rs` | what the panel should say, from real captures | `cargo test` |
 | `parity.rs` | no frontend decides what the panel already decided | `cargo test` |
 | `e2e.rs` + inner tests | the shipped binary, the CLI surface, distribution | `cargo test` |
+| `install.rs` | `install.sh` piped, against a release laid out on disk | `cargo test` |
 | `tests/qml`, `tests/gnome` | each frontend's service against a recorded panel | `tests/qml/run.sh`, `node --test` |
 | `tests/gnome/shell` | the extension's menu in a real GNOME Shell | `tests/gnome/shell/run.sh` |
 
@@ -55,8 +56,14 @@ list in [panel-spec.md](panel-spec.md).
   Omarchy tarball unpacks under its manifest id (never `omarchy.*`), EGO's
   `version` is an integer, every payload exists and declares the binary's
   version, aliases and legacy names stay disjoint, the 0.4 bootstrap is still
-  published and proves the binary before deleting itself. See
-  [distribution.md](distribution.md).
+  published and proves the binary before deleting itself, `SHA256SUMS` is taken
+  after the last asset and uploaded, and `install.sh` reads each payload where
+  the Package step puts it. See [distribution.md](distribution.md).
+- `tests/install.rs` pipes `scripts/install.sh` into `bash -s` from a temp
+  directory, with `PATH=/usr/bin:/bin`, a temp `HOME` and
+  `TAILGAUGE_DOWNLOAD_BASE` pointing at a release it builds from
+  `CARGO_BIN_EXE_tailgauge` and `sha256sum`: the binary and every alias land,
+  and a tampered archive installs nothing.
 
 ## Frontend harnesses
 
@@ -101,6 +108,7 @@ test could see it. Run at 45 and 50 after any
 - `crates/tailgauge-core/tests/specification.rs` (`fixture`, `NOW`), `crates/tailgauge-core/tests/fixtures/`
 - `crates/tailgauge-core/tests/parity.rs` (`PLASMA`, `GNOME`, `OMARCHY`, `frontends`)
 - `crates/tailgauge/tests/e2e.rs` (`Machine::with`, `Machine::run`, `every_command_the_frontends_invoke_exists`)
+- `crates/tailgauge/tests/install.rs` (`Release::new`, `Release::install`)
 - `crates/tailgauge/src/project.rs` (`mod tests`, `published_suffixes`), `crates/tailgauge/src/main.rs` (`mod tests`)
 - `tests/qml/run.sh`, `tests/qml/Check.qml`, `tests/qml/plasma.qml`, `tests/qml/omarchy.qml`, `tests/qml/stubs/`, `tests/qml/fixtures/panel.json`
 - `tests/gnome/register.js`, `tests/gnome/gi-loader.js`, `tests/gnome/mocks/`, `tests/gnome/panel.test.js`, `tests/gnome/provider.test.js`

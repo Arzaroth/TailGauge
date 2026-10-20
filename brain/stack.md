@@ -85,7 +85,7 @@ no `.cargo/config.toml` in place.
 
 GitHub Actions only: `ci.yml` on pull requests and pushes to `master`,
 `release.yml` on `v*` tags (or `workflow_dispatch` with an existing tag). Linux
-only, x86_64 and aarch64 on native runners. Six release assets; no Windows or
+only, x86_64 and aarch64 on native runners. Seven release assets (`SHA256SUMS` among them); no Windows or
 macOS build. See [operations.md](operations.md).
 
 ## Sources
