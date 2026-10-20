@@ -165,15 +165,34 @@ mod tests {
 
         for suffix in published_suffixes() {
             let name = format!("dist/tailgauge-v0.0.0-{suffix}");
-            let matched = globs.iter().any(|glob| {
-                let (head, tail) = glob.split_once('*').expect("a glob");
-                name.starts_with(head) && name.ends_with(tail)
+            let matched = globs.iter().any(|glob| match glob.split_once('*') {
+                Some((head, tail)) => name.starts_with(head) && name.ends_with(tail),
+                None => name == *glob,
             });
             assert!(
                 matched,
                 "Package builds {name} but no glob matches: {globs:?}"
             );
         }
+    }
+
+    /// `install.sh` refuses an archive SHA256SUMS does not list, so the sums
+    /// are taken once every asset is written, and published with them.
+    #[test]
+    fn the_release_publishes_the_checksums_of_every_asset() {
+        let release = repo_file(".github/workflows/release.yml");
+        let sums = release
+            .find("sha256sum -- * >SHA256SUMS")
+            .expect("the release takes no checksums");
+        let last_asset = release
+            .rfind("dist/tailgauge-$safe-")
+            .expect("the release writes no assets");
+        assert!(sums > last_asset, "an asset is written after the checksums");
+        let uploaded = release.split("files: |").nth(1).expect("no files block");
+        assert!(
+            uploaded.contains("dist/SHA256SUMS"),
+            "SHA256SUMS is not uploaded"
+        );
     }
 
     #[test]

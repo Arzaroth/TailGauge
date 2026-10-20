@@ -159,6 +159,10 @@ jobs:
           install -m 755 scripts/compat/tailgauge-update pack/helpers/bin/tailgauge-update
           tar -czf "dist/tailgauge-$safe-helpers.tar.gz" -C pack/helpers .
 
+          # What scripts/install.sh checks a download against before running it.
+          (cd dist && sha256sum -- * >SHA256SUMS)
+          cat dist/SHA256SUMS
+
           ls -l dist
 
       - name: Extract release notes from CHANGELOG
@@ -188,3 +192,4 @@ jobs:
             dist/*.plasmoid
             dist/*.tar.gz
             dist/*.zip
+            dist/SHA256SUMS
