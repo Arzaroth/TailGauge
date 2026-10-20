@@ -50,9 +50,34 @@ after that succeeded; a failed rename puts the old copy back. Per-frontend
 failures are collected, not fatal. The binary itself is swapped through a temp
 `<binary>.old`. One kernel lock (`UpdateLock`) serialises updates.
 
+## `install.sh`
+
+One script, two sources. `checkout()` looks for `Cargo.toml` and
+`crates/tailgauge` above the script's own path; `curl ... | bash` has no path
+(`BASH_SOURCE` is empty), so it finds none.
+
+- **In a clone**: `build.sh`, `cargo build --release --locked`, and the payloads
+  from `build/`. GNOME prefers `gnome-extensions install` on the zip.
+- **Piped, or with `--version`**: `fetch_release` resolves the tag (the
+  `releases/latest` redirect unless `--version` names one), downloads
+  `SHA256SUMS`, picks `tailgauge-<tag>-linux-<arch>.tar.gz` from it, refuses an
+  archive whose sum differs, unpacks it to a temp directory and runs its
+  `tailgauge --version` before installing anything. Payloads come from the
+  archive's `frontends/<id>/<artifact>` and `systemd/`, the same paths selvedge
+  reads, so a curl install and `--update` install the same bytes.
+  `TAILGAUGE_REPO` picks a fork; `TAILGAUGE_DOWNLOAD_BASE` (a directory or URL)
+  stands in for the release, which is how `tests/install.rs` runs it.
+- Releases before 0.7.0 publish no `SHA256SUMS` and cannot be installed this
+  way.
+- The whole script is a `main` called on its last line, so a download cut short
+  defines functions and runs nothing.
+- `--no-frontend` installs the binary, aliases and unit only: the path for a
+  widget that came from a store.
+
 ## Release assets
 
-`release.yml` publishes six, named `tailgauge-<tag>-<suffix>`:
+`release.yml` publishes seven, named `tailgauge-<tag>-<suffix>` but for the
+last:
 
 - `plasmoid.plasmoid`: a zip of the package contents, for `kpackagetool6 -i`
   and the KDE Store.
@@ -67,6 +92,8 @@ failures are collected, not fatal. The binary itself is swapped through a temp
   `ARCHIVE_SUFFIX` (`.tar.gz`); this is what `--update` and
   `--install-frontend` download.
 - `helpers.tar.gz`: `bin/tailgauge-update`, the 0.4 bootstrap (below).
+- `SHA256SUMS`: `sha256sum` of every asset above, taken after the last one is
+  written (`the_release_publishes_the_checksums_of_every_asset`).
 
 `the_release_publishes_the_archive_this_binary_downloads` compares the
 workflow's `dist/tailgauge-$safe-*` names with selvedge's own `arch_target()`,
@@ -80,7 +107,7 @@ extensions.gnome.org by hand after each release (`release` skill, step 7).
 Neither store can install the binary or the systemd unit: the KDE Store ships a
 kpackage, EGO an extension zip. Every frontend draws what `tailgauge panel`
 prints, so a store-only install has a widget and no panel until the binary is
-installed from a release archive. Store-installed payloads also update on the
+installed (`install.sh --no-frontend`). Store-installed payloads also update on the
 store's schedule, apart from the binary, which is why the panel JSON must stay
 readable one release either side and why skew is reported
 ([../features/updates.md](../features/updates.md)). Omarchy has no store: its
@@ -119,5 +146,6 @@ archives copy all four licence files because an archive is a copy.
 - `crates/tailgauge/src/project.rs` (`TAILGAUGE`, `ALIASES`, `FRONTENDS`, `mod tests`)
 - `crates/tailgauge/src/main.rs` (`splice_alias`, `handle_install_frontend`, `report_frontends`)
 - selvedge `v0.3.2`: `src/frontend.rs` (`ARCHIVE_ROOT`, `dest_dir`, `install_into`, `schemas_ready`), `src/update.rs` (`arch_target`, `ARCHIVE_SUFFIX`, `install_frontends`, `apply`)
-- `.github/workflows/release.yml` (Package step), `scripts/install.sh`, `scripts/build.sh`, `scripts/compat/tailgauge-update`
+- `.github/workflows/release.yml` (Package step), `scripts/install.sh` (`checkout`, `fetch_release`, `main`), `scripts/build.sh`, `scripts/compat/tailgauge-update`
+- `crates/tailgauge/tests/install.rs`
 - `NOTICE`, `LICENSE`, `LICENSE-MIT`, `omarchy/arzaroth.tailgauge/NOTICE`

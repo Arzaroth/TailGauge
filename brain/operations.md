@@ -34,17 +34,20 @@ a PR. Run it in bash with `shopt -s globstar nullglob`.
   removed, schemas compiled, plus a `.shell-extension.zip` when `zip` exists)
   and `build/arzaroth.tailgauge` (copied, never symlinked: Omarchy's plugin
   registry refuses symlinks).
-- `scripts/install.sh [--plasma] [--gnome] [--omarchy] [--no-taildrop]
-  [--placement=left|center|right]`: with no target flag it picks from
-  `XDG_CURRENT_DESKTOP`. It runs `build.sh`, `cargo build --release --locked`,
-  installs `~/.local/bin/tailgauge`, removes a stale `tailgauge-update`, writes
+- `scripts/install.sh [--plasma] [--gnome] [--omarchy] [--no-frontend]
+  [--no-taildrop] [--placement=left|center|right] [--version vX.Y.Z]`: with no
+  target flag it picks from `XDG_CURRENT_DESKTOP`. Its sources depend on where
+  it runs ([architecture/distribution.md](architecture/distribution.md#installsh)):
+  in a clone it runs `build.sh` and `cargo build --release --locked`; piped, or
+  with `--version`, it fetches and checks a release archive. Then it installs
+  `~/.local/bin/tailgauge`, removes a stale `tailgauge-update`, writes
   the `tailgauge-<alias>` symlinks, then the Taildrop unit (unless
   `--no-taildrop`), then each desktop payload: Plasma through `kpackagetool6`
   (`-u` when installed, `-i` otherwise); GNOME through `gnome-extensions install
   --force` on the zip, falling back to a stage-and-swap that moves the old copy
   aside so a failed copy keeps it; Omarchy copied to a staging directory, then
   the old plugin `rm -rf`'d and the new one `mv`'d in. `--placement` is Omarchy
-  only.
+  only; `--no-frontend` skips every payload and the desktop detection.
 - Taildrop unit: `systemd/tailgauge-receive.service`, a user unit
   (`ExecStart=%h/.local/bin/tailgauge receive`, `Restart=always`,
   `WantedBy=graphical-session.target`). Installed and enabled by
@@ -92,7 +95,7 @@ Every place the version lives:
 
 Then `git grep -n -F '<old>' -- ':!CHANGELOG.md'` must come back empty.
 `release.yml` rebuilds and retests, refuses a tag that disagrees with any
-manifest or with `tailgauge --version`, packages six assets and takes the
+manifest or with `tailgauge --version`, packages seven assets (six plus `SHA256SUMS`) and takes the
 release notes from the `## [x.y.z]` CHANGELOG section (house format: no date).
 The KDE Store and EGO uploads are manual and come after.
 
