@@ -215,6 +215,40 @@ mod tests {
         }
     }
 
+    /// `install.sh` installs from the same archive `--update` does, so it reads
+    /// each payload from where the Package step put it, under the name the
+    /// desktop knows it by.
+    #[test]
+    fn the_installer_reads_the_archive_the_release_packs() {
+        let installer = repo_file("scripts/install.sh");
+        assert!(
+            installer.contains("-linux-$arch\\.tar\\.gz"),
+            "the installer asks for no linux-<arch> archive"
+        );
+        assert!(installer.contains("SHA256SUMS"));
+        assert!(installer.contains(&format!("\"$tmp/release/{}\"", TAILGAUGE.primary())));
+        let release = repo_file(".github/workflows/release.yml");
+        assert!(release.contains("\"$stage/systemd/\""));
+        assert!(installer.contains("$tmp/release/systemd/tailgauge-receive.service"));
+        for f in TAILGAUGE.frontends {
+            assert!(
+                installer.contains(&format!(
+                    "$tmp/release/{}/{}/",
+                    selvedge::frontend::ARCHIVE_ROOT,
+                    f.id
+                )),
+                "the installer does not read the {} payload from the archive",
+                f.id
+            );
+            assert!(
+                installer.contains(&format!("=\"{}\"", f.artifact)),
+                "the installer does not name the {} payload {}",
+                f.id,
+                f.artifact
+            );
+        }
+    }
+
     #[test]
     fn the_plasmoid_ships_as_a_plasmoid_zip() {
         // kpackagetool6 and the KDE Store both take a zip of the package
