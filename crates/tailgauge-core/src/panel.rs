@@ -566,16 +566,27 @@ fn update_section(state: &PanelState) -> PanelSection {
     let update = state.update.clone().unwrap_or_default();
     let mut rows = Vec::new();
     if update.available {
+        // A packaged binary is the package manager's to replace, and
+        // `--update` refuses it: the banner says where the upgrade comes from
+        // and offers nothing to click.
+        let managed = !update.upgraded_by.is_empty();
         rows.push(PanelRow {
             id: "update".into(),
             kind: "update".into(),
             label: format!("TailGauge {} is available", update.latest),
-            // No store owns any part of TailGauge, so there is never a copy
-            // the binary may not replace.
-            sublabel: "Install it now".into(),
+            sublabel: if managed {
+                format!("Upgrade it with {}", update.upgraded_by)
+            } else {
+                "Install it now".into()
+            },
             icon: "software-update-available-symbolic".into(),
             glyph: "\u{f06b0}".into(),
-            action: "update".into(),
+            action: if managed {
+                String::new()
+            } else {
+                "update".into()
+            },
+            navigable: !managed,
             busy: state.updating,
             current: true,
             payload: payload(&update),
