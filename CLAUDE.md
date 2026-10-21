@@ -174,8 +174,9 @@ a clean distribution, and the release does not publish until it has.
   `every_package_points_the_taildrop_unit_at_usr_bin`.
 - **No package installs the Omarchy widget.** The shell loads third-party
   plugins from `~/.config/omarchy/plugins/` only.
-- **Signing starts when `packaging/tailgauge.asc` is committed.** From then on
-  a release without `TAILGAUGE_GPG_KEY` refuses to publish.
+- **`packaging/tailgauge.asc` being committed is what turns signing on**, and
+  with it a release without `TAILGAUGE_GPG_KEY` refuses to publish. The key
+  itself lives in `~/.config/tailgauge/`, never in the tree.
 
 ## The updater is a crate, and it is not in this repository
 
