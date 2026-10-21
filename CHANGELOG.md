@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.7.0]
+
 ### Added
 
 - **Installing is one `curl ... | bash`.** `scripts/install.sh`, piped from

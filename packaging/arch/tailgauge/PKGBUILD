@@ -6,7 +6,7 @@
 # have to checksum.
 
 pkgname=tailgauge
-pkgver=0.6.2
+pkgver=0.7.0
 pkgrel=1
 pkgdesc="Tailscale and NetBird in the KDE Plasma, GNOME Shell and Omarchy panel"
 arch=('x86_64' 'aarch64')
