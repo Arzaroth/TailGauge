@@ -1264,6 +1264,31 @@ fn an_update_in_flight_marks_the_row_busy() {
 }
 
 #[test]
+fn a_packaged_install_is_sent_to_its_package_manager_rather_than_offered_an_update() {
+    let packaged = PanelState {
+        update: Some(core::panel_state::UpdateInfo {
+            available: true,
+            latest: "1.1.0".into(),
+            upgraded_by: "your package manager".into(),
+            ..Default::default()
+        }),
+        ..state()
+    };
+    let panel = resolve(&packaged);
+    assert!(section(&panel, "update").visible);
+
+    let row = &rows_of(&panel, "update")[0];
+    assert_eq!(row.label, "TailGauge 1.1.0 is available");
+    assert_eq!(row.sublabel, "Upgrade it with your package manager");
+    assert_eq!(row.action, "", "--update refuses a packaged binary");
+    assert!(!row.navigable);
+    assert!(
+        !panel.navigation.iter().any(|n| n.row_id == "update"),
+        "a banner with nothing to do is not a cursor stop"
+    );
+}
+
+#[test]
 fn the_footer_carries_the_version_the_frontend_passed() {
     let versioned = PanelState {
         version: "1.2.3".into(),
