@@ -19,6 +19,7 @@ pub const TAILGAUGE: Project = Project {
     // No MSI: there is no Windows build, and an update always replaces in
     // place.
     msi_marker_key: None,
+    targets: selvedge::SHORT_TARGETS,
 };
 
 /// One symlink per subcommand, under the name the shell helper had. A key
@@ -136,7 +137,10 @@ mod tests {
     #[test]
     fn the_release_publishes_the_archive_this_binary_downloads() {
         let published = published_suffixes();
-        let wanted = format!("{}{ARCHIVE_SUFFIX}", arch_target().expect("known arch"));
+        let wanted = format!(
+            "{}{ARCHIVE_SUFFIX}",
+            arch_target(&TAILGAUGE).expect("known arch")
+        );
         assert!(
             published.iter().any(|s| s == &wanted),
             "apply() asks for {wanted}, and the release publishes {published:?}"
