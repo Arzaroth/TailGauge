@@ -1,0 +1,39 @@
+# Maintainer: Marc-Etienne Barrut <lekva+github@arzaroth.com>
+#
+# Repackages the static binary and the frontend payloads of a GitHub release
+# archive. The release workflow attaches a copy of this file with pkgver and
+# sha256sums filled in, and the packages it builds from it.
+
+pkgname=tailgauge-bin
+pkgver=0.6.2
+pkgrel=1
+pkgdesc="Tailscale and NetBird in the KDE Plasma, GNOME Shell and Omarchy panel (release binary)"
+arch=('x86_64' 'aarch64')
+url="https://github.com/Arzaroth/TailGauge"
+license=('MIT OR WTFPL')
+provides=("tailgauge=$pkgver")
+conflicts=('tailgauge')
+optdepends=('tailscale: a VPN for it to drive'
+  'netbird: a VPN for it to drive'
+  'zenity: the Taildrop file chooser'
+  'kdialog: the Taildrop file chooser on Plasma'
+  'wl-clipboard: the copy actions on Wayland')
+options=('!strip' '!debug')
+source_x86_64=("$url/releases/download/v$pkgver/tailgauge-v$pkgver-linux-x86_64.tar.gz")
+source_aarch64=("$url/releases/download/v$pkgver/tailgauge-v$pkgver-linux-aarch64.tar.gz")
+sha256sums_x86_64=('SKIP')
+sha256sums_aarch64=('SKIP')
+
+package() {
+  install -Dm755 tailgauge "$pkgdir/usr/bin/tailgauge"
+  for alias in ctl watch notify send receive file-select copy tui; do
+    ln -s tailgauge "$pkgdir/usr/bin/tailgauge-$alias"
+  done
+  install -d "$pkgdir/usr/lib/systemd/user"
+  sed 's|^ExecStart=%h/\.local/bin/tailgauge |ExecStart=/usr/bin/tailgauge |' \
+    systemd/tailgauge-receive.service >"$pkgdir/usr/lib/systemd/user/tailgauge-receive.service"
+  install -d "$pkgdir/usr/share/plasma/plasmoids" "$pkgdir/usr/share/gnome-shell/extensions"
+  cp -r --no-preserve=ownership frontends/plasma/org.tailgauge.plasmoid "$pkgdir/usr/share/plasma/plasmoids/"
+  cp -r --no-preserve=ownership frontends/gnome/tailgauge@arzaroth.github.io "$pkgdir/usr/share/gnome-shell/extensions/"
+  install -Dm644 -t "$pkgdir/usr/share/licenses/$pkgname" LICENSE LICENSE-MIT LICENSE-WTFPL NOTICE
+}

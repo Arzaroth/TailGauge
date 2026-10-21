@@ -1,0 +1,60 @@
+# Maintainer: Marc-Etienne Barrut <lekva+github@arzaroth.com>
+#
+# Builds TailGauge from the release's source tarball. The release workflow
+# attaches a copy of this file with pkgver and sha256sums filled in; the copy
+# in the repository keeps SKIP, since it lives inside the tarball it would
+# have to checksum.
+
+pkgname=tailgauge
+pkgver=0.6.2
+pkgrel=1
+pkgdesc="Tailscale and NetBird in the KDE Plasma, GNOME Shell and Omarchy panel"
+arch=('x86_64' 'aarch64')
+url="https://github.com/Arzaroth/TailGauge"
+license=('MIT OR WTFPL')
+depends=('gcc-libs' 'glibc')
+makedepends=('cargo' 'nodejs' 'pnpm' 'glib2')
+optdepends=('tailscale: a VPN for it to drive'
+  'netbird: a VPN for it to drive'
+  'zenity: the Taildrop file chooser'
+  'kdialog: the Taildrop file chooser on Plasma'
+  'wl-clipboard: the copy actions on Wayland')
+conflicts=('tailgauge-bin')
+options=('!lto' '!debug')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+prepare() {
+  cd "TailGauge-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+  pnpm install --frozen-lockfile
+}
+
+build() {
+  cd "TailGauge-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable CARGO_TARGET_DIR=target
+  cargo build --frozen --release -p tailgauge
+  scripts/build.sh
+}
+
+check() {
+  cd "TailGauge-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable CARGO_TARGET_DIR=target
+  cargo test --frozen -p tailgauge-core
+}
+
+package() {
+  cd "TailGauge-$pkgver"
+  install -Dm755 target/release/tailgauge "$pkgdir/usr/bin/tailgauge"
+  for alias in ctl watch notify send receive file-select copy tui; do
+    ln -s tailgauge "$pkgdir/usr/bin/tailgauge-$alias"
+  done
+  install -d "$pkgdir/usr/lib/systemd/user"
+  sed 's|^ExecStart=%h/\.local/bin/tailgauge |ExecStart=/usr/bin/tailgauge |' \
+    systemd/tailgauge-receive.service >"$pkgdir/usr/lib/systemd/user/tailgauge-receive.service"
+  install -d "$pkgdir/usr/share/plasma/plasmoids" "$pkgdir/usr/share/gnome-shell/extensions"
+  cp -r --no-preserve=ownership build/org.tailgauge.plasmoid "$pkgdir/usr/share/plasma/plasmoids/"
+  cp -r --no-preserve=ownership build/tailgauge@arzaroth.github.io "$pkgdir/usr/share/gnome-shell/extensions/"
+  install -Dm644 -t "$pkgdir/usr/share/licenses/$pkgname" LICENSE LICENSE-MIT LICENSE-WTFPL NOTICE
+}
