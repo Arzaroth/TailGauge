@@ -27,7 +27,7 @@ Checked against TailGauge at `d1f40d0` (0.7.0).
 
 ## Backport status (2026-10-20)
 
-### Backported: received images are decoded for a notification preview
+### Backported: received images are no longer decoded for a notification preview
 
 `dc2b1809` (2026-10-17) stopped `omarchy-tailscale-receive` passing
 `--image` for received images: "Untrusted received files should not be decoded
