@@ -339,6 +339,7 @@ jobs:
             echo "::error::TAILGAUGE_GPG_KEY is not the key packaging/tailgauge.asc publishes ($fpr)"
             exit 1
           fi
+          sudo apt-get update -qq
           sudo apt-get install -qq -y rpm >/dev/null
           echo "fpr=$fpr" >>"$GITHUB_OUTPUT"
 
