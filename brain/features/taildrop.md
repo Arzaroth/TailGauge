@@ -54,8 +54,9 @@ has no `FileSend` capability.
   name, so there is no check-then-rename race), numbering collisions
   `name-1.ext` with only the last extension kept off the counter
   (`notes.tar-1.gz`), then unlinks the staged copy.
-- Each file is announced `Received <name>` / `Saved to ~/Downloads`, with the
-  image as the notification picture for image extensions. Click-to-open:
+- Each file is announced `Received <name>` / `Saved to ~/Downloads`, never with
+  the file itself as the notification picture: a received file is untrusted, so
+  nothing decodes it before someone opens it. Click-to-open:
   `notify.rs` re-execs itself detached as `notify --await-action --open
   <path>`, which runs `notify-send --wait --action=default=Open` and
   `xdg-open`s the file on the default action. Without `notify-send` action
