@@ -101,6 +101,13 @@ distribution before publishing (see
 release notes from the `## [x.y.z]` CHANGELOG section (house format: no date).
 The KDE Store and EGO uploads are manual and come after.
 
+The release key lives outside the repository, in `~/.config/tailgauge/`
+(`gnupg/`, and `release-signing.{fingerprint,passphrase,public.asc,secret.asc,revoke.asc}`),
+the same layout as smith's and wyrmyon's. The repository secrets
+`TAILGAUGE_GPG_KEY` and `TAILGAUGE_GPG_PASSPHRASE` are set from the
+`secret.asc` and `passphrase` files; the public half is
+`packaging/tailgauge.asc`.
+
 Feature branches go through `feature-treatment`: rebase, parallel finder
 review, fixes as new layers, docs, gate, PR worked with `babysit-pr` to a
 **rebase merge**, release, `wt remove`.

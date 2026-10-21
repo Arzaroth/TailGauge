@@ -121,9 +121,10 @@ Expect `-plasmoid.plasmoid`, `-gnome-shell-extension.zip`,
 `-omarchy-plugin.tar.gz`, `-linux-x86_64.tar.gz`, `-linux-aarch64.tar.gz`,
 `-helpers.tar.gz` (the bootstrap installs from 0.4.0 or earlier still ask for),
 `-pkgbuild.tar.gz`, a `.deb` and an `.rpm` per architecture, the two
-`tailgauge-bin` `.pkg.tar.zst`, and `SHA256SUMS`; once `packaging/tailgauge.asc`
-is committed, also a `.sig` per Arch package, `SHA256SUMS.asc` and
-`tailgauge-release-key.asc`. The workflow publishes only after the `verify` job
+`tailgauge-bin` `.pkg.tar.zst`, `SHA256SUMS`, a `.sig` per Arch package,
+`SHA256SUMS.asc` and `tailgauge-release-key.asc`. A release without the
+`TAILGAUGE_GPG_KEY` secret refuses to publish; the key is in
+`~/.config/tailgauge/` (see `brain/operations.md`). The workflow publishes only after the `verify` job
 has installed every package on a clean distribution.
 The release body is the `## [x.y.z]` CHANGELOG section followed by GitHub's
 generated "What's Changed" list (the workflow asks for both). If the run warns

@@ -60,6 +60,15 @@ Each release has a `.deb`, an `.rpm` and an Arch package for x86_64 and aarch64.
 systemctl --user enable --now tailgauge-receive.service
 ```
 
+The `.rpm`s, the Arch packages (a `.sig` beside each) and `SHA256SUMS` (in `SHA256SUMS.asc`) are signed with the release key [`packaging/tailgauge.asc`](packaging/tailgauge.asc), fingerprint `6342F5C2E27356FE3462208259F1EE16E8417BB6`. Trust it once:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Arzaroth/TailGauge/master/packaging/tailgauge.asc -o tailgauge.asc
+gpg --import tailgauge.asc && gpg --verify SHA256SUMS.asc SHA256SUMS   # any distribution
+sudo rpm --import tailgauge.asc                                         # Fedora, openSUSE
+sudo pacman-key --add tailgauge.asc && sudo pacman-key --lsign-key 6342F5C2E27356FE3462208259F1EE16E8417BB6  # Arch
+```
+
 The binary is static, so the packages run on anything from Debian 12 and Ubuntu 22.04 up. Omarchy only loads third-party widgets from `~/.config/omarchy/plugins/`, so no package can install one: run `tailgauge --install-frontend omarchy` and `omarchy-plugin-enable arzaroth.tailgauge` once, and again after an upgrade when `tailgauge --update` reports the widget behind. A packaged binary upgrades through its package manager: `--update` refuses it, and the panel's banner says so instead of offering to install.
 
 Moving from an `install.sh` install to a package, remove `~/.local/bin/tailgauge*` and the per-user widgets first: Plasma and GNOME put `~/.local/bin` ahead of `/usr/bin` on the `PATH` they run `tailgauge` from, and the desktops load a per-user widget over the system one.
