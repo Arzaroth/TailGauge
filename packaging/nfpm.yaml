@@ -1,0 +1,89 @@
+# The .deb and .rpm, built by scripts/package.sh from inside a staged release
+# archive: ARCH (amd64, arm64) and VERSION come from the environment, and the
+# script appends one symlink per alias to `contents`, which therefore stays
+# last.
+name: tailgauge
+arch: ${ARCH}
+platform: linux
+version: ${VERSION}
+section: net
+priority: optional
+maintainer: Marc-Etienne Barrut <lekva+github@arzaroth.com>
+homepage: https://github.com/Arzaroth/TailGauge
+license: MIT OR WTFPL
+description: |
+  Tailscale and NetBird in the KDE Plasma, GNOME Shell and Omarchy panel.
+  Connection state, on/off, account switching, exit nodes including Mullvad
+  regions, machine browsing with copy actions, and Taildrop file sending,
+  drawn by a Plasma widget and a GNOME Shell extension from one binary.
+recommends:
+  - ca-certificates
+suggests:
+  - tailscale
+  - netbird
+  - zenity
+  - wl-clipboard
+
+rpm:
+  group: Applications/Internet
+  compression: zstd
+deb:
+  compression: xz
+
+contents:
+  - src: ./archive/tailgauge
+    dst: /usr/bin/tailgauge
+    file_info:
+      mode: 0755
+  - src: ./tailgauge-receive.service
+    dst: /usr/lib/systemd/user/tailgauge-receive.service
+    file_info:
+      mode: 0644
+  - src: ./archive/frontends/plasma/org.tailgauge.plasmoid/
+    dst: /usr/share/plasma/plasmoids/org.tailgauge.plasmoid
+    type: tree
+  - src: ./archive/frontends/gnome/tailgauge@arzaroth.github.io/
+    dst: /usr/share/gnome-shell/extensions/tailgauge@arzaroth.github.io
+    type: tree
+  - src: ./archive/README.md
+    dst: /usr/share/doc/tailgauge/README.md
+    file_info:
+      mode: 0644
+  - src: ./archive/CHANGELOG.md
+    dst: /usr/share/doc/tailgauge/CHANGELOG.md
+    file_info:
+      mode: 0644
+  - src: ./archive/NOTICE
+    dst: /usr/share/doc/tailgauge/NOTICE
+    file_info:
+      mode: 0644
+  - src: ./archive/LICENSE
+    dst: /usr/share/doc/tailgauge/copyright
+    packager: deb
+    file_info:
+      mode: 0644
+  - src: ./archive/LICENSE-MIT
+    dst: /usr/share/doc/tailgauge/LICENSE-MIT
+    packager: deb
+    file_info:
+      mode: 0644
+  - src: ./archive/LICENSE-WTFPL
+    dst: /usr/share/doc/tailgauge/LICENSE-WTFPL
+    packager: deb
+    file_info:
+      mode: 0644
+  - src: ./archive/LICENSE
+    dst: /usr/share/licenses/tailgauge/LICENSE
+    packager: rpm
+    file_info:
+      mode: 0644
+  - src: ./archive/LICENSE-MIT
+    dst: /usr/share/licenses/tailgauge/LICENSE-MIT
+    packager: rpm
+    file_info:
+      mode: 0644
+  - src: ./archive/LICENSE-WTFPL
+    dst: /usr/share/licenses/tailgauge/LICENSE-WTFPL
+    packager: rpm
+    file_info:
+      mode: 0644
