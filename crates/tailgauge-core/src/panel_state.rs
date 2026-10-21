@@ -44,6 +44,10 @@ pub struct UpdateInfo {
     pub latest: String,
     #[serde(default)]
     pub available: bool,
+    /// What upgrades this install when `--update` may not, such as the
+    /// package manager that owns it; empty when the binary replaces itself.
+    #[serde(default, rename = "upgradedBy")]
+    pub upgraded_by: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
