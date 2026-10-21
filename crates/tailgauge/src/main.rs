@@ -629,16 +629,30 @@ mod tests {
         assert_eq!(spliced(&[]), [] as [&str; 0]);
     }
 
-    fn installer_aliases() -> Vec<String> {
-        let installer = std::fs::read_to_string(
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/install.sh"),
+    /// Every file that writes the alias symlinks itself, each with its own
+    /// `for alias in` loop.
+    const ALIAS_WRITERS: &[&str] = &[
+        "scripts/install.sh",
+        "scripts/package.sh",
+        "scripts/check-package.sh",
+        "packaging/arch/tailgauge/PKGBUILD",
+        "packaging/arch/tailgauge-bin/PKGBUILD",
+    ];
+
+    fn aliases_in(rel: &str) -> Vec<String> {
+        let source = std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../..")
+                .join(rel),
         )
-        .expect("the installer");
-        let line = installer
+        .unwrap_or_else(|e| panic!("{rel}: {e}"));
+        let loops: Vec<&str> = source
             .lines()
-            .find(|l| l.contains("for alias in"))
-            .expect("the alias loop");
-        line.trim()
+            .filter(|l| l.contains("for alias in"))
+            .collect();
+        assert_eq!(loops.len(), 1, "{rel} should have one alias loop");
+        loops[0]
+            .trim()
             .trim_start_matches("for alias in ")
             .trim_end_matches("; do")
             .split_whitespace()
@@ -646,19 +660,25 @@ mod tests {
             .collect()
     }
 
-    /// The installer writes these on a fresh install, and selvedge rewrites
-    /// `ALIASES` on `--update`: a name in one list only is a symlink that one
-    /// way of installing has and the other does not.
+    fn installer_aliases() -> Vec<String> {
+        aliases_in("scripts/install.sh")
+    }
+
+    /// The installer and the packages write these on a fresh install, and
+    /// selvedge rewrites `ALIASES` on `--update`: a name in one list only is a
+    /// symlink that one way of installing has and the others do not.
     #[test]
-    fn the_installer_and_the_updater_write_the_same_aliases() {
-        let mut installer: Vec<String> = installer_aliases()
-            .iter()
-            .map(|alias| format!("tailgauge-{alias}"))
-            .collect();
+    fn the_installer_the_packages_and_the_updater_write_the_same_aliases() {
         let mut updater = project::ALIASES.to_vec();
-        installer.sort();
         updater.sort();
-        assert_eq!(installer, updater);
+        for rel in ALIAS_WRITERS {
+            let mut written: Vec<String> = aliases_in(rel)
+                .iter()
+                .map(|alias| format!("tailgauge-{alias}"))
+                .collect();
+            written.sort();
+            assert_eq!(written, updater, "{rel}");
+        }
     }
 
     /// The installer writes one symlink per alias, and a symlink whose name is
