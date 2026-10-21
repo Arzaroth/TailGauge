@@ -45,7 +45,8 @@ list in [panel-spec.md](panel-spec.md).
   for `tailgauge` argv literals and `_ctl(...)` calls and runs each with
   `--help`.
 - Inner unit tests: `main.rs` (alias splicing, update-flag exclusivity,
-  `the_installer_and_the_updater_write_the_same_aliases`), `send.rs`,
+  `the_installer_the_packages_and_the_updater_write_the_same_aliases`, over
+  every file with a `for alias in` loop), `send.rs`,
   `file_select.rs`, `receive.rs`, `tui.rs` (pane building, search, cursor,
   provider choice), and the distribution tests below.
 - **Distribution tests** in `crates/tailgauge/src/project.rs` read
@@ -57,8 +58,13 @@ list in [panel-spec.md](panel-spec.md).
   `version` is an integer, every payload exists and declares the binary's
   version, aliases and legacy names stay disjoint, the 0.4 bootstrap is still
   published and proves the binary before deleting itself, `SHA256SUMS` is taken
-  after the last asset and uploaded, and `install.sh` reads each payload where
-  the Package step puts it. See [distribution.md](distribution.md).
+  after the last asset and uploaded, `install.sh` reads each payload where
+  the Package step puts it, every package puts the payloads where the desktop
+  looks (as nfpm `tree`s), points the unit at `/usr/bin` and is built from the
+  archive, and the release uploads every package and publishes only after
+  `verify`. See [distribution.md](distribution.md).
+- The packages themselves are only checked in CI: `release.yml`'s `verify` job
+  installs each one in a clean container and runs `scripts/check-package.sh`.
 - `tests/install.rs` pipes `scripts/install.sh` into `bash -s` from a temp
   directory, with `PATH=/usr/bin:/bin`, a temp `HOME` and
   `TAILGAUGE_DOWNLOAD_BASE` pointing at a release it builds from

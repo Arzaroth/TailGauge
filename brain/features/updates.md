@@ -27,8 +27,13 @@ panel. The flags are mutually exclusive and refuse a subcommand
 - `panel.rs` `update_section`: section `update`, first in the panel, untitled,
   visible only when `available`. One row, kind and action `update`, label
   `TailGauge <latest> is available`, sublabel `Install it now`, `busy` while the
-  frontend says it is `updating`. Always offered: no store owns any part of
-  TailGauge, so there is never a copy the binary may not replace.
+  frontend says it is `updating`.
+- **A packaged binary**: `gather::upgraded_by` asks selvedge's
+  `update::owner` who owns the running binary (by path; only when an update is
+  available) and fills `UpdateInfo.upgraded_by` (`your package manager`,
+  `Homebrew`, `Nix`, `snap`). The row then reads `Upgrade it with <that>`, has
+  no action and is not a cursor stop, since `--update` would refuse. Test:
+  `a_packaged_install_is_sent_to_its_package_manager_rather_than_offered_an_update`.
 - Plasma, GNOME and Omarchy dispatch `update` to `applyUpdate`, which runs
   `tailgauge --update`, shows `Updating TailGauge…`, and puts stderr in
   `lastError` on failure. The TUI runs `selvedge::update::apply` in-process from
@@ -73,7 +78,7 @@ desktop switched to after install. See
 ## Sources
 
 - `crates/tailgauge/src/main.rs` (`resolve`, `handle_check_update`, `handle_update`, `handle_install_frontend`, `report_frontends`, `report_frontend_skew`)
-- `crates/tailgauge/src/gather.rs` (`update_info`), `crates/tailgauge-core/src/panel_state.rs` (`UpdateInfo`)
+- `crates/tailgauge/src/gather.rs` (`update_info`, `upgraded_by`), `crates/tailgauge-core/src/panel_state.rs` (`UpdateInfo`)
 - `crates/tailgauge-core/src/panel.rs` (`update_section`, `panel_footer`, `binary_version`)
-- selvedge `v0.3.2` `src/update.rs` (`check_cached`, `CACHE_TTL_MS`, `apply`), `src/state.rs` (`UpdateStatus`, `update_cache_file`)
+- selvedge `v0.8.0` `src/update.rs` (`check_cached`, `CACHE_TTL_MS`, `apply`, `owner`), `src/state.rs` (`UpdateStatus`, `update_cache_file`)
 - `plasma/org.tailgauge.plasmoid/contents/ui/ProviderService.qml`, `gnome/tailgauge@arzaroth.github.io/provider.ts`, `omarchy/arzaroth.tailgauge/Service.qml` (`checkUpdate`, `applyUpdate`)
