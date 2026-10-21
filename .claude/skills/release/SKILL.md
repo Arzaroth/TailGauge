@@ -48,6 +48,7 @@ is the house format) and leave `## [Unreleased]` empty above it. Then:
 | `omarchy/arzaroth.tailgauge/manifest.json` | `version` |
 | `README.md` | the `tailgauge --update` sample output under "Updating" (`Current version` and `Already up to date`) |
 | `.github/workflows/release.yml` | the `workflow_dispatch` tag description example |
+| `packaging/arch/tailgauge/PKGBUILD`, `packaging/arch/tailgauge-bin/PKGBUILD` | `pkgver` (the release renders its own copies, but the committed ones are what someone runs `makepkg` on from a clone) |
 
 Check nothing still carries the old version:
 
