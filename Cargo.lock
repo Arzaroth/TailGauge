@@ -1896,14 +1896,16 @@ dependencies = [
 
 [[package]]
 name = "selvedge"
-version = "0.3.2"
-source = "git+https://github.com/Arzaroth/selvedge?tag=v0.3.2#9e4b8bdd6054c7e5fa7eea9ced820b509015cbc1"
+version = "0.8.0"
+source = "git+https://github.com/Arzaroth/selvedge?tag=v0.8.0#16b59fac57ab7219e6a1cbfab0e5113e468233c5"
 dependencies = [
  "anyhow",
  "http",
+ "reqwest",
  "self_update",
  "serde",
  "serde_json",
+ "zip",
 ]
 
 [[package]]
