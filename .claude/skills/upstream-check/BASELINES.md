@@ -32,18 +32,20 @@ Checked against TailGauge at `d1f40d0` (0.7.0).
 `dc2b1809` (2026-10-17) stopped `omarchy-tailscale-receive` passing
 `--image` for received images: "Untrusted received files should not be decoded
 automatically for a preview." It now always shows the file glyph, and the click
-still opens the file. `crates/tailgauge/src/receive.rs` (`announce`, via
-`IMAGE_EXTENSIONS`) still sends the path as an `image-path` hint, so any
-tailnet peer allowed to Taildrop us gets an image decoded by the notification
-daemon. Backported in `c6ae698` (`announce` passes no image).
+still opens the file. Before the backport, `announce` in
+`crates/tailgauge/src/receive.rs` sent every received image as an `image-path`
+hint, so any tailnet peer allowed to Taildrop us got an image decoded by the
+notification daemon. Backported in `c6ae698`: `announce` passes no image, and
+the saved path stays in `open`, so clicking still opens the file.
 
 ### Backported: unqualified `Color` under Qt 6.12
 
 `b83d3df0` (PR #14553, 2026-10-08): Qt 6.12 adds a QtQuick `Color` type that
 shadows the shell's palette singleton. Upstream now imports
 `qs.Commons as Commons` and writes `Commons.Color`, and documents the same
-requirement for third-party plugins. Our widget still has 11 bare `Color.`
-references across `Panel.qml`, `TailGaugeIcon.qml`, `NetBirdIcon.qml`. On this
+requirement for third-party plugins. Before the backport, our widget had 11
+bare `Color.` references across `Panel.qml`, `TailGaugeIcon.qml` and
+`NetBirdIcon.qml`. On this
 machine (Qt 6.12.0, omarchy 4.0.6) the running shell logged no palette warning
 from our plugin even before the fix. Backported in `40a3221`: every palette
 reference is `Commons.Color`, and the qualified build loads in the live shell
