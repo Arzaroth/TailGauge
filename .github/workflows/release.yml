@@ -11,6 +11,8 @@ on:
     paths:
       - '.github/workflows/release.yml'
       - 'scripts/install.sh'
+      - 'scripts/package.sh'
+      - 'packaging/**'
       - 'scripts/build.sh'
       - 'scripts/compat/**'
       - 'systemd/**'
@@ -32,6 +34,8 @@ concurrency:
 env:
   REF: ${{ github.event.inputs.tag || github.ref }}
   PUBLISH: ${{ github.event_name != 'pull_request' }}
+  NFPM_VERSION: 2.47.0
+  NFPM_SHA256: 3f1cf344bd0b57373ca55636a78c08b0491f7293d609a456a9ac3b0b150fda97
 
 jobs:
   # Built on a runner of the architecture it targets, rather than cross-compiled:
@@ -129,10 +133,14 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install glib tools
+      - name: Install glib tools and nfpm
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libglib2.0-bin
+          deb="nfpm_${NFPM_VERSION}_amd64.deb"
+          curl -fsSLO "https://github.com/goreleaser/nfpm/releases/download/v$NFPM_VERSION/$deb"
+          echo "$NFPM_SHA256  $deb" | sha256sum -c -
+          sudo dpkg -i "$deb"
 
       # Nothing ships that the tests have not seen: the same build.sh output is
       # what the tests import and what the archives carry.
@@ -199,6 +207,9 @@ jobs:
             # copy. NOTICE is what says which portions that covers.
             cp LICENSE LICENSE-MIT LICENSE-WTFPL NOTICE "$stage/"
             tar -czf "dist/tailgauge-$safe-linux-$arch.tar.gz" -C "$stage" .
+            # The .deb and .rpm, from the archive rather than beside it, so a
+            # package and `--update` install the same bytes.
+            scripts/package.sh "dist/tailgauge-$safe-linux-$arch.tar.gz" dist
           done
 
           # The `helpers` asset an install from 0.4.0 or earlier still asks
@@ -270,4 +281,6 @@ jobs:
             dist/*.plasmoid
             dist/*.tar.gz
             dist/*.zip
+            dist/*.deb
+            dist/*.rpm
             dist/SHA256SUMS
