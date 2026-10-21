@@ -44,7 +44,7 @@ use the indexes.
 | [providers.md](architecture/providers.md) | The provider registry, capabilities, argv, the parsers and fixtures, gathering, `tailgauge watch`. |
 | [binary.md](architecture/binary.md) | The `tailgauge` command line, alias dispatch, `ctl`, the helper subcommands. |
 | [testing.md](architecture/testing.md) | Specification, parity, e2e, the QML and GNOME harnesses, the real GNOME Shell run. |
-| [distribution.md](architecture/distribution.md) | Binary names, the selvedge contract, release assets, stores, `--install-frontend`, the 0.4.0 upgrade. |
+| [distribution.md](architecture/distribution.md) | Binary names, the selvedge contract, `install.sh`, release assets, distribution packages, stores, `--install-frontend`, the 0.4.0 upgrade. |
 
 ## Features (the what) - [features/index.md](features/index.md)
 

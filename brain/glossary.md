@@ -88,9 +88,15 @@ that blur it. Back to the root map: [BRAIN.md](BRAIN.md).
 ## The binary and distribution
 
 - **Alias** - a `tailgauge-<sub>` symlink beside the binary that
-  `splice_alias` turns into a subcommand. Listed in `ALIASES`, in
-  `install.sh` and in the bootstrap's `ALIASES=(...)`. See [architecture/binary.md](architecture/binary.md). Avoid:
+  `splice_alias` turns into a subcommand. Listed in `ALIASES`, in the
+  `for alias in` loops of the installer, the packagers and the package check,
+  and in the bootstrap's `ALIASES=(...)`. See [architecture/binary.md](architecture/binary.md). Avoid:
   helper, wrapper.
+- **Package** - a `.deb`, `.rpm` or Arch `.pkg.tar.zst` that installs the
+  binary, the aliases, the unit and the Plasma and GNOME payloads under `/usr`,
+  owned by the package manager. `tailgauge-bin` is the Arch one made from the
+  release archive. See [architecture/distribution.md](architecture/distribution.md#packages).
+  Avoid: bundle, distro build.
 - **Helpers** - the pre-0.5 shell scripts the binary replaced, and the
   `helpers.tar.gz` release asset that still carries the **bootstrap**
   (`scripts/compat/tailgauge-update`) for 0.4.0 installs. Also

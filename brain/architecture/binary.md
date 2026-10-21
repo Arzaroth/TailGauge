@@ -49,12 +49,13 @@ rest as argv[1], so the symlink and the subcommand share one parser. A bare
 `tailgauge-` is left alone. There is no `tailgauge-panel` symlink, and the old
 `tailgauge-update` is in `project::TAILGAUGE.legacy` because updating is a flag.
 
-- The alias list lives in three places that must match: `ALIASES` in
-  `project.rs` (what selvedge rewrites on `--update`), the `for alias in` loop
-  in `scripts/install.sh`, and `ALIASES=(...)` in
-  `scripts/compat/tailgauge-update` (the bootstrap a 0.4.0 install updates
-  through). The first two are compared exactly
-  (`the_installer_and_the_updater_write_the_same_aliases`,
+- The alias list lives in several places that must match: `ALIASES` in
+  `project.rs` (what selvedge rewrites on `--update`), the `for alias in` loops
+  in `scripts/install.sh`, `scripts/package.sh`, `scripts/check-package.sh` and
+  both PKGBUILDs, and `ALIASES=(...)` in `scripts/compat/tailgauge-update` (the
+  bootstrap a 0.4.0 install updates through). All but the bootstrap are
+  compared exactly
+  (`the_installer_the_packages_and_the_updater_write_the_same_aliases`,
   `every_alias_the_installer_writes_is_a_subcommand`); the bootstrap only by a
   substring check in `the_bootstrap_downloads_an_archive_the_release_publishes`.
 
