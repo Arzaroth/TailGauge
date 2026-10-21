@@ -4,6 +4,19 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A received image is no longer decoded to preview it.** `tailgauge receive`
+  handed every image it saved to the notification daemon as a preview, so a
+  file from any machine allowed to Taildrop you was decoded the moment it
+  landed, before anyone chose to open it. The notification shows the usual
+  icon now, and clicking it still opens the file. Omarchy made the same change
+  to its own receiver.
+
+- **The Omarchy widget names the shell palette as `Commons.Color`.** Qt 6.12
+  adds a `Color` type of its own that can hide the shell's palette from a
+  plugin, and Omarchy now requires third-party plugins to qualify it.
+
 ## [0.7.0]
 
 ### Added
