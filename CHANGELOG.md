@@ -18,7 +18,9 @@ All notable changes to this project are documented here.
   PKGBUILDs (one of them building from source). They install the binary, its
   aliases, the Plasma widget, the GNOME extension and the Taildrop unit
   system-wide. The Omarchy widget still installs per user, with
-  `tailgauge --install-frontend omarchy`.
+  `tailgauge --install-frontend omarchy`. The `.rpm`s, the Arch packages and
+  `SHA256SUMS` are signed with the release key in `packaging/tailgauge.asc`
+  (`6342F5C2E27356FE3462208259F1EE16E8417BB6`).
 
 - **A packaged install's update banner points at the package manager.**
   `tailgauge --update` leaves a binary its package manager owns alone, and the

@@ -150,9 +150,10 @@ install the same bytes (`the_packages_are_built_from_the_release_archive`).
   (Arch on x86_64 only) and runs `scripts/check-package.sh`: version, every
   alias, the unit's `ExecStart`, both payloads with their subdirectories, and
   for `.deb`/`.rpm` that removal leaves no plasmoid directory behind.
-- Signing (smith's scheme): off until `packaging/tailgauge.asc` is committed;
-  then a tag release needs `TAILGAUGE_GPG_KEY` and `TAILGAUGE_GPG_PASSPHRASE`,
-  signs the `.rpm`s, the Arch packages and `SHA256SUMS`, and `verify` checks
+- Signing (smith's scheme): on because `packaging/tailgauge.asc` (Ed25519,
+  sign-only, no expiry, `6342F5C2E27356FE3462208259F1EE16E8417BB6`) is committed, so a tag release needs
+  `TAILGAUGE_GPG_KEY` and `TAILGAUGE_GPG_PASSPHRASE`; without the file it would
+  publish unsigned. It signs the `.rpm`s, the Arch packages and `SHA256SUMS`, and `verify` checks
   each signature. A pull request never sees the secret.
 
 ## Stores
