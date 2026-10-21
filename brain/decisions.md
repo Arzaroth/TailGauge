@@ -164,6 +164,29 @@ and nothing else.
 
 See [architecture/distribution.md](architecture/distribution.md#installsh).
 
+### 0007 Packages are made from the release archive
+
+**Decision.** `.deb`, `.rpm` and `tailgauge-bin` repackage the per-arch
+archive: its static musl binary and its built payloads, installed under
+`/usr`. The Omarchy widget is left out, and a packaged binary is never
+replaced by `--update`.
+
+**Why.** The archive is what `--update` installs, so a package cannot carry
+different bytes. A static binary is the only one a single package can promise
+to Debian 12 and Arch alike; the glibc build needed 2.38. Omarchy reads
+third-party plugins from the user's config and nowhere else, and a package
+must not write into a home.
+
+**Rejected.**
+- *Build each package from source in its distribution*: a toolchain per
+  distribution in CI, and packages whose bytes differ from the archive's.
+- *Build the glibc binary on an older runner*: still a floor (whatever that
+  runner's glibc is), where musl has none.
+- *Ship the Omarchy payload under `/usr/share/tailgauge` for the user to copy*:
+  a second, unversioned copy that a package upgrade would leave behind.
+
+See [architecture/distribution.md](architecture/distribution.md#packages).
+
 ## Taildrop
 
 - **Receive claims each file with a hard link into a staging directory.** No

@@ -118,12 +118,13 @@ Every job is a subcommand of `tailgauge`; a `tailgauge-<sub>` symlink per
 subcommand keeps old key bindings working, turned into the subcommand by
 `splice_alias`.
 
-- **A new subcommand gets its alias in all three lists: `ALIASES`
-  (`project.rs`), the alias loop in `scripts/install.sh`, and `ALIASES=(...)`
-  in `scripts/compat/tailgauge-update` (the 0.4.0 bootstrap).** Each list was
+- **A new subcommand gets its alias in every list: `ALIASES` (`project.rs`),
+  the `for alias in` loops of `scripts/install.sh`, `scripts/package.sh`,
+  `scripts/check-package.sh` and both PKGBUILDs, and `ALIASES=(...)` in
+  `scripts/compat/tailgauge-update` (the 0.4.0 bootstrap).** Each list was
   only checked against the subcommands, so an alias added to `install.sh` alone
   existed on a fresh install and vanished on the first `--update`.
-  `the_installer_and_the_updater_write_the_same_aliases`,
+  `the_installer_the_packages_and_the_updater_write_the_same_aliases`,
   `every_alias_names_a_subcommand_the_binary_has`; the bootstrap is held only
   by a substring check in
   `the_bootstrap_downloads_an_archive_the_release_publishes`, so check its
@@ -153,6 +154,28 @@ subcommand keeps old key bindings working, turned into the subcommand by
 - **The release asset names are selvedge's.** The distribution tests in
   `project.rs` compare the workflow against `arch_target()`, not against a
   second copy of the name.
+
+## Packages
+
+`scripts/package.sh` (nfpm) and the PKGBUILDs install what the release archive
+carries, system-wide. `scripts/check-package.sh` is what each one must pass on
+a clean distribution, and the release does not publish until it has.
+
+- **The release binary is static musl.** Built against the runner's glibc, the
+  C under rustls asked for 2.38, and the 0.6.2 binary would not start on Debian
+  12 or Ubuntu 22.04. The binary job refuses one that links a shared library.
+- **A directory goes into nfpm as `type: tree`.** A plain directory source
+  flattens it: the plasmoid lost `contents/ui/` and the extension its compiled
+  schemas, and the package still built.
+  `every_package_puts_the_desktop_payloads_where_the_desktop_looks`.
+- **Each packager points the Taildrop unit at `/usr/bin`.** The unit runs
+  `%h/.local/bin/tailgauge`, where `install.sh` puts it, and every packager
+  rewrites that one line with the same `sed`.
+  `every_package_points_the_taildrop_unit_at_usr_bin`.
+- **No package installs the Omarchy widget.** The shell loads third-party
+  plugins from `~/.config/omarchy/plugins/` only.
+- **Signing starts when `packaging/tailgauge.asc` is committed.** From then on
+  a release without `TAILGAUGE_GPG_KEY` refuses to publish.
 
 ## The updater is a crate, and it is not in this repository
 

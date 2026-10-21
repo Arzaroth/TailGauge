@@ -13,10 +13,30 @@ All notable changes to this project are documented here.
   release, `--no-frontend` installs only the binary beside a store-installed
   widget. Run from a clone, it still builds the checkout.
 
+- **Packages for Debian, Fedora and Arch.** Each release carries a `.deb`, an
+  `.rpm` and a `tailgauge-bin` Arch package for x86_64 and aarch64, plus the
+  PKGBUILDs (one of them building from source). They install the binary, its
+  aliases, the Plasma widget, the GNOME extension and the Taildrop unit
+  system-wide. The Omarchy widget still installs per user, with
+  `tailgauge --install-frontend omarchy`.
+
+- **A packaged install's update banner points at the package manager.**
+  `tailgauge --update` leaves a binary its package manager owns alone, and the
+  banner says to upgrade it there instead of offering to install.
+
+### Fixed
+
+- **The release binary starts on Debian 12, Ubuntu 22.04 and RHEL 9.** It
+  needed glibc 2.38; it is now linked statically against musl.
+
 ### Distribution
 
 - **Each release publishes `SHA256SUMS`.** Releases before this one have none,
   so the piped installer cannot install them.
+- **selvedge 0.8.0**, which refuses to replace a binary a package manager owns.
+- **The release rehearses on pull requests.** A change to the workflow, the
+  packaging or the installer runs every job but the publish, and a release
+  installs each package on a clean distribution before it goes out.
 
 ## [0.6.2]
 

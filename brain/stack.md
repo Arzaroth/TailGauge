@@ -51,7 +51,7 @@ Sources of truth: `Cargo.toml` (workspace), `crates/*/Cargo.toml`, `Cargo.lock`,
 - `ratatui` 0.29 with `crossterm` 0.28: `tailgauge tui` only
   ([features/tui.md](features/tui.md)).
 - `selvedge` from `https://github.com/Arzaroth/selvedge`, pinned by **tag**
-  (`v0.3.2`, lock commit `9e4b8bd`), default features on, which means
+  (`v0.8.0`, lock commit `16b59fa`), default features on, which means
   `self-update`: `self_update` 0.44 with `reqwest` + `rustls`, tar/flate2 and
   zip. It is the updater, the frontend installer, the update cache and the
   `proc` helpers. Shared with TokenGauge. See
@@ -85,8 +85,11 @@ no `.cargo/config.toml` in place.
 
 GitHub Actions only: `ci.yml` on pull requests and pushes to `master`,
 `release.yml` on `v*` tags (or `workflow_dispatch` with an existing tag). Linux
-only, x86_64 and aarch64 on native runners. Seven release assets (`SHA256SUMS` among them); no Windows or
-macOS build. See [operations.md](operations.md).
+only, x86_64 and aarch64 on native runners, the binary linked statically
+against musl. Archives, `.deb`, `.rpm` (nfpm), Arch packages (makepkg in an
+archlinux container) and `SHA256SUMS`; no Windows or macOS build. See
+[operations.md](operations.md) and
+[architecture/distribution.md](architecture/distribution.md#packages).
 
 ## Sources
 

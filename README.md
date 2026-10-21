@@ -46,6 +46,24 @@ cd TailGauge
 scripts/install.sh
 ```
 
+### Packages
+
+Each release has a `.deb`, an `.rpm` and an Arch package for x86_64 and aarch64. They install the binary and its aliases into `/usr/bin`, the Plasma widget and the GNOME extension system-wide, and the Taildrop unit, which is yours to enable:
+
+| Distribution | Install |
+|---|---|
+| Debian, Ubuntu | `sudo apt install ./tailgauge_X.Y.Z_amd64.deb` |
+| Fedora, RHEL, openSUSE | `sudo dnf install ./tailgauge-X.Y.Z-1.x86_64.rpm` (`sudo zypper install` on openSUSE) |
+| Arch | `sudo pacman -U ./tailgauge-bin-X.Y.Z-1-x86_64.pkg.tar.zst`, or `makepkg -si` from the PKGBUILDs in `tailgauge-vX.Y.Z-pkgbuild.tar.gz` (`tailgauge` builds from source, `tailgauge-bin` repackages the release) |
+
+```bash
+systemctl --user enable --now tailgauge-receive.service
+```
+
+The binary is static, so the packages run on anything from Debian 12 and Ubuntu 22.04 up. Omarchy only loads third-party widgets from `~/.config/omarchy/plugins/`, so no package can install one: run `tailgauge --install-frontend omarchy` and `omarchy-plugin-enable arzaroth.tailgauge` once, and again after an upgrade when `tailgauge --update` reports the widget behind. A packaged binary upgrades through its package manager: `--update` refuses it, and the panel's banner says so instead of offering to install.
+
+Moving from an `install.sh` install to a package, remove `~/.local/bin/tailgauge*` and the per-user widgets first: Plasma and GNOME put `~/.local/bin` ahead of `/usr/bin` on the `PATH` they run `tailgauge` from, and the desktops load a per-user widget over the system one.
+
 **Plasma**: adds the widget to your library. Add it from *Add Widgets*. QML changes need the shell reloaded, and the unit name depends on how the session started it:
 
 ```bash
@@ -100,6 +118,7 @@ The three frontends are QML and JavaScript their desktops install; the binary is
 | [extensions.gnome.org](https://extensions.gnome.org) | the GNOME extension | the Extensions app applies them on next session |
 | GitHub releases | the Omarchy widget | `tailgauge --update`; there is no plugin store to go through |
 | GitHub releases | everything, the binary included | `tailgauge --update` |
+| Distro package | the binary, the Plasma widget, the GNOME extension, the Taildrop unit | the package manager |
 
 **Neither store can install the binary or the systemd unit** - the KDE Store ships a kpackage, EGO ships an extension zip. Every frontend asks `tailgauge panel` for what to draw, so **a store-installed widget needs the binary beside it**, or it has nothing to show. Install it alone, leaving the store's widget where it is:
 
@@ -115,7 +134,7 @@ tailgauge --update                    # install it
 tailgauge --install-frontend gnome    # after switching desktops; `all` takes the set
 ```
 
-`--check-update` serves a cached answer for six hours, so the panel polling it costs nothing; `--force` goes out anyway. All three panels show a banner when an update is out, with an **Install it now** row.
+`--check-update` serves a cached answer for six hours, so the panel polling it costs nothing; `--force` goes out anyway. All three panels show a banner when an update is out, with an **Install it now** row, or, on a packaged install, a row saying to upgrade it with the package manager.
 
 `--update` reports each frontend by the version read back off disk, and splits the restart hints into the ones a shell restart covers and the one that needs the session. On the path where nothing was updated it still says whether an installed frontend disagrees with the binary, which is the skew the whole thing exists to catch:
 
@@ -137,7 +156,11 @@ Tagging `vX.Y.Z` publishes:
 - `tailgauge-vX.Y.Z-gnome-shell-extension.zip` - `gnome-extensions install`, and the EGO upload
 - `tailgauge-vX.Y.Z-omarchy-plugin.tar.gz` - unpacks into `~/.config/omarchy/plugins/`
 - `tailgauge-vX.Y.Z-linux-x86_64.tar.gz`, `-linux-aarch64.tar.gz` - the binary, the three frontend payloads under `frontends/`, and the systemd unit. This is what `install.sh`, `--update` and `--install-frontend` download.
+- `tailgauge_X.Y.Z_amd64.deb`, `_arm64.deb`, `tailgauge-X.Y.Z-1.x86_64.rpm`, `.aarch64.rpm` - built by `scripts/package.sh` from the archives above
+- `tailgauge-bin-X.Y.Z-1-x86_64.pkg.tar.zst`, `-aarch64.pkg.tar.zst`, and `tailgauge-vX.Y.Z-pkgbuild.tar.gz` with both PKGBUILDs
 - `SHA256SUMS` - the checksum of every asset above, which `install.sh` checks a download against before running it
+
+A pull request that touches the release, the packaging or the installer runs the whole workflow short of publishing, and every release installs each package on a clean Debian 12, Ubuntu 22.04, Fedora and Arch before it goes out.
 
 The distribution tests in `crates/tailgauge/src/project.rs` fail the build if those names stop matching what the updater asks for - the asset name is spelled by selvedge's own `arch_target()`, so the test compares the workflow against the running code rather than against a second copy of the name. The three manifests and `Cargo.toml` all declare the version, and a tag that disagrees with any of them refuses to publish.
 
@@ -169,6 +192,9 @@ omarchy/                 the Omarchy 4 bar widget (Quickshell QML)
 systemd/                 the Taildrop receive user unit
 scripts/build.sh         compiles the extension, then assembles build/
 scripts/install.sh       installs a release (piped) or builds the checkout (in a clone)
+scripts/package.sh       the .deb and .rpm, from a release archive
+scripts/arch.sh          the Arch packages
+packaging/               nfpm.yaml and the PKGBUILDs
 ```
 
 ### The two crates

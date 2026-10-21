@@ -95,7 +95,9 @@ Every place the version lives:
 
 Then `git grep -n -F '<old>' -- ':!CHANGELOG.md'` must come back empty.
 `release.yml` rebuilds and retests, refuses a tag that disagrees with any
-manifest or with `tailgauge --version`, packages seven assets (six plus `SHA256SUMS`) and takes the
+manifest or with `tailgauge --version`, builds the archives and the packages, installs every package on a clean
+distribution before publishing (see
+[architecture/distribution.md](architecture/distribution.md#packages)) and takes the
 release notes from the `## [x.y.z]` CHANGELOG section (house format: no date).
 The KDE Store and EGO uploads are manual and come after.
 

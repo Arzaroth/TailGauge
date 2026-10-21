@@ -18,6 +18,8 @@ then jump to [panel-spec.md](panel-spec.md) for the JSON and
 | `systemd/tailgauge-receive.service` | User unit running `%h/.local/bin/tailgauge receive` (Taildrop inbox) |
 | `scripts/build.sh` | Compiles the extension and assembles the three payloads under `build/` |
 | `scripts/install.sh` | Installs for the running desktop: a checked release when piped from curl, the checkout when run in a clone (`--plasma`, `--gnome`, `--omarchy`, `--no-frontend`, `--no-taildrop`, `--placement=`, `--version`) |
+| `scripts/package.sh`, `scripts/arch.sh`, `packaging/` | The `.deb` and `.rpm` (nfpm) and the Arch packages, all from a release archive |
+| `scripts/check-package.sh` | What every package must hold, run on a clean distribution by the release |
 | `scripts/compat/tailgauge-update` | Bootstrap shipped in the `helpers` asset so a 0.4.0 install can update itself onto the binary |
 | `tests/qml`, `tests/gnome`, `tests/gnome/shell` | Frontend harnesses (QML runtime with stubbed imports, Node with GJS mocked, a real headless GNOME Shell) |
 | `.github/workflows/{ci,release}.yml` | The gate and the tag-driven release |
