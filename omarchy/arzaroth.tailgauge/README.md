@@ -19,17 +19,24 @@ here re-derives panel content.
 
 ## Install
 
-From a checkout:
-
 ```bash
-scripts/install.sh --omarchy
+curl -fsSL https://raw.githubusercontent.com/Arzaroth/TailGauge/master/scripts/install.sh | bash -s -- --omarchy
 ```
 
-That builds the plugin, installs the `tailgauge` binary into `~/.local/bin`,
+From a checkout, `scripts/install.sh --omarchy` does the same from the tree
+instead of the latest release.
+
+That installs the `tailgauge` binary into `~/.local/bin`,
 enables the Taildrop receive service, copies this folder to
 `~/.config/omarchy/plugins/arzaroth.tailgauge/`, and enables the widget. Pass
 `--placement=left|center|right` to choose a bar section; without it the
 manifest's `right` applies. Add `--no-taildrop` to skip the receive service.
+
+With the binary from a distribution package, no package can install the
+widget: Omarchy loads third-party plugins from `~/.config/omarchy/plugins/`
+only. Run `tailgauge --install-frontend omarchy` and
+`omarchy-plugin-enable arzaroth.tailgauge` once, and the first again after each
+package upgrade.
 
 ## Panel
 
