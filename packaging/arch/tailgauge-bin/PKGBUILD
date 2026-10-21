@@ -5,7 +5,7 @@
 # sha256sums filled in, and the packages it builds from it.
 
 pkgname=tailgauge-bin
-pkgver=0.7.0
+pkgver=0.7.1
 pkgrel=1
 pkgdesc="Tailscale and NetBird in the KDE Plasma, GNOME Shell and Omarchy panel (release binary)"
 arch=('x86_64' 'aarch64')

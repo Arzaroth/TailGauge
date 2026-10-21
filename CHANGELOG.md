@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.7.1]
+
 ### Fixed
 
 - **A received image is no longer decoded to preview it.** `tailgauge receive`
