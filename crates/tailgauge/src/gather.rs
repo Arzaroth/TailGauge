@@ -13,6 +13,7 @@ use tailgauge_core::panel_state::{PanelState, ProviderState, UpdateInfo};
 use tailgauge_core::providers::{self, Capability, ProviderDescriptor};
 
 use selvedge::state;
+use selvedge::update::Owner;
 
 use crate::project::TAILGAUGE;
 use selvedge::proc;
@@ -159,9 +160,27 @@ fn update_info() -> UpdateInfo {
         .map(|cached| UpdateInfo {
             current: cached.current,
             latest: cached.latest.unwrap_or_default(),
+            upgraded_by: if cached.available {
+                upgraded_by()
+            } else {
+                String::new()
+            },
             available: cached.available,
         })
         .unwrap_or_default()
+}
+
+/// Who upgrades this binary when `--update` would refuse to, by where it runs
+/// from.
+fn upgraded_by() -> String {
+    match selvedge::update::owner(&TAILGAUGE) {
+        Ok(Some(Owner::Homebrew)) => "Homebrew",
+        Ok(Some(Owner::Nix)) => "Nix",
+        Ok(Some(Owner::Snap)) => "snap",
+        Ok(Some(_)) => "your package manager",
+        Ok(None) | Err(_) => return String::new(),
+    }
+    .into()
 }
 
 pub fn panel_state(ui: &Ui) -> PanelState {
