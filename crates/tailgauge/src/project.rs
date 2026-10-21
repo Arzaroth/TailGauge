@@ -498,4 +498,110 @@ mod tests {
             "the --json answer hides the pending migration from an old panel"
         );
     }
+
+    /// The scripts that build a package, and the PKGBUILDs.
+    const PACKAGERS: &[&str] = &[
+        "scripts/package.sh",
+        "packaging/arch/tailgauge/PKGBUILD",
+        "packaging/arch/tailgauge-bin/PKGBUILD",
+    ];
+
+    /// A package puts each payload where its desktop loads system-wide
+    /// extensions from; a payload anywhere else installs and is never drawn.
+    #[test]
+    fn every_package_puts_the_desktop_payloads_where_the_desktop_looks() {
+        let nfpm = repo_file("packaging/nfpm.yaml");
+        let pkgbuilds = [
+            repo_file("packaging/arch/tailgauge/PKGBUILD"),
+            repo_file("packaging/arch/tailgauge-bin/PKGBUILD"),
+        ];
+        for (id, dir) in [
+            ("plasma", "/usr/share/plasma/plasmoids"),
+            ("gnome", "/usr/share/gnome-shell/extensions"),
+        ] {
+            let f = selvedge::frontend::find(&TAILGAUGE, id).expect("a frontend");
+            // `tree`: a plain directory source flattens its subdirectories,
+            // which lost the plasmoid's contents/ui and the compiled schemas.
+            assert!(
+                nfpm.contains(&format!("    dst: {dir}/{}\n    type: tree\n", f.artifact)),
+                "nfpm.yaml does not install the {id} payload as a tree under {dir}"
+            );
+            for pkgbuild in &pkgbuilds {
+                assert!(pkgbuild.contains(&format!("\"$pkgdir{dir}\"")));
+                assert!(
+                    pkgbuild.contains(&format!("{}/{} \"$pkgdir{dir}/\"", f.id, f.artifact))
+                        || pkgbuild.contains(&format!("build/{} \"$pkgdir{dir}/\"", f.artifact)),
+                    "a PKGBUILD does not copy the {id} payload into {dir}"
+                );
+            }
+        }
+    }
+
+    /// The unit runs `%h/.local/bin/tailgauge`, where install.sh puts it; a
+    /// package puts it in /usr/bin, and each packager rewrites that one line.
+    #[test]
+    fn every_package_points_the_taildrop_unit_at_usr_bin() {
+        let unit = repo_file("systemd/tailgauge-receive.service");
+        assert!(unit.contains("\nExecStart=%h/.local/bin/tailgauge receive\n"));
+        let rewrite = r"'s|^ExecStart=%h/\.local/bin/tailgauge |ExecStart=/usr/bin/tailgauge |'";
+        for rel in PACKAGERS {
+            assert!(
+                repo_file(rel).contains(rewrite),
+                "{rel} does not rewrite ExecStart"
+            );
+        }
+        assert!(
+            repo_file("scripts/check-package.sh")
+                .contains("'ExecStart=/usr/bin/tailgauge receive'"),
+            "the package check does not look at the unit"
+        );
+    }
+
+    /// Packages are made from the archive `--update` downloads, so the two
+    /// cannot carry different bytes.
+    #[test]
+    fn the_packages_are_built_from_the_release_archive() {
+        let release = repo_file(".github/workflows/release.yml");
+        assert!(
+            release
+                .contains(r#"scripts/package.sh "dist/tailgauge-$safe-linux-$arch.tar.gz" dist"#)
+        );
+        let bin = repo_file("packaging/arch/tailgauge-bin/PKGBUILD");
+        for arch in ARCHES {
+            assert!(
+                bin.contains(&format!(
+                    "/releases/download/v$pkgver/tailgauge-v$pkgver-linux-{arch}.tar.gz"
+                )),
+                "tailgauge-bin does not download the {arch} archive"
+            );
+        }
+    }
+
+    #[test]
+    fn the_release_uploads_every_package_and_its_signature() {
+        let release = repo_file(".github/workflows/release.yml");
+        let uploaded = release.split("files: |").nth(1).expect("no files block");
+        for glob in [
+            "dist/*.deb",
+            "dist/*.rpm",
+            "dist/*.pkg.tar.zst",
+            "dist/*.sig",
+            "dist/*.asc",
+        ] {
+            assert!(uploaded.contains(glob), "{glob} is not uploaded");
+        }
+        let verify = release
+            .split("\n  verify:\n")
+            .nth(1)
+            .expect("no verify job");
+        let publish = release
+            .split("\n  publish:\n")
+            .nth(1)
+            .expect("no publish job");
+        assert!(
+            publish.contains("needs: verify"),
+            "the release publishes unverified packages"
+        );
+        assert!(verify.contains("sh /s/check-package.sh"));
+    }
 }
