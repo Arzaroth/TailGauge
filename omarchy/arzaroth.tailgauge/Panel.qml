@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 Panel {
@@ -22,15 +23,15 @@ Panel {
   property bool machineSearchActive: false
   property int phraseIndex: 0
 
-  readonly property color foreground: bar ? bar.foreground : Color.foreground
-  readonly property color urgent: bar ? bar.urgent : Color.urgent
+  readonly property color foreground: bar ? bar.foreground : Commons.Color.foreground
+  readonly property color urgent: bar ? bar.urgent : Commons.Color.urgent
   readonly property color dim: Qt.darker(foreground, 1.55)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   // The bar describes the machine, not the panel's current view: switching
   // which provider is shown must not read as a disconnection.
   readonly property color barIconColor: root.panel.bar.connected ? barForeground : Qt.darker(barForeground, 1.55)
-  readonly property color hoverFill: Style.hoverFillFor(foreground, Color.accent)
-  readonly property color selectedFill: Style.selectedFillFor(foreground, Color.accent)
+  readonly property color hoverFill: Style.hoverFillFor(foreground, Commons.Color.accent)
+  readonly property color selectedFill: Style.selectedFillFor(foreground, Commons.Color.accent)
 
   readonly property var recentMullvadRegions: settings.recentMullvadRegions instanceof Array
     ? settings.recentMullvadRegions : []
@@ -682,7 +683,7 @@ Panel {
                 visible: sectionView.isChips
                 width: parent.width
                 foreground: root.foreground
-                accent: Color.accent
+                accent: Commons.Color.accent
                 fontFamily: root.fontFamily
                 // The panel cursor still walks these rows, so the chip under it
                 // has to light up like any other row would.
@@ -1038,7 +1039,7 @@ Panel {
       }
 
       background: BorderSurface {
-        color: Color.popups.background
+        color: Commons.Color.popups.background
         borderSpec: Border.flat(root.dim, 1)
         radius: Style.cornerRadius
       }
