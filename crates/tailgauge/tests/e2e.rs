@@ -565,3 +565,57 @@ fn every_command_the_frontends_invoke_exists() {
         );
     }
 }
+
+#[test]
+fn plain_tailgauge_sums_up_the_connection_and_the_machines() {
+    let machine = Machine::with(&["tailscale"]);
+    let (code, stdout, _) = machine.run(&[]);
+    assert_eq!(code, 0, "{stdout}");
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(lines[0], "provider   tailscale", "{stdout}");
+    assert_eq!(lines[1], "status     connected", "{stdout}");
+    assert_eq!(lines[2], "exit node  router", "{stdout}");
+    assert!(
+        lines[4].starts_with("workstation") && lines[4].ends_with("this machine"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("laptop       100.64.0.2  online"),
+        "{stdout}"
+    );
+    assert!(
+        !stdout.contains("mullvad"),
+        "a relay is not a machine: {stdout}"
+    );
+    assert!(
+        stdout.ends_with("and 1 machine not seen for 30 days\n"),
+        "{stdout}"
+    );
+    assert!(
+        !stdout.contains('\x1b'),
+        "piped output has no colour: {stdout:?}"
+    );
+}
+
+#[test]
+fn plain_tailgauge_names_the_other_provider_and_a_daemon_that_is_down() {
+    let both = Machine::with(&["tailscale", "netbird"]);
+    let (_, stdout, _) = both.run(&[]);
+    assert!(
+        stdout.starts_with("provider   tailscale (netbird installed, "),
+        "{stdout}"
+    );
+
+    let down = Machine::with(&["tailscale-down"]);
+    let (code, stdout, _) = down.run(&[]);
+    assert_eq!(
+        code, 0,
+        "a summary reports a state, it does not fail on one"
+    );
+    assert!(stdout.contains("status     disconnected"), "{stdout}");
+
+    let none = Machine::with(&[]);
+    let (code, stdout, _) = none.run(&[]);
+    assert_eq!(code, 0);
+    assert!(stdout.starts_with("no VPN client found"), "{stdout}");
+}

@@ -128,6 +128,20 @@ pub fn shell_command(argv: &[String]) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_short_ago_reads_in_one_unit() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-11-02T12:00:00Z")
+            .unwrap()
+            .timestamp_millis();
+        assert_eq!(minutes_since("2026-11-02T11:48:00Z", now), Some(12));
+        assert_eq!(minutes_since("2026-11-02T12:05:00Z", now), None);
+        assert_eq!(minutes_since("never", now), None);
+        assert_eq!(compact_minutes(0), "now");
+        assert_eq!(compact_minutes(12), "12m");
+        assert_eq!(compact_minutes(3 * 60 + 5), "3h");
+        assert_eq!(compact_minutes(2 * 24 * 60), "2d");
+    }
     use super::*;
 
     const NOW: i64 = 1_789_365_600_000; // 2026-09-14T06:00:00Z
