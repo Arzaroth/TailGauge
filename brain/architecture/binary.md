@@ -125,7 +125,8 @@ detaches pkexec's stdio.
 
 ## Sources
 
-- `crates/tailgauge/src/main.rs` (`Cli`, `Action`, `resolve`, `Command`, `CtlAction`, `EXIT_NO_CHOOSER`, `resolve_provider`, `run_panel`, `splice_alias`, `settle`, `report`)
+- `crates/tailgauge/src/main.rs`
+- `crates/tailgauge/src/summary.rs`, `crates/tailgauge/src/gather.rs` (`connection_state`) (`Cli`, `Action`, `resolve`, `Command`, `CtlAction`, `EXIT_NO_CHOOSER`, `resolve_provider`, `run_panel`, `splice_alias`, `settle`, `report`)
 - `crates/tailgauge/src/ctl.rs` (`EXIT_DISCONNECTED`, `Outcome`, `attended`, `take_over_terminal`, `announce`, `read`, `run_opening_login`, `login_url`, `target_of`, `address_of`, `requested_node`, `authorize_command`)
 - `crates/tailgauge/src/notify.rs` (`Notification`, `run`, `spawn_actionable`, `await_action`), `copy.rs` (`candidates`), `file_select.rs` (`order`, `Picked`)
 - `crates/tailgauge/src/project.rs` (`TAILGAUGE`, `ALIASES`), `scripts/install.sh` (alias loop), `scripts/compat/tailgauge-update` (`ALIASES`), `systemd/tailgauge-receive.service`

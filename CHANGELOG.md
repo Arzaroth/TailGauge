@@ -10,8 +10,8 @@ All notable changes to this project are documented here.
   others are, whether it is connected, the exit node, and this machine with
   every peer seen in the last 30 days, online or idle and for how long; older
   ones are counted on one line. A terminal gets it in colour unless `NO_COLOR`
-  is set. It used to print the help and exit 2, which `tailgauge --help` still
-  does.
+  is set. It used to print the help and exit 2; `tailgauge --help` still
+  prints it.
 
 ## [0.7.1]
 
