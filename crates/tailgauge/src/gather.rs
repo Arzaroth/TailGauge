@@ -212,24 +212,9 @@ pub fn panel_state(ui: &Ui) -> PanelState {
             .collect(),
     );
 
-    let Some(active) = providers::active_provider(&state) else {
+    let Some(active) = connect(&mut state, &gathered) else {
         return state;
     };
-    state.installed = true;
-
-    if let Some((_, core::StatusResult::Ok(status))) =
-        gathered.iter().find(|(id, _)| *id == active.id)
-    {
-        state.running = status.running;
-        state.needs_login = status.needs_login;
-        state.self_name = status.self_name.clone();
-        state.self_ip = status.self_ip.clone();
-        state.self_user_id = status.self_user_id.clone();
-        state.self_peer = Some(status.self_peer.clone());
-        state.file_sharing = status.file_sharing;
-        state.peers = status.peers.clone();
-        state.own_exit_nodes = status.exit_nodes.clone();
-    }
     // The optimistic toggle wins until the daemon catches up: a click that
     // reads as nothing having happened is worse than one the next poll undoes.
     state.active = ui.active.unwrap_or(state.running);
@@ -245,6 +230,49 @@ pub fn panel_state(ui: &Ui) -> PanelState {
         state.networks = extras.networks;
     }
 
+    state
+}
+
+/// Fills in the active provider's connection from the statuses gathered, and
+/// returns that provider.
+fn connect(
+    state: &mut PanelState,
+    gathered: &[(&'static str, core::StatusResult)],
+) -> Option<&'static ProviderDescriptor> {
+    let active = providers::active_provider(state)?;
+    state.installed = true;
+    if let Some((_, core::StatusResult::Ok(status))) =
+        gathered.iter().find(|(id, _)| *id == active.id)
+    {
+        state.running = status.running;
+        state.needs_login = status.needs_login;
+        state.self_name = status.self_name.clone();
+        state.self_ip = status.self_ip.clone();
+        state.self_user_id = status.self_user_id.clone();
+        state.self_peer = Some(status.self_peer.clone());
+        state.file_sharing = status.file_sharing;
+        state.peers = status.peers.clone();
+        state.own_exit_nodes = status.exit_nodes.clone();
+    }
+    Some(active)
+}
+
+/// What plain `tailgauge` shows: every installed provider's status and the
+/// active one's machines, without the calls only the panel needs.
+pub fn connection_state() -> PanelState {
+    let mut state = PanelState {
+        providers: Some(probe()),
+        ..PanelState::default()
+    };
+    let installed = providers::installed_providers(&state);
+    let gathered = statuses(&installed);
+    state.summaries = Some(
+        gathered
+            .iter()
+            .map(|(id, status)| core::bar::summarize_provider(id, status))
+            .collect(),
+    );
+    connect(&mut state, &gathered);
     state
 }
 

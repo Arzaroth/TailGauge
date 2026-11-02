@@ -13,6 +13,7 @@ mod notify;
 mod project;
 mod receive;
 mod send;
+mod summary;
 mod tailscale;
 mod tui;
 mod watch;
@@ -240,8 +241,14 @@ fn main() -> ExitCode {
 
     let command = match action {
         Action::Nothing => {
-            let _ = <Cli as clap::CommandFactory>::command().print_help();
-            return ExitCode::from(2);
+            use std::io::IsTerminal;
+            let out = std::io::stdout();
+            let styled = out.is_terminal() && std::env::var_os("NO_COLOR").is_none();
+            let state = gather::connection_state();
+            let ink = summary::Ink::new(styled);
+            return report(
+                summary::render(&state, state::now_ms(), &ink, &mut out.lock()).map_err(Into::into),
+            );
         }
         Action::CheckUpdate => return report(handle_check_update(force)),
         Action::Update => return report(handle_update()),

@@ -58,6 +58,23 @@ pub fn format_since(value: &str, now_ms: i64) -> String {
     plural(hours / 24, "day")
 }
 
+/// Whole minutes since an RFC 3339 timestamp, `None` for one that is absent
+/// or unreadable. A time ahead of this clock is now: the two clocks disagree.
+pub fn minutes_since(value: &str, now_ms: i64) -> Option<i64> {
+    let then = chrono::DateTime::parse_from_rfc3339(value.trim()).ok()?;
+    Some((now_ms - then.timestamp_millis()).div_euclid(60_000).max(0))
+}
+
+/// Minutes in one short unit: "now", "12m", "3h", "2d".
+pub fn compact_minutes(minutes: i64) -> String {
+    match minutes {
+        m if m < 1 => "now".to_string(),
+        m if m < 60 => format!("{m}m"),
+        m if m < 24 * 60 => format!("{}h", m / 60),
+        m => format!("{}d", m / (24 * 60)),
+    }
+}
+
 fn plural(count: i64, unit: &str) -> String {
     if count == 1 {
         format!("{count} {unit} ago")
@@ -110,6 +127,20 @@ pub fn shell_command(argv: &[String]) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_short_ago_reads_in_one_unit() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-11-02T12:00:00Z")
+            .unwrap()
+            .timestamp_millis();
+        assert_eq!(minutes_since("2026-11-02T11:48:00Z", now), Some(12));
+        assert_eq!(minutes_since("2026-11-02T12:05:00Z", now), Some(0));
+        assert_eq!(minutes_since("never", now), None);
+        assert_eq!(compact_minutes(0), "now");
+        assert_eq!(compact_minutes(12), "12m");
+        assert_eq!(compact_minutes(3 * 60 + 5), "3h");
+        assert_eq!(compact_minutes(2 * 24 * 60), "2d");
+    }
     use super::*;
 
     const NOW: i64 = 1_789_365_600_000; // 2026-09-14T06:00:00Z

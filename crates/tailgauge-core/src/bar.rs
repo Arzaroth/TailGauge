@@ -51,7 +51,7 @@ fn summary_for<'a>(state: &'a PanelState, id: &str) -> Option<&'a ProviderSummar
     state.summaries.as_ref()?.iter().find(|s| s.id == id)
 }
 
-fn provider_state_word(summary: Option<&ProviderSummary>) -> String {
+pub fn provider_state_word(summary: Option<&ProviderSummary>) -> String {
     let Some(summary) = summary else {
         return "checking\u{2026}".to_string();
     };
