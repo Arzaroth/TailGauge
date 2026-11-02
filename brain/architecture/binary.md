@@ -14,7 +14,13 @@ in [distribution.md](distribution.md).
 top-level flags. `resolve()` turns them into one `Action` and refuses
 combinations: two update flags at once, or an update flag with a subcommand,
 exit 2 with a message (`the_update_flags_do_one_thing_each`). No subcommand and
-no flag prints help and exits 2 (`Action::Nothing`).
+no flag prints a summary and exits 0 (`Action::Nothing`, `summary::render`):
+the active provider with the other installed ones and their state, whether it
+is connected, the exit node, then this machine and every peer seen in the last
+30 days (online, or idle and for how long), older ones counted on one line,
+Mullvad relays left out. It is gathered by `gather::connection_state`, every
+installed provider's `status --json` and nothing the panel alone needs, and is
+coloured only on a terminal without `NO_COLOR`. `--help` prints the help.
 
 | Flag | Does |
 | --- | --- |

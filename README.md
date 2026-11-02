@@ -94,6 +94,7 @@ On Xorg, restart the shell with `Alt+F2` `r`. On Wayland, log out and back in.
 The Plasma and GNOME panels have no IPC and need none: they block on `tailgauge watch`, which listens on tailscaled's IPN bus and polls any other VPN it finds, so a change shows up in them within a second or two, whoever made it. `tailgauge ctl` drives the daemon from a key binding or a script, and the Omarchy widget additionally answers to `omarchy-shell arzaroth.tailgauge toggleTailscale` the way its first-party neighbours do.
 
 ```bash
+tailgauge                         # the connection and the machines, at a glance
 tailgauge ctl status              # exits 0 connected, 3 not
 tailgauge ctl toggle              # off if it is on, on if it is off
 tailgauge ctl up                  # opens the login page when it needs one
