@@ -58,12 +58,11 @@ pub fn format_since(value: &str, now_ms: i64) -> String {
     plural(hours / 24, "day")
 }
 
-/// Whole minutes since an RFC 3339 timestamp, or `None` for one that is
-/// absent, unreadable or in the future.
+/// Whole minutes since an RFC 3339 timestamp, `None` for one that is absent
+/// or unreadable. A time ahead of this clock is now: the two clocks disagree.
 pub fn minutes_since(value: &str, now_ms: i64) -> Option<i64> {
     let then = chrono::DateTime::parse_from_rfc3339(value.trim()).ok()?;
-    let minutes = (now_ms - then.timestamp_millis()).div_euclid(60_000);
-    (minutes >= 0).then_some(minutes)
+    Some((now_ms - then.timestamp_millis()).div_euclid(60_000).max(0))
 }
 
 /// Minutes in one short unit: "now", "12m", "3h", "2d".
@@ -135,7 +134,7 @@ mod tests {
             .unwrap()
             .timestamp_millis();
         assert_eq!(minutes_since("2026-11-02T11:48:00Z", now), Some(12));
-        assert_eq!(minutes_since("2026-11-02T12:05:00Z", now), None);
+        assert_eq!(minutes_since("2026-11-02T12:05:00Z", now), Some(0));
         assert_eq!(minutes_since("never", now), None);
         assert_eq!(compact_minutes(0), "now");
         assert_eq!(compact_minutes(12), "12m");

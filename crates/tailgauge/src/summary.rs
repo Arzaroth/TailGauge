@@ -127,7 +127,7 @@ pub fn render(state: &PanelState, now_ms: i64, ink: &Ink, out: &mut impl Write) 
                 .as_deref()
                 .and_then(|seen| minutes_since(seen, now_ms))
             {
-                Some(m) if m <= STALE_MINUTES => (format!("idle {}", compact_minutes(m)), *dim),
+                Some(m) if m < STALE_MINUTES => (format!("idle {}", compact_minutes(m)), *dim),
                 _ => {
                     stale += 1;
                     continue;
