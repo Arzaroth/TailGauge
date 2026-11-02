@@ -154,3 +154,48 @@ pub fn render(state: &PanelState, now_ms: i64, ink: &Ink, out: &mut impl Write) 
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tailgauge_core::panel_state::{PanelState, ProviderState};
+
+    fn peer(name: &str, last_seen: &str) -> Peer {
+        Peer {
+            host_name: name.into(),
+            ipv4: vec!["100.64.0.9".into()],
+            last_seen: Some(last_seen.into()),
+            ..Peer::default()
+        }
+    }
+
+    #[test]
+    fn the_cutoff_is_thirty_days_and_a_clock_ahead_is_now() {
+        // 2026-11-02T12:00:00Z
+        let now = 1_793_620_800_000;
+        let state = PanelState {
+            providers: Some(vec![ProviderState {
+                id: "tailscale".into(),
+                installed: true,
+            }]),
+            running: true,
+            peers: vec![
+                peer("ahead", "2026-11-02T12:00:05Z"),
+                peer("edge", "2026-10-03T12:00:00Z"),
+                peer("inside", "2026-10-03T12:01:00Z"),
+            ],
+            ..PanelState::default()
+        };
+        let mut out = Vec::new();
+        render(&state, now, &Ink::new(false), &mut out).unwrap();
+        let text = String::from_utf8(out).unwrap();
+
+        assert!(text.contains("ahead   100.64.0.9  idle now"), "{text}");
+        assert!(text.contains("inside  100.64.0.9  idle 29d"), "{text}");
+        assert!(!text.contains("edge "), "{text}");
+        assert!(
+            text.ends_with("and 1 machine not seen for 30 days\n"),
+            "{text}"
+        );
+    }
+}
