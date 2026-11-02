@@ -58,6 +58,24 @@ pub fn format_since(value: &str, now_ms: i64) -> String {
     plural(hours / 24, "day")
 }
 
+/// Whole minutes since an RFC 3339 timestamp, or `None` for one that is
+/// absent, unreadable or in the future.
+pub fn minutes_since(value: &str, now_ms: i64) -> Option<i64> {
+    let then = chrono::DateTime::parse_from_rfc3339(value.trim()).ok()?;
+    let minutes = (now_ms - then.timestamp_millis()).div_euclid(60_000);
+    (minutes >= 0).then_some(minutes)
+}
+
+/// Minutes in one short unit: "now", "12m", "3h", "2d".
+pub fn compact_minutes(minutes: i64) -> String {
+    match minutes {
+        m if m < 1 => "now".to_string(),
+        m if m < 60 => format!("{m}m"),
+        m if m < 24 * 60 => format!("{}h", m / 60),
+        m => format!("{}d", m / (24 * 60)),
+    }
+}
+
 fn plural(count: i64, unit: &str) -> String {
     if count == 1 {
         format!("{count} {unit} ago")

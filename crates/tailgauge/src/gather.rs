@@ -257,6 +257,25 @@ fn connect(
     Some(active)
 }
 
+/// What plain `tailgauge` shows: every installed provider's status and the
+/// active one's machines, without the calls only the panel needs.
+pub fn connection_state() -> PanelState {
+    let mut state = PanelState {
+        providers: Some(probe()),
+        ..PanelState::default()
+    };
+    let installed = providers::installed_providers(&state);
+    let gathered = statuses(&installed);
+    state.summaries = Some(
+        gathered
+            .iter()
+            .map(|(id, status)| core::bar::summarize_provider(id, status))
+            .collect(),
+    );
+    connect(&mut state, &gathered);
+    state
+}
+
 pub fn resolve_options(ui: &Ui) -> core::panel::ResolveOptions {
     core::panel::ResolveOptions {
         phrase_index: ui.phrase_index,
