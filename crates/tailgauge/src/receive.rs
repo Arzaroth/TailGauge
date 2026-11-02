@@ -13,10 +13,6 @@ use selvedge::proc;
 /// handing the finished file over is a rename.
 const STAGING: &str = ".tailgauge-taildrop";
 
-const IMAGE_EXTENSIONS: &[&str] = &[
-    "png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "tif", "tiff",
-];
-
 pub fn run(dir: &Path, once: bool) -> anyhow::Result<()> {
     let staging = dir.join(STAGING);
     std::fs::create_dir_all(&staging)?;
@@ -105,10 +101,6 @@ fn split_name(name: &str) -> (&str, &str) {
 
 fn announce(dir: &Path, path: &Path) {
     let name = path.file_name().unwrap_or_default().to_string_lossy();
-    let is_image = path
-        .extension()
-        .map(|e| e.to_string_lossy().to_lowercase())
-        .is_some_and(|e| IMAGE_EXTENSIONS.contains(&e.as_str()));
     let shown = path.to_string_lossy();
 
     // Announcing is best-effort: the file is already delivered, and a
@@ -117,7 +109,8 @@ fn announce(dir: &Path, path: &Path) {
         summary: &format!("Received {name}"),
         body: &format!("Saved to {}", tildify(dir)),
         urgency: "normal",
-        image: is_image.then_some(&shown),
+        // A received file is untrusted: never have the notifier decode it.
+        image: None,
         open: Some(&shown),
     });
 }

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Shapes
 import qs.Commons
+import qs.Commons as Commons
 
 // The NetBird mark, drawn as vector paths rather than loaded as an SVG so it
 // can be painted in the panel's foreground colour like every other icon here.
@@ -13,7 +14,7 @@ Item {
   id: root
 
   property real iconSize: Style.font.icon
-  property color color: Color.foreground
+  property color color: Commons.Color.foreground
   // The hero can afford the brand oranges; a bar icon has to follow the theme.
   property bool monochrome: true
 
