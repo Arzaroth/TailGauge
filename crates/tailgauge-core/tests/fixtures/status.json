@@ -19,7 +19,8 @@
       "HostName": "laptop", "DNSName": "laptop.example.ts.net.", "UserID": 1001,
       "OS": "linux", "Online": true, "TaildropTarget": 1,
       "TailscaleIPs": ["100.64.0.2", "fd7a:115c:a1e0::2"],
-      "ExitNodeOption": false, "ExitNode": false
+      "ExitNodeOption": false, "ExitNode": false,
+      "KeyExpiry": "2026-12-01T06:00:00Z"
     },
     "nodekey:02": {
       "HostName": "router", "DNSName": "router.example.ts.net.", "UserID": 1001,
@@ -31,13 +32,15 @@
       "HostName": "phone", "DNSName": "phone.example.ts.net.", "UserID": 2002,
       "OS": "android", "Online": true, "TaildropTarget": 0,
       "TailscaleIPs": ["100.64.0.4"],
-      "ExitNodeOption": false, "ExitNode": false
+      "ExitNodeOption": false, "ExitNode": false,
+      "KeyExpiry": "2026-09-01T00:00:00Z"
     },
     "nodekey:04": {
       "HostName": "offline-box", "DNSName": "offline-box.example.ts.net.", "UserID": 1001,
       "OS": "windows", "Online": false, "TaildropTarget": 1,
       "TailscaleIPs": ["100.64.0.5"],
-      "ExitNodeOption": true, "ExitNode": false
+      "ExitNodeOption": true, "ExitNode": false,
+      "KeyExpiry": "2026-08-01T00:00:00Z", "Expired": true
     },
     "nodekey:05": {
       "HostName": "fr-par-wg-001.mullvad.ts.net", "DNSName": "fr-par-wg-001.mullvad.ts.net.",

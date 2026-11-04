@@ -561,7 +561,7 @@ fn machine_rows_carry_their_subtitle_icon_copy_options_and_actions() {
             .iter()
             .map(|a| a.id.as_str())
             .collect::<Vec<_>>(),
-        ["send", "copy"]
+        ["detail", "send", "copy"]
     );
 }
 
@@ -575,6 +575,7 @@ fn the_send_action_appears_only_for_a_taildrop_target() {
                 .actions
                 .iter()
                 .map(|a| a.id.as_str())
+                .filter(|id| *id != "detail")
                 .collect::<Vec<_>>(),
             ["copy"],
             "{name}"
@@ -610,7 +611,7 @@ fn offline_machines_are_listed_last_marked_and_cannot_be_sent_to() {
             .iter()
             .map(|a| a.id.as_str())
             .collect::<Vec<_>>(),
-        ["copy"]
+        ["detail", "copy"]
     );
     assert_eq!(
         offline
@@ -2235,6 +2236,47 @@ fn peer_detail_rows_shows_only_what_was_actually_reported() {
     assert_eq!(by["detail:routes"], "192.168.42.0/24");
 
     assert!(core::panel::peer_detail_rows(&Peer::default(), NOW).is_empty());
+}
+
+#[test]
+fn a_machine_says_when_its_key_expires_and_when_it_already_has() {
+    let key = |name: &str| {
+        let peer = STATUS
+            .peers
+            .iter()
+            .find(|p| p.host_name == name)
+            .expect(name);
+        details_of(peer).get("detail:key").cloned()
+    };
+    assert_eq!(key("laptop").as_deref(), Some("in 78 days"));
+    assert_eq!(
+        key("offline-box").as_deref(),
+        Some("Expired"),
+        "the daemon's word"
+    );
+    assert_eq!(
+        key("phone").as_deref(),
+        Some("Expired"),
+        "a date behind this clock, even before the daemon says so"
+    );
+    assert_eq!(key("router"), None, "a key that never expires has no row");
+
+    let stale = from_status(serde_json::json!({"KeyExpiry": "0001-01-01T00:00:00Z"}));
+    assert_eq!(details_of(&stale).get("detail:key"), None);
+}
+
+#[test]
+fn time_left_reads_like_a_human_wrote_it() {
+    let until = |value: &str| core::fmt::format_until(value, NOW);
+    assert_eq!(
+        until("2026-09-14T06:00:30Z").as_deref(),
+        Some("in under a minute")
+    );
+    assert_eq!(until("2026-09-14T09:00:00Z").as_deref(), Some("in 3 hours"));
+    assert_eq!(until("2026-09-15T06:00:00Z").as_deref(), Some("in 1 day"));
+    assert_eq!(until("2026-09-14T06:00:00Z").as_deref(), Some(""));
+    assert_eq!(until(""), None);
+    assert_eq!(until("not a date"), None);
 }
 
 #[test]
