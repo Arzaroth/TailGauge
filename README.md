@@ -150,9 +150,9 @@ tailgauge --install-frontend gnome    # after switching desktops; `all` takes th
 
 ```
 $ tailgauge --update
-Current version: 0.8.1
+Current version: 0.9.0
 Checking for updates...
-Already up to date (0.8.1).
+Already up to date (0.9.0).
 Omarchy bar widget is still v0.4.0 - update it: tailgauge --install-frontend omarchy
 ```
 

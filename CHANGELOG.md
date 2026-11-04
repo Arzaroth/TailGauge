@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.9.0]
+
 ### Added
 
 - **A machine's details say when its key expires.** Expanding a Tailscale
