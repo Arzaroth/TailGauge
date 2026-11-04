@@ -11,7 +11,7 @@
     "test": "scripts/build.sh && node --import ./tests/gnome/register.js --test 'tests/gnome/**/*.test.js'"
   },
   "devDependencies": {
-    "@girs/gnome-shell": "50.0.4",
+    "@girs/gnome-shell": "51.0.1",
     "@types/node": "^22.10.2",
     "typescript": "~5.7.2"
   }
