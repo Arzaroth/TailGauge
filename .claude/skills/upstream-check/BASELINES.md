@@ -2,14 +2,21 @@
 
 Rewritten at the end of every `upstream-check` run.
 
-## Last checked: 2026-10-20
+## Last checked: 2026-11-04
 
 | Upstream | Baseline | Notes |
 | --- | --- | --- |
-| basecamp/omarchy | `0a7beb7d` on `quattro` (2026-10-20) | Local omarchy is `4.0.6-1`, running on Qt `6.12.0` |
-| tailscale/tailscale | CLI `v1.104.1` | Fixtures in `crates/tailgauge-core/tests/fixtures/` still match the live CLI shape |
+| basecamp/omarchy | `9b525a93` on `quattro` (2026-11-04) | Local omarchy is `4.0.6-1`, running on Qt `6.12.0` |
+| tailscale/tailscale | CLI `v1.104.5` | Local CLI is 1.104.2. Fixtures in `crates/tailgauge-core/tests/fixtures/` still match the live CLI shape |
+| netbirdio/netbird | `v0.82.0` (2026-10-29), HEAD `313f71fb` | Local CLI is 0.82.0. Fixtures date from 2026-09-16 (about v0.78.2); `status --json` live still matches them. `networks list` not recaptured: the local client's login has expired |
+| GNOME Shell | `51.1` | **`metadata.json` lists 45 to 50; 51.0 shipped 2026-09-14 and is not listed** |
+| Plasma | `v6.8.2` (2026-10-27) | The plasmoid declares `X-Plasma-API-Minimum-Version` 6.0; still the 6.x API |
+| selvedge | pinned `v0.8.0`, latest `v0.13.0` | 0.9 to 0.13 add brands, plans, usage and catalog for TokenGauge; no updater fix, no bump needed |
+| tsui | `2018695b` on `main` (2026-10-25) | |
+| trayscale | `67266aa8` on `master` (2026-10-26) | |
+| KTailctl | `64ca9beb` on `main` | |
 
-Checked against TailGauge at `d1f40d0` (0.7.0).
+Checked against TailGauge at `f3b8c01` (0.8.0).
 
 ## Where we forked from
 
@@ -25,56 +32,76 @@ Checked against TailGauge at `d1f40d0` (0.7.0).
   the same shell. It is a third-party plugin and shares no files with theirs
   except the dot-grid icon.
 
-## Backport status (2026-10-20)
+## Backport status (2026-11-04)
 
-### Backported: received images are no longer decoded for a notification preview
+### Diverged on purpose: received images still get no notification preview
 
-`dc2b1809` (2026-10-17) stopped `omarchy-tailscale-receive` passing
-`--image` for received images: "Untrusted received files should not be decoded
-automatically for a preview." It now always shows the file glyph, and the click
-still opens the file. Before the backport, `announce` in
-`crates/tailgauge/src/receive.rs` sent every received image as an `image-path`
-hint, so any tailnet peer allowed to Taildrop us got an image decoded by the
-notification daemon. Backported in `c6ae698`: `announce` passes no image, and
-the saved path stays in `open`, so clicking still opens the file.
+`d743f8e8` (2026-10-22) reverted the `dc2b1809` change we backported in
+`c6ae698`: `omarchy-tailscale-receive` passes `--image` again for image
+extensions, reasoning that Taildrop only accepts files from your own devices.
+Ours keeps `image: None` in `announce` (`crates/tailgauge/src/receive.rs`): a
+compromised or shared device of your own is still a decoder input nobody asked
+for, and the click still opens the file. Revisit only if a user asks.
 
-### Backported: unqualified `Color` under Qt 6.12
+### Open candidates
 
-`b83d3df0` (PR #14553, 2026-10-08): Qt 6.12 adds a QtQuick `Color` type that
-shadows the shell's palette singleton. Upstream now imports
-`qs.Commons as Commons` and writes `Commons.Color`, and documents the same
-requirement for third-party plugins. Before the backport, our widget had 11
-bare `Color.` references across `Panel.qml`, `TailGaugeIcon.qml` and
-`NetBirdIcon.qml`. On this
-machine (Qt 6.12.0, omarchy 4.0.6) the running shell logged no palette warning
-from our plugin even before the fix. Backported in `40a3221`: every palette
-reference is `Commons.Color`, and the qualified build loads in the live shell
-with no warnings.
+- **GNOME 51 is refused.** `gnome/tailgauge@arzaroth.github.io/metadata.json`
+  stops at `"50"`, so GNOME disables the extension on 51 as incompatible. Add
+  `"51"` after `tests/gnome/shell/run.sh --gnome 51` passes.
+- **Peer key expiry is never shown.** tsui `9fbd5120` shows "Expired" for an
+  expired peer key, and `f9ba9797` added a machine-details submenu with key
+  expiry in it. `crates/tailgauge-core` reads neither `KeyExpiry` nor
+  `Expired`, and an expired key is exactly the peer that will not answer.
+  It would be a field in the expanded machine row in `panel_spec`, plus a
+  fixture case, and needs no per-frontend work.
+
+- **Animations ignore reduce-motion.** `8918fbae` / `aaccd247` route every
+  animation in their tailscale panel through `Style.duration()` and change the
+  phrase swap to 150ms / 200ms `Easing.OutCubic`. Ours
+  (`omarchy/arzaroth.tailgauge/Panel.qml`, `phraseSwap` and the busy-row
+  `NumberAnimation on rotation`) still uses raw 180 / 260 / 900ms, so they run
+  with animations off. Omarchy-only, a few lines.
+- **Huge tailnets.** `c872d57c` polls `status --json --peers=false` while the
+  panel is closed, publishes arrays only when their content changed, and
+  virtualizes the machine list (measured: 4.6s to 0.17s of shell CPU per poll
+  on 3,900 peers). Every TailGauge poll runs full `status --json` and
+  `panel_spec` emits every machine row; `gather::Ui` carries no "panel open"
+  flag. Not hit on a ~50-peer tailnet. A real backport is a `Ui` field, a
+  light-status path in `gather.rs` / `providers.rs`, and row virtualization on
+  all four surfaces.
 
 ### Verified, no action
 
-- Their `Model.js` changed only in `84cfb939` (i18n): a `tr` argument threaded
-  through `displayHostName`, `accountLabel`, `parseStatus`, `parseAccounts`. No
-  parsing logic moved.
-- `4c1b4cb3`: `KeyboardPanel` gained an optional lazy `content` Component and
-  `loadedContent`. Panels that declare children directly keep the eager
-  behaviour, which is what ours does.
-- `c231097d`: first-party IPC handlers are now `ShellIpc` and `omarchy-shell`
-  goes over a socket first. A plain `IpcHandler` (ours) gets `SKIP` and falls
-  back to `qs ipc`, so it still works, about 45ms slower per call.
-- `b7e900ce` / `1a161eb5`: bar sections are now `left`, `centerBegin`,
-  `center`, `centerEnd`, `tray`, `right`. Our manifest says `right`, still
-  valid. `omarchy-plugin-validate build/arzaroth.tailgauge` exits 0 against the
-  installed 4.0.6.
-- Tailscale 1.102.4 to 1.104.1: under `cmd/tailscale/cli` and `ipn/ipnstate`
-  only additive changes (`TailnetStatus.StableID`, whois, netcheck, diag). Live
-  `status --json` still carries every field we read, `Self.CapMap` still has
-  file-sharing, `switch --list --json` keys are unchanged, and the
-  `exit-node list` header is still the column set `parse_exit_node_list`
-  slices. `cargo test -p tailgauge-core` passes.
-
-Noted while checking: this machine runs `tailscaled` 1.102.3 under a 1.104.1
-client. The skew warning goes to stderr only.
+- `Model.js` unchanged since 2026-10-20.
+- `1e2d9f9b` stacks Taildrop toasts by passing `--app-name Taildrop`; ours
+  already sends `--app-name=TailGauge` (`crates/tailgauge/src/notify.rs`).
+- `d743f8e8` also ordered their receive unit after UWSM's env import, because
+  their strings need `OMARCHY_PATH`. Ours are plain English and
+  `systemd/tailgauge-receive.service` reads no session env; its `~` shortening
+  (`tildify`) was never affected by their quoting bug.
+- `shell/Ui` changes to components we use are additive: `KeyboardPanel`
+  gained card morphing, live height growth and press feedback;
+  `PanelKeyCatcher` a `reorderableSideways` flag; `PanelToolTip` word wrap;
+  `BarIconButton` a press give. `Panel.qml`'s `ShellIpc` now gets an empty
+  target when `manageIpc` is false, which is what ours sets (it runs its own
+  `IpcHandler`). `PluginBarApi` gained `popoutCardFor` / `notePopoutCard`,
+  used by `KeyboardPanel` itself. `ScreenMoveRemap` was removed; we never
+  imported it.
+- `PluginRegistry.qml` (`c726e6a7`, `a0010440`): bytecode-reload and bar-entry
+  restore fixes, no schema change. `omarchy-plugin-validate
+  build/arzaroth.tailgauge` exits 0 against 4.0.6.
+- Tailscale 1.104.1 to 1.104.5: no file under `cmd/tailscale/cli` or
+  `ipn/ipnstate` changed (SSH hardening, DNS, magicsock). Live `status --json`
+  carries every field we read with `Self.CapMap` file-sharing, `switch --list
+  --json` keys are unchanged, the `exit-node list` header matches, and
+  `cargo test -p tailgauge-core` passes.
+- NetBird 0.78.2 to 0.82.0: on the paths we drive, only `dd38fabc` (opt-in
+  `--table` on `status`) and `up` changes that touch no flag we pass.
+- Peers, first look (no prior baseline): trayscale's exit-node fixes
+  (`212e4007`, `22d7ed36`) live in its LocalAPI layer, which we do not have;
+  the rest is a GTK refactor. KTailctl only added a Nix flake and a
+  startup-feedback fix. tailray added exit-node selection, which we have.
+  tailscale-gnome-qs has not been pushed since 2025-03 and is not watched.
 
 ## Known one-way differences, ours ahead, not to be "fixed" toward upstream
 
