@@ -69,6 +69,12 @@ below are the ones with an incident behind them.
   search field being typed into. Counted models and `syncRegistration()`
   instead. `no_qml_frontend_rebuilds_its_rows_just_to_redraw_them`,
   `every_frontend_keeps_its_search_field_across_a_redraw`.
+- **Mirroring the daemon onto a switch never fires its handler.** GNOME 47+
+  emits `toggled` from `setToggleState` as well as from a click, so syncing the
+  header switch toggled the connection and the next poll flipped it back: an
+  on/off loop on Fedora bad enough that a user disabled the extension (every
+  release through 0.8.0). The extension blocks the handler around the call.
+  `the_gnome_switch_mirrors_the_daemon_without_toggling_it`.
 - **Every subcommand a frontend spells exists.**
   `every_command_the_frontends_invoke_exists` (e2e).
 

@@ -160,6 +160,7 @@ when a decision leaks into a desktop:
 | `every_frontend_draws_the_header_controls_it_is_handed` | a frontend that never reads `header.actions` |
 | `the_gnome_extension_has_a_slot_for_every_section_the_panel_emits` | `SECTION_IDS` in `panel.ts` differing from what `panel_spec` emits, in order |
 | `no_click_on_the_bar_icon_toggles_a_connection` | a bar-icon click handler (Plasma `CompactRep.qml` `onClicked`, GNOME `extension.ts` `'button-press-event'`, Omarchy `Panel.qml` `onPressed`) that calls `toggleTailscale` or no longer calls `cycleProvider` |
+| `the_gnome_switch_mirrors_the_daemon_without_toggling_it` | a GNOME `setToggleState` call not wrapped in `block_signal_handler` / `unblock_signal_handler` of the header's `'toggled'` handler |
 
 `crates/tailgauge-core/tests/specification.rs` says what the panel should do,
 case by case (111 tests, ported from the former `model.test.ts` and kept in its
