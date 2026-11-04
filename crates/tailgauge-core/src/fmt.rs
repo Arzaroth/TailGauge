@@ -54,11 +54,10 @@ pub fn format_since(value: &str, now_ms: i64) -> String {
 /// `Some("")` for one already behind this clock.
 pub fn format_until(value: &str, now_ms: i64) -> Option<String> {
     let then = chrono::DateTime::parse_from_rfc3339(value.trim()).ok()?;
-    let seconds = (then.timestamp_millis() - now_ms).div_euclid(1000);
-    Some(match seconds {
-        s if s <= 0 => String::new(),
-        s if s < 60 => "in under a minute".to_string(),
-        s => format!("in {}", span(s)),
+    Some(match then.timestamp_millis() - now_ms {
+        ms if ms <= 0 => String::new(),
+        ms if ms < 60_000 => "in under a minute".to_string(),
+        ms => format!("in {}", span(ms / 1000)),
     })
 }
 
