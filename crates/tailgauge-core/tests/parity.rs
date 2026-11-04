@@ -478,3 +478,35 @@ fn no_click_on_the_bar_icon_toggles_a_connection() {
         );
     }
 }
+
+/// Since GNOME 47 the switch item emits `toggled` from `setToggleState` as
+/// well as from a click, so mirroring the daemon onto the header switch toggled
+/// the connection, and the next poll mirrored that back: an endless on/off loop.
+#[test]
+fn the_gnome_switch_mirrors_the_daemon_without_toggling_it() {
+    let source = repo_file("gnome/tailgauge@arzaroth.github.io/extension.ts");
+    let handler = between(&source, "this.", " = this._headerItem.connect('toggled'");
+    let handler = handler.rsplit("this.").next().expect("a field");
+    let block = format!(".block_signal_handler(this.{handler})");
+    let unblock = format!(".unblock_signal_handler(this.{handler})");
+    let mut calls = source.match_indices("setToggleState(").peekable();
+    assert!(
+        calls.peek().is_some(),
+        "the header switch is no longer synced"
+    );
+    for (at, _) in calls {
+        let (before, after) = source.split_at(at);
+        let last = before.rfind("_signal_handler(").expect("a blocked handler");
+        let next = after.find("_signal_handler(").expect("an unblock");
+        assert_eq!(
+            before.rfind(&block).map(|b| b + ".block".len()),
+            Some(last),
+            "setToggleState runs with its 'toggled' handler connected"
+        );
+        assert_eq!(
+            after.find(&unblock).map(|u| u + ".unblock".len()),
+            Some(next),
+            "the 'toggled' handler stays blocked after setToggleState"
+        );
+    }
+}
