@@ -178,6 +178,9 @@ a clean distribution, and the release does not publish until it has.
   `%h/.local/bin/tailgauge`, where `install.sh` puts it, and every packager
   rewrites that one line with the same `sed`.
   `every_package_points_the_taildrop_unit_at_usr_bin`.
+- **`verify` imports `packaging/tailgauge.asc` before it installs the `.rpm`.**
+  Fedora's rpm once let a signature by an unknown key through; when
+  `fedora:latest` stopped (`NOKEY`), the 0.8.1 tag failed to publish.
 - **No package installs the Omarchy widget.** The shell loads third-party
   plugins from `~/.config/omarchy/plugins/` only.
 - **`packaging/tailgauge.asc` being committed is what turns signing on**, and
