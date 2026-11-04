@@ -503,9 +503,15 @@ fn the_gnome_switch_mirrors_the_daemon_without_toggling_it() {
             Some(last),
             "setToggleState runs with its 'toggled' handler connected"
         );
+        let unblock_at = after.find(&unblock).expect("an unblock");
+        let finally_at = after[..unblock_at].rfind("} finally {");
+        assert!(
+            finally_at.is_some_and(|f| !after[f + "} finally {".len()..unblock_at].contains('}')),
+            "the 'toggled' handler is not unblocked in a finally"
+        );
         assert_eq!(
-            after.find(&unblock).map(|u| u + ".unblock".len()),
-            Some(next),
+            unblock_at + ".unblock".len(),
+            next,
             "the 'toggled' handler stays blocked after setToggleState"
         );
     }
