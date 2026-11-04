@@ -43,24 +43,23 @@ Ours keeps `image: None` in `announce` (`crates/tailgauge/src/receive.rs`): a
 compromised or shared device of your own is still a decoder input nobody asked
 for, and the click still opens the file. Revisit only if a user asks.
 
+### Backported on `fix/upstream-backports`
+
+- **GNOME 51.** `shell-version` stopped at `"50"`, so GNOME 51 disabled the
+  extension as incompatible. Now listed, after `tests/gnome/shell/run.sh
+  --gnome 51` drew and scrolled the menu on 51.1; `@girs/gnome-shell` moved to
+  `51.0.1` with it.
+- **Peer key expiry**, after tsui `9fbd5120`. `peer_detail_rows` shows
+  `Key expiry`: time left, or "Expired" when Tailscale says `Expired` or the
+  `KeyExpiry` date has passed. On this machine's tailnet, 14 of 52 peers read
+  "Expired".
+- **Animations follow no-animations mode**, after `8918fbae` / `aaccd247`.
+  `Style.duration()` only exists from omarchy 4.5 (`b18ab495`, 2026-09-28),
+  so the widget goes through a `motion()` helper that falls back to the plain
+  duration on 4.0.6; checked live on 4.0.6 with no QML errors.
+
 ### Open candidates
 
-- **GNOME 51 is refused.** `gnome/tailgauge@arzaroth.github.io/metadata.json`
-  stops at `"50"`, so GNOME disables the extension on 51 as incompatible. Add
-  `"51"` after `tests/gnome/shell/run.sh --gnome 51` passes.
-- **Peer key expiry is never shown.** tsui `9fbd5120` shows "Expired" for an
-  expired peer key, and `f9ba9797` added a machine-details submenu with key
-  expiry in it. `crates/tailgauge-core` reads neither `KeyExpiry` nor
-  `Expired`, and an expired key is exactly the peer that will not answer.
-  It would be a field in the expanded machine row in `panel_spec`, plus a
-  fixture case, and needs no per-frontend work.
-
-- **Animations ignore reduce-motion.** `8918fbae` / `aaccd247` route every
-  animation in their tailscale panel through `Style.duration()` and change the
-  phrase swap to 150ms / 200ms `Easing.OutCubic`. Ours
-  (`omarchy/arzaroth.tailgauge/Panel.qml`, `phraseSwap` and the busy-row
-  `NumberAnimation on rotation`) still uses raw 180 / 260 / 900ms, so they run
-  with animations off. Omarchy-only, a few lines.
 - **Huge tailnets.** `c872d57c` polls `status --json --peers=false` while the
   panel is closed, publishes arrays only when their content changed, and
   virtualizes the machine list (measured: 4.6s to 0.17s of shell CPU per poll
