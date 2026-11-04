@@ -73,6 +73,12 @@ pub struct Peer {
     pub public_key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub routes: Option<Vec<String>>,
+    /// Absent on a machine whose key never expires (tagged, or expiry turned
+    /// off in the admin console).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_expiry: Option<String>,
+    #[serde(rename = "Expired", skip_serializing_if = "Option::is_none")]
+    pub key_expired: Option<bool>,
 }
 
 // ---------------------------------------------------------------------------

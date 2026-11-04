@@ -345,6 +345,15 @@ pub fn peer_detail_rows(peer: &Peer, now_ms: i64) -> Vec<PanelRow> {
         );
     }
 
+    let until = fmt::format_until(peer.key_expiry.as_deref().unwrap_or(""), now_ms);
+    let key = match until {
+        _ if peer.key_expired == Some(true) => "Expired".to_string(),
+        Some(until) if until.is_empty() => "Expired".to_string(),
+        Some(until) => until,
+        None => String::new(),
+    };
+    detail(&mut rows, "key", "Key expiry", key);
+
     let routes = peer.routes.clone().unwrap_or_default();
     if !routes.is_empty() {
         detail(&mut rows, "routes", "Routes", routes.join(", "));
