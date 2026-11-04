@@ -947,6 +947,7 @@ Panel {
       spacing: Style.space(8)
 
       Text {
+        id: rowGlyph
         textFormat: Text.PlainText
         text: surface.row ? surface.row.glyph : ""
         color: surface.current ? root.foreground : root.dim
@@ -960,6 +961,7 @@ Panel {
           to: 360
           duration: root.motion(900)
           loops: Animation.Infinite
+          onStopped: rowGlyph.rotation = 0
         }
         onRotationChanged: if (surface.row && !surface.row.busy && rotation !== 0) rotation = 0
       }
