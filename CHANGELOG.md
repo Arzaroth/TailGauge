@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.8.1]
+
 ### Fixed
 
 - **GNOME no longer turns the connection on and off by itself.** On GNOME 47
