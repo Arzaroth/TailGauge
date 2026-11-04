@@ -172,6 +172,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
     declare _panelIcon: InstanceType<typeof TailGaugeIcon>;
     declare _panelLabel: St.Label;
     declare _headerItem: PopupMenu.PopupSwitchMenuItem;
+    declare _headerToggledId: number;
     declare _statusItem: PopupMenu.PopupMenuItem;
     declare _refreshItem: PopupMenu.PopupMenuItem;
     declare _footerItem: PopupMenu.PopupMenuItem;
@@ -286,7 +287,8 @@ class TailGaugeIndicator extends PanelMenu.Button {
 
     _buildStaticItems(): void {
         this._headerItem = new PopupMenu.PopupSwitchMenuItem('Tailscale', false);
-        this._headerItem.connect('toggled', () => this._service.toggleTailscale());
+        this._headerToggledId = this._headerItem.connect('toggled',
+            () => this._service.toggleTailscale());
         this._menu.addMenuItem(this._headerItem);
 
         this._statusItem = new PopupMenu.PopupMenuItem('', {reactive: false, can_focus: false});
@@ -403,8 +405,16 @@ class TailGaugeIndicator extends PanelMenu.Button {
     _syncHeader(panel: Panel.Panel): void {
         this._headerItem.label.text = panel.header.title;
         this._headerItem.setSensitive(panel.header.toggleEnabled);
-        if (this._headerItem.state !== panel.header.toggleChecked)
-            this._headerItem.setToggleState(panel.header.toggleChecked);
+        // GNOME 47+ emits 'toggled' from setToggleState too, which would turn
+        // mirroring the daemon into a click: an on/off loop.
+        if (this._headerItem.state !== panel.header.toggleChecked) {
+            this._headerItem.block_signal_handler(this._headerToggledId);
+            try {
+                this._headerItem.setToggleState(panel.header.toggleChecked);
+            } finally {
+                this._headerItem.unblock_signal_handler(this._headerToggledId);
+            }
+        }
 
         // The idle line is the header's own meta; the status slot carries only
         // what the model put there.
