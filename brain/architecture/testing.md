@@ -30,7 +30,8 @@ Source-grepping guards over the Plasma, GNOME and Omarchy sources (not the TUI):
 no user-visible string written in a frontend, no re-derived section visibility,
 exit-node list, copy options, status precedence or search haystack, no provider
 binary named in an argv, a GNOME slot for every section, no bar-icon click that
-toggles a connection. Details and the full
+toggles a connection, no GNOME header switch that toggles while mirroring the
+daemon. Details and the full
 list in [panel-spec.md](panel-spec.md).
 
 ## The binary (`crates/tailgauge/tests/e2e.rs` and inner tests)

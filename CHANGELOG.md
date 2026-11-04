@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **GNOME no longer turns the connection on and off by itself.** On GNOME 47
+  and later (Fedora 41 onward), the header switch treated each refresh that
+  updated it as a click, so the active VPN, Tailscale or NetBird, went up and
+  down in a loop for as long as the extension ran. Only a click on the switch
+  acts now.
+
 ## [0.8.0]
 
 ### Added

@@ -114,8 +114,10 @@ that test existed.
   children, copy options or actions become submenus; machines and the Mullvad
   picker are submenus. The menu rebuilds only when `_signatureOf(panel)`
   changes; typing filters by hiding rows (`_applySearch`), never by
-  rebuilding. Opening the menu sets `attentive`, scrolls to the top, refreshes
-  and starts the phrase tick (`PHRASE_INTERVAL_MS` 2800).
+  rebuilding. `_syncHeader` mirrors `toggleChecked` onto the switch with its
+  `'toggled'` handler (`_headerToggledId`) blocked: GNOME 47+ emits `toggled`
+  from `setToggleState` too. Opening the menu sets `attentive`, scrolls to the
+  top, refreshes and starts the phrase tick (`PHRASE_INTERVAL_MS` 2800).
 - `TailGaugeIcon` draws the mark natively on an `St.DrawingArea`; with
   `show-status-in-panel` the header title sits beside it.
 - Settings: GSettings schema `org.gnome.shell.extensions.tailgauge`

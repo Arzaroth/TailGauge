@@ -22,6 +22,11 @@ in the provider's own `up` / `down` argv ([../architecture/providers.md](../arch
   When an answer agrees with the click, `_desired` resets to -1. Absent and
   `false` differ (`the_optimistic_toggle_is_absent_rather_than_false`,
   e2e `a_click_shows_what_was_asked_until_the_daemon_agrees`).
+- Only a user's click turns the switch into a command. Mirroring the daemon
+  onto it must not: GNOME 47+ emits `toggled` from `setToggleState`, so the
+  extension blocks its handler while syncing (see
+  [../../CLAUDE.md](../../CLAUDE.md), "Frontend parity"). The Plasma and
+  Omarchy switches act on `onToggled`, which a programmatic set never fires.
 - The click runs `tailgauge ctl --provider <active> up|down`, then a delayed
   refresh (`DELAYED_REFRESH_MS` 600 in GNOME). "Turning it on…" shows as the
   action status; a failure's stderr becomes `lastError`, which `panel_status`
