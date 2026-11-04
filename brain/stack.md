@@ -24,8 +24,8 @@ Sources of truth: `Cargo.toml` (workspace), `crates/*/Cargo.toml`, `Cargo.lock`,
   - `tailgauge`: the one binary (`[[bin]] name = "tailgauge"`, `src/main.rs`)
     every frontend spawns. See [architecture/binary.md](architecture/binary.md).
 - **TypeScript** `~5.7.2` (lock: 5.7.3), `strict`, typed against
-  `@girs/gnome-shell` pinned to `50.0.4`, the newest shell the extension lists.
-  The extension still declares `shell-version` 45 to 50, so an API newer than 45
+  `@girs/gnome-shell` pinned to `51.0.1`, the newest shell the extension lists.
+  The extension still declares `shell-version` 45 to 51, so an API newer than 45
   typechecks and then fails on an old shell. Only the GNOME extension is
   compiled: `tsc -p tsconfig.gnome.json` (target ES2022, ESNext modules, output
   `build/.ts/gnome`), driven by `scripts/build.sh`.

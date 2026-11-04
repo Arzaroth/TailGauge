@@ -9,7 +9,7 @@ desktop starts deciding something the panel already decided.
 | Surface | Where | Toolkit | Calls the binary through |
 | --- | --- | --- | --- |
 | Plasma | `plasma/org.tailgauge.plasmoid` | QML, Plasma 6 (`X-Plasma-API-Minimum-Version` 6.0) | `Plasma5Support.DataSource`, `executable` engine, `sh -c` command lines |
-| GNOME | `gnome/tailgauge@arzaroth.github.io` | TypeScript compiled to GJS, `shell-version` 45 to 50 | `Gio.Subprocess` on `sh -c '<PATH>; exec "$@"' sh argv...` |
+| GNOME | `gnome/tailgauge@arzaroth.github.io` | TypeScript compiled to GJS, `shell-version` 45 to 51 | `Gio.Subprocess` on `sh -c '<PATH>; exec "$@"' sh argv...` |
 | Omarchy | `omarchy/arzaroth.tailgauge` | Quickshell QML plugin (`kinds: ["bar-widget"]`) | `Quickshell.Io.Process` argv, `Quickshell.execDetached` |
 | TUI | `crates/tailgauge/src/tui.rs` | ratatui + crossterm | in-process `gather::panel_state` + `panel_spec` |
 
@@ -166,6 +166,10 @@ that test existed.
   bare. Colours come from the bar (`bar.foreground`, `bar.urgent`); a status
   with tone `error` uses the urgent colour, everything dim is
   `Qt.darker(foreground, 1.55)`.
+- Every animation's duration goes through `motion()`, which is
+  `Style.duration()` where the shell has it (4.5 and later, 0 in
+  no-animations mode), and the plain duration on 4.0. The busy spinner also
+  stops on `Style.reduceMotion`, since an infinite loop of 0 ms would spin.
 - Installed by copying, never symlinking (the plugin registry refuses symlinks);
   reload with `omarchy-shell -q shell rescanPlugins`. TailGauge began as a port
   of Omarchy's first-party `omarchy.tailscale` plugin; the MIT notice is in
@@ -183,7 +187,7 @@ a command. It has no watcher and no settings file. See
 
 - `plasma/org.tailgauge.plasmoid/contents/ui/{main,CompactRep,FullRep,PanelRowView,ProviderService,ConfigGeneral}.qml`, `plasma/org.tailgauge.plasmoid/contents/config/main.xml`, `plasma/org.tailgauge.plasmoid/metadata.json`
 - `gnome/tailgauge@arzaroth.github.io/panel.ts` (`SECTION_IDS`, `emptyPanel`), `provider.ts` (`ProviderService`, `ui` accessor, `_ui`, `_ctl`, `toggleTailscale`, `_showOptimistically`, `_watch`, `_armPoll`), `extension.ts` (`box`, `scrollView`, `TailGaugeIndicator`, `_cycleProvider`, `_pushUi`, `toggle`, `_signatureOf`, `_applySearch`, `_onMenuKey`, `_dispatch`), `prefs.ts`, `metadata.json`, `schemas/org.gnome.shell.extensions.tailgauge.gschema.xml`
-- `omarchy/arzaroth.tailgauge/{Panel,Service}.qml` (`IpcHandler`, `diagnose`, `persistSetting`, `cycleProvider`), `omarchy/arzaroth.tailgauge/manifest.json`
+- `omarchy/arzaroth.tailgauge/{Panel,Service}.qml` (`IpcHandler`, `diagnose`, `persistSetting`, `cycleProvider`, `motion`), `omarchy/arzaroth.tailgauge/manifest.json`
 - `crates/tailgauge/src/tui.rs`, `crates/tailgauge/src/copy.rs`
 - `scripts/build.sh`, `tsconfig.gnome.json`, `tests/qml/run.sh`, `tests/gnome/shell/run.sh`
 - `crates/tailgauge-core/tests/parity.rs` (`no_click_on_the_bar_icon_toggles_a_connection`), `tests/gnome/provider.test.js`, `crates/tailgauge/tests/e2e.rs` (`every_command_the_frontends_invoke_exists`)

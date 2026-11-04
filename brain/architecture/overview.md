@@ -13,7 +13,7 @@ then jump to [panel-spec.md](panel-spec.md) for the JSON and
 | `crates/tailgauge-core` | The library: provider registry, CLI parsers, and `panel_spec`. Depends on `chrono`, `serde`, `serde_json` only |
 | `crates/tailgauge` | The one binary (`tailgauge`): clap subcommands, the gather, `ctl`, `watch`, Taildrop, clipboard, notifications, the TUI, the selvedge `Project` |
 | `plasma/org.tailgauge.plasmoid` | KDE Plasma 6 applet, QML, installed as it sits |
-| `gnome/tailgauge@arzaroth.github.io` | GNOME Shell extension, TypeScript compiled to GJS (GNOME 45 to 50) |
+| `gnome/tailgauge@arzaroth.github.io` | GNOME Shell extension, TypeScript compiled to GJS (GNOME 45 to 51) |
 | `omarchy/arzaroth.tailgauge` | Omarchy bar widget, Quickshell QML plugin |
 | `systemd/tailgauge-receive.service` | User unit running `%h/.local/bin/tailgauge receive` (Taildrop inbox) |
 | `scripts/build.sh` | Compiles the extension and assembles the three payloads under `build/` |
