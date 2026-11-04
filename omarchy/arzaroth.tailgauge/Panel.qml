@@ -32,6 +32,12 @@ Panel {
   readonly property color barIconColor: root.panel.bar.connected ? barForeground : Qt.darker(barForeground, 1.55)
   readonly property color hoverFill: Style.hoverFillFor(foreground, Commons.Color.accent)
   readonly property color selectedFill: Style.selectedFillFor(foreground, Commons.Color.accent)
+  // Omarchy 4.0 has neither: its animations always run.
+  readonly property bool reduceMotion: Style.reduceMotion === true
+
+  function motion(ms) {
+    return typeof Style.duration === "function" ? Style.duration(ms) : ms
+  }
 
   readonly property var recentMullvadRegions: settings.recentMullvadRegions instanceof Array
     ? settings.recentMullvadRegions : []
@@ -446,16 +452,16 @@ Panel {
       target: hero
       property: "metaOpacity"
       to: 0.0
-      duration: 180
-      easing.type: Easing.OutQuad
+      duration: root.motion(150)
+      easing.type: Easing.OutCubic
     }
     ScriptAction { script: root.phraseIndex = root.phraseIndex + 1 }
     PropertyAnimation {
       target: hero
       property: "metaOpacity"
       to: 1.0
-      duration: 260
-      easing.type: Easing.InQuad
+      duration: root.motion(200)
+      easing.type: Easing.OutCubic
     }
   }
 
@@ -941,6 +947,7 @@ Panel {
       spacing: Style.space(8)
 
       Text {
+        id: rowGlyph
         textFormat: Text.PlainText
         text: surface.row ? surface.row.glyph : ""
         color: surface.current ? root.foreground : root.dim
@@ -949,11 +956,12 @@ Panel {
         Layout.alignment: Qt.AlignVCenter
 
         NumberAnimation on rotation {
-          running: surface.row ? surface.row.busy : false
+          running: (surface.row ? surface.row.busy : false) && !root.reduceMotion
           from: 0
           to: 360
-          duration: 900
+          duration: root.motion(900)
           loops: Animation.Infinite
+          onStopped: rowGlyph.rotation = 0
         }
         onRotationChanged: if (surface.row && !surface.row.busy && rotation !== 0) rotation = 0
       }

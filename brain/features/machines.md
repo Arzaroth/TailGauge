@@ -30,7 +30,7 @@ with the connection (`this_device_disappears_with_the_tailnet_it_belongs_to`).
   [taildrop.md](taildrop.md)), `copy`.
 - **Details.** `peer_detail_rows` turns what the provider actually reported
   (connection, latency, endpoint, relay, handshake or last seen, bytes,
-  routes...) into non-navigable `detail:*` children; the row is `expanded` when
+  key expiry, routes...) into non-navigable `detail:*` children; the row is `expanded` when
   its id equals the frontend's `expandedPeerId`.
 - **Copy options** `peer_copy_options`, in this order and only when non-empty:
   `name`, `dns`, `ipv6`, `ip`, `key` (public key). Every frontend runs
@@ -60,4 +60,4 @@ with the connection (`this_device_disappears_with_the_tailnet_it_belongs_to`).
 - `crates/tailgauge-core/src/panel.rs` (`self_section`, `machines_section`, `MACHINE_SEARCH_MIN`, `row_label`, `peer_subtitle`, `peer_row_subtitle`, `peer_copy_options`, `peer_detail_rows`, `os_icon`, `panel_navigation`)
 - `crates/tailgauge-core/src/exit_nodes.rs` (`machine_search_key`), `crates/tailgauge-core/src/peer.rs` (`collate`), `crates/tailgauge-core/src/status.rs` (`parse_status`)
 - `crates/tailgauge/src/copy.rs`, `gnome/tailgauge@arzaroth.github.io/provider.ts` (`copyToClipboard`)
-- `crates/tailgauge-core/tests/specification.rs` (`the_machines_search_appears_only_for_a_list_long_enough_to_need_it`, `a_machine_key_matches_every_field_its_row_shows_and_the_os`, `machine_rows_carry_their_subtitle_icon_copy_options_and_actions`), `crates/tailgauge-core/tests/parity.rs`
+- `crates/tailgauge-core/tests/specification.rs` (`the_machines_search_appears_only_for_a_list_long_enough_to_need_it`, `a_machine_key_matches_every_field_its_row_shows_and_the_os`, `machine_rows_carry_their_subtitle_icon_copy_options_and_actions`, `a_machine_says_when_its_key_expires_and_when_it_already_has`), `crates/tailgauge-core/tests/parity.rs`

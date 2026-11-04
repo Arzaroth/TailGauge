@@ -47,6 +47,22 @@ pub fn format_since(value: &str, now_ms: i64) -> String {
     if seconds < 60 {
         return "just now".to_string();
     }
+    format!("{} ago", span(seconds))
+}
+
+/// How long until, `None` for a timestamp that is absent or unreadable, and
+/// `Some("")` for one already behind this clock.
+pub fn format_until(value: &str, now_ms: i64) -> Option<String> {
+    let then = chrono::DateTime::parse_from_rfc3339(value.trim()).ok()?;
+    Some(match then.timestamp_millis() - now_ms {
+        ms if ms <= 0 => String::new(),
+        ms if ms < 60_000 => "in under a minute".to_string(),
+        ms => format!("in {}", span(ms / 1000)),
+    })
+}
+
+/// Whole seconds, a minute or more, in the largest unit that fits.
+fn span(seconds: i64) -> String {
     let minutes = seconds / 60;
     if minutes < 60 {
         return plural(minutes, "minute");
@@ -77,9 +93,9 @@ pub fn compact_minutes(minutes: i64) -> String {
 
 fn plural(count: i64, unit: &str) -> String {
     if count == 1 {
-        format!("{count} {unit} ago")
+        format!("{count} {unit}")
     } else {
-        format!("{count} {unit}s ago")
+        format!("{count} {unit}s")
     }
 }
 

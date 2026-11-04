@@ -38,9 +38,16 @@ function spawn(argv: string[], flags: Gio.SubprocessFlags): Gio.Subprocess {
 // the CLIs, polls every installed provider at once, and returns the whole
 // resolved panel. This class spawns it, pushes the answer into `panel`, and
 // turns a row's action back into a command.
+interface ProviderSignals extends GObject.Object.SignalSignatures {
+    'changed': () => void;
+}
+
 export const ProviderService = GObject.registerClass({
     Signals: {'changed': {}},
 }, class ProviderService extends GObject.Object {
+    declare connect: GObject.SignalMethods<this, ProviderSignals>['connect'];
+    declare emit: GObject.SignalMethods<this, ProviderSignals>['emit'];
+
     declare _settings: Gio.Settings;
     declare _cancellables: Map<string, Gio.Cancellable>;
     declare _timeouts: Map<string, number>;

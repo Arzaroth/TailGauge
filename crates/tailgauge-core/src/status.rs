@@ -184,6 +184,8 @@ pub fn peer_from_status(
         created: Some(peer::non_zero_time(raw, "Created")),
         public_key: Some(peer::field(raw, "PublicKey")),
         routes: Some(peer::strings(raw, "PrimaryRoutes")),
+        key_expiry: Some(peer::non_zero_time(raw, "KeyExpiry")),
+        key_expired: Some(raw.get("Expired") == Some(&Value::Bool(true))),
         ..Peer::default()
     }
 }

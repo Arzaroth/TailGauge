@@ -91,7 +91,9 @@ codepoint, what Omarchy draws), `action`, `current`, `busy`, `bold`,
   busy while `updating`, the `auth` row while `busy`.
 - **`children`**: a peer's detail rows (`peer_detail_rows`, `detail:<field>`,
   `navigable: false`, only fields the provider actually reported; `Last seen`
-  only when there is no handshake; `Added` when fewer than three rows) and the
+  only when there is no handshake; `Key expiry` reads "Expired" when Tailscale
+  says `Expired` or the `KeyExpiry` date has passed, and is absent for a key
+  that never expires; `Added` when fewer than three rows) and the
   picker's `region:<id>` rows. `expanded` is set for the peer whose id matches
   `expandedPeerId` and for the picker when `mullvadPickerOpen`.
 - **Search.** A row with a `searchScope` (`machines` or `mullvad`) is drawn when
@@ -130,7 +132,7 @@ files; frontends write only desktop conventions (`Refresh`, `Settings`) and a
 short, listed set of progress and failure words, enforced by `parity.rs`.
 
 `fmt.rs` holds the wording helpers the panel uses (`format_bytes`,
-`format_since`, `is_profiles_access_denied`) plus `elide_status`, `first_url`,
+`format_since`, `format_until`, `is_profiles_access_denied`) plus `elide_status`, `first_url`,
 `shell_quote` and `shell_command`, which no production code calls now: only
 `fmt.rs`'s own unit tests, and `specification.rs` for `shell_command`.
 

@@ -4,6 +4,21 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **A machine's details say when its key expires.** Expanding a Tailscale
+  machine shows "Key expiry": how long is left, or "Expired" once it has
+  passed, which is why a machine that looks fine stops answering. A machine
+  whose key never expires has no such row.
+- **GNOME 51.** The extension declared GNOME 45 to 50, so GNOME 51 turned it
+  off as incompatible.
+
+### Fixed
+
+- **Omarchy's no-animations mode reaches the widget.** The rotating status
+  line and the spinner on a row that waits kept moving with animations turned
+  off. On Omarchy 4.0, which has no such mode, they run as before.
+
 ## [0.8.1]
 
 ### Fixed

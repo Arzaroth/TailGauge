@@ -196,6 +196,13 @@ See [architecture/distribution.md](architecture/distribution.md#packages).
   collides with nothing. It still needs the binary: the key calls
   `toggleTailscale`, which spawns `tailgauge ctl` and does nothing until the
   binary has answered a panel. See [features/keyboard.md](features/keyboard.md).
+- **A received image is never the notification's picture, though Omarchy's is
+  again.** Their `omarchy-tailscale-receive` dropped the preview (`dc2b1809`)
+  and brought it back two weeks later (`d743f8e8`), on the grounds that
+  Taildrop only takes files from your own devices. One of your own devices
+  can still be compromised, and a click still opens the file, so the preview
+  buys a thumbnail at the price of a decoder running on input nobody opened.
+  See [features/taildrop.md](features/taildrop.md).
 
 ## Sources
 
