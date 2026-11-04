@@ -2263,6 +2263,29 @@ fn a_machine_says_when_its_key_expires_and_when_it_already_has() {
 
     let stale = from_status(serde_json::json!({"KeyExpiry": "0001-01-01T00:00:00Z"}));
     assert_eq!(details_of(&stale).get("detail:key"), None);
+
+    let revoked = from_status(serde_json::json!({
+        "KeyExpiry": "2026-12-01T06:00:00Z",
+        "Expired": true,
+    }));
+    assert_eq!(
+        details_of(&revoked).get("detail:key").map(String::as_str),
+        Some("Expired"),
+        "the daemon's word wins over a date still ahead"
+    );
+}
+
+#[test]
+fn the_key_expiry_reaches_the_machine_row_it_belongs_to() {
+    let panel = resolve(&state());
+    let laptop = labelled(rows_of(&panel, "machines"), "laptop");
+    let key = laptop
+        .children
+        .iter()
+        .find(|c| c.id == "detail:key")
+        .expect("a key expiry child");
+    assert_eq!(key.label, "Key expiry");
+    assert_eq!(key.sublabel, "in 78 days");
 }
 
 #[test]
@@ -2274,6 +2297,11 @@ fn time_left_reads_like_a_human_wrote_it() {
     );
     assert_eq!(until("2026-09-14T09:00:00Z").as_deref(), Some("in 3 hours"));
     assert_eq!(until("2026-09-15T06:00:00Z").as_deref(), Some("in 1 day"));
+    assert_eq!(
+        until("2026-09-14T06:00:00.500Z").as_deref(),
+        Some("in under a minute"),
+        "half a second left is not expired"
+    );
     assert_eq!(until("2026-09-14T06:00:00Z").as_deref(), Some(""));
     assert_eq!(until(""), None);
     assert_eq!(until("not a date"), None);
