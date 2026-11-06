@@ -44,8 +44,9 @@ in the provider's own `up` / `down` argv ([../architecture/providers.md](../arch
   it re-reads status, and if the provider is not running posts a critical
   "Could not turn X on" (e2e
   `ctl_up_from_a_key_binding_opens_the_login_page_while_up_waits`). NetBird's
-  `up` would open the browser itself, so its argv carries `--no-browser` and
-  this is the only open (`ctl_up_on_netbird_opens_the_login_page_once`).
+  `up` would open the browser itself, so the run gets the provider's
+  `unattended_up_env()` (`NB_NO_BROWSER=true`) and this is the only open
+  (`ctl_up_on_netbird_opens_the_login_page_once`). Attended, NetBird opens it.
 - `down` runs `<cli> down`; failure is a critical notification. `toggle` reads
   status and calls exactly one of them. `status` exits 0 connected, 3 not
   (`idle_line`: "Needs login", "Disconnected", or the daemon's own state word).
