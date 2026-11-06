@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="TailGauge">
+  <defs><linearGradient id="tile" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#141a44"/><stop offset="1" stop-color="#070a1e"/></linearGradient><linearGradient id="t" gradientUnits="userSpaceOnUse" x1="46" y1="18" x2="8" y2="58"><stop offset="0" stop-color="#9ef6ff"/><stop offset=".55" stop-color="#6a7cff" stop-opacity=".5"/><stop offset="1" stop-color="#7a5cff" stop-opacity="0"/></linearGradient></defs>
+  <rect width="64" height="64" rx="14" fill="url(#tile)"/>
+  <rect x=".5" y=".5" width="63" height="63" rx="13.500" fill="none" stroke="#fff" stroke-opacity=".08"/>
+  <path d="M50.4 23.4L8 58L40.4 13.9Z" fill="url(#t)"/>
+  <path d="M33 30L22 40L14 52" stroke="#fff" stroke-opacity=".6" stroke-width="1.200"/>
+  <g fill="#fff"><circle cx="33" cy="30" r="2.300"/><circle cx="22" cy="40" r="2"/><circle cx="14" cy="52" r="1.700"/></g>
+  <circle cx="46" cy="18" r="7" fill="#f2feff"/>
+  <g fill="#fff" fill-opacity=".7"><circle cx="14" cy="14" r="1"/><circle cx="26" cy="8" r=".8"/><circle cx="55" cy="44" r="1"/></g>
+</svg>
