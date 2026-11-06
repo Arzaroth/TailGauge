@@ -123,7 +123,11 @@ impl ProviderDescriptor {
     }
 
     pub fn up(&self) -> Vec<String> {
-        argv(&[self.cli, "up"])
+        if self.id == "netbird" {
+            argv(&[self.cli, "up", "--no-browser"])
+        } else {
+            argv(&[self.cli, "up"])
+        }
     }
 
     pub fn down(&self) -> Vec<String> {
@@ -447,6 +451,18 @@ mod tests {
         assert!(netbird.watch(300).is_none());
         assert!(tailscale.networks().is_none());
         assert!(tailscale.select_network("x", true).is_none());
+    }
+
+    #[test]
+    fn only_tailgauge_opens_the_login_page() {
+        assert_eq!(
+            provider_by_id("tailscale").unwrap().up(),
+            ["tailscale", "up"]
+        );
+        assert_eq!(
+            provider_by_id("netbird").unwrap().up(),
+            ["netbird", "up", "--no-browser"]
+        );
     }
 }
 
