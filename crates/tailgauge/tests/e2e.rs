@@ -78,12 +78,27 @@ impl Machine {
                      *) exit 1 ;;\nesac\n",
                     f = fixtures().display()
                 ),
-                "xdg-open" => "#!/bin/sh\necho \"$1\" > \"$HOME/opened\"\n".to_string(),
+                // `up` opens the browser itself unless told not to, as the
+                // real one does, then waits for the login.
+                "netbird-login" => format!(
+                    "#!/bin/sh\ncase \"$1\" in\n\
+                     up) url=https://login.netbird.io/e2e\n\
+                         echo 'Please do the SSO login in your browser.'\n\
+                         echo \"$url\"\n\
+                         [ \"$NB_NO_BROWSER\" = true ] || xdg-open \"$url\"\n\
+                         i=0\n\
+                         while [ ! -e \"$HOME/opened\" ] && [ $i -lt 50 ]; do /bin/sleep 0.1; i=$((i+1)); done\n\
+                         /bin/sleep 0.2 ;;\n\
+                     status) /bin/cat '{f}/netbird-status.json' ;;\n\
+                     *) exit 1 ;;\nesac\n",
+                    f = fixtures().display()
+                ),
+                "xdg-open" => "#!/bin/sh\necho \"$1\" >> \"$HOME/opened\"\n".to_string(),
                 other => panic!("no fake {other}"),
             };
             let name = match *cli {
                 "tailscale-down" | "tailscale-login" => "tailscale",
-                "netbird-switching" => "netbird",
+                "netbird-switching" | "netbird-login" => "netbird",
                 other => other,
             };
             let path = home.join("bin").join(name);
@@ -392,6 +407,17 @@ fn ctl_up_from_a_key_binding_opens_the_login_page_while_up_waits() {
     assert!(
         machine.home.join("opened-while-waiting").exists(),
         "the login page opened only after `tailscale up` gave up waiting for it"
+    );
+}
+
+#[test]
+fn ctl_up_on_netbird_opens_the_login_page_once() {
+    let machine = Machine::with(&["netbird-login", "xdg-open"]);
+    let (code, _, stderr) = machine.run(&["ctl", "--provider", "netbird", "up"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(
+        std::fs::read_to_string(machine.home.join("opened")).expect("the page was opened"),
+        "https://login.netbird.io/e2e\n"
     );
 }
 

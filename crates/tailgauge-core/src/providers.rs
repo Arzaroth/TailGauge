@@ -126,6 +126,17 @@ impl ProviderDescriptor {
         argv(&[self.cli, "up"])
     }
 
+    /// What `up` is run with when TailGauge opens the login page itself, so
+    /// the CLI does not open it too. An environment variable rather than a
+    /// flag: a NetBird older than `--no-browser` ignores it instead of failing.
+    pub fn unattended_up_env(&self) -> &'static [(&'static str, &'static str)] {
+        if self.id == "netbird" {
+            &[("NB_NO_BROWSER", "true")]
+        } else {
+            &[]
+        }
+    }
+
     pub fn down(&self) -> Vec<String> {
         argv(&[self.cli, "down"])
     }
@@ -447,6 +458,19 @@ mod tests {
         assert!(netbird.watch(300).is_none());
         assert!(tailscale.networks().is_none());
         assert!(tailscale.select_network("x", true).is_none());
+    }
+
+    #[test]
+    fn only_tailgauge_opens_the_login_page() {
+        let netbird = provider_by_id("netbird").unwrap();
+        assert_eq!(netbird.up(), ["netbird", "up"]);
+        assert_eq!(netbird.unattended_up_env(), [("NB_NO_BROWSER", "true")]);
+        assert!(
+            provider_by_id("tailscale")
+                .unwrap()
+                .unattended_up_env()
+                .is_empty()
+        );
     }
 }
 

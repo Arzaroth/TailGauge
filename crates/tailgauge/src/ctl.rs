@@ -122,7 +122,7 @@ pub fn up(provider: &ProviderDescriptor) -> Outcome {
     // Bound to a key there is no terminal for `tailscale up` to print its
     // login URL on, so it is scraped out of the stream the way the panels do.
     // `up` waits for the login to finish, so the page opens while it waits.
-    run_opening_login(&argv, |url| {
+    run_opening_login(&argv, provider.unattended_up_env(), |url| {
         announce(
             "normal",
             "Authorize this device",
@@ -149,9 +149,10 @@ pub fn up(provider: &ProviderDescriptor) -> Outcome {
 
 /// Run `tailscale up` to completion, handing the first login URL it prints on
 /// either stream to `open` as soon as it appears.
-fn run_opening_login(argv: &[String], open: impl FnOnce(String)) {
+fn run_opening_login(argv: &[String], env: &[(&str, &str)], open: impl FnOnce(String)) {
     let Ok(mut child) = Command::new(&argv[0])
         .args(&argv[1..])
+        .envs(env.iter().copied())
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
