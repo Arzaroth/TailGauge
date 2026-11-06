@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.9.1]
+
 ### Fixed
 
 - **Turning on an expired NetBird opens the login page once.** NetBird opened
