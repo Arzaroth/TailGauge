@@ -79,14 +79,16 @@ impl Machine {
                     f = fixtures().display()
                 ),
                 // `up` opens the browser itself unless told not to, as the
-                // real one does.
+                // real one does, then waits for the login.
                 "netbird-login" => format!(
                     "#!/bin/sh\ncase \"$1\" in\n\
                      up) url=https://login.netbird.io/e2e\n\
                          echo 'Please do the SSO login in your browser.'\n\
                          echo \"$url\"\n\
-                         [ \"$2\" = --no-browser ] || xdg-open \"$url\"\n\
-                         /bin/sleep 0.5 ;;\n\
+                         [ \"$NB_NO_BROWSER\" = true ] || xdg-open \"$url\"\n\
+                         i=0\n\
+                         while [ ! -e \"$HOME/opened\" ] && [ $i -lt 50 ]; do /bin/sleep 0.1; i=$((i+1)); done\n\
+                         /bin/sleep 0.2 ;;\n\
                      status) /bin/cat '{f}/netbird-status.json' ;;\n\
                      *) exit 1 ;;\nesac\n",
                     f = fixtures().display()
