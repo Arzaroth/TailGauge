@@ -7,7 +7,7 @@ The registry, detection and parsers are in
 
 ## What NetBird gets
 
-- **Connection on/off** through `netbird up` / `netbird down`
+- **Connection on/off** through `netbird up --no-browser` / `netbird down`
   ([connection.md](connection.md)). Running is `daemonStatus` "Connected";
   `NeedsLogin`, `SessionExpired` and `LoginFailed` read as needs-login
   (`parse_netbird_status_grades_every_login_shaped_daemon_state`). NetBird's

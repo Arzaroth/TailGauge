@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Turning on an expired NetBird opens the login page once.** NetBird opened
+  the browser itself and TailGauge opened the same page, so it came up in two
+  windows.
+
 ## [0.9.0]
 
 ### Added

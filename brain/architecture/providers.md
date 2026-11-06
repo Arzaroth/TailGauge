@@ -41,7 +41,7 @@ and the parsers live in `tailgauge-core` and shell out to nothing; the binary
 | Ask | Tailscale argv | NetBird argv |
 | --- | --- | --- |
 | status | `tailscale status --json` | `netbird status --json` |
-| on / off | `tailscale up` / `down` | `netbird up` / `down` |
+| on / off | `tailscale up` / `down` | `netbird up --no-browser` / `down` |
 | exit-node list | `tailscale exit-node list` | - |
 | set exit node | `tailscale set --exit-node=<target>` (empty clears) | - |
 | profiles | `tailscale switch --list --json`, `tailscale switch <id>` | - |
