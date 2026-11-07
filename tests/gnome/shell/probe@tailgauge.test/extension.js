@@ -72,6 +72,14 @@ export default class Probe extends Extension {
                 record(`scroll view: height=${scroll.height} ${scroll.style ?? ''}`);
                 record(`sections: natural=${natural}`);
                 record(`scroll: upper=${adjustment.upper} page=${adjustment.page_size}`);
+                const icon = indicator._panelIcon;
+                // What the icon paints into is its content box, which the
+                // theme's padding can shrink well below the allocation.
+                const content = icon.get_theme_node().get_content_box(icon.get_allocation_box());
+                const [drawnWidth, drawnHeight] = [content.get_width(), content.get_height()];
+                record(`panel icon: ${icon.width}x${icon.height} drawn=${drawnWidth}x${drawnHeight}`);
+                if (Math.min(drawnWidth, drawnHeight) < 8)
+                    record('error: the panel icon is drawn squashed');
                 if (popup.y + popup.height > monitor.y + monitor.height)
                     record('error: the menu runs off the bottom of the monitor');
                 if (natural > 0 && scroll.height <= 1)
