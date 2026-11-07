@@ -4,6 +4,8 @@
 //! and the argv for each thing the panel asks of it. Nothing else in the crate
 //! names a provider, and no frontend does at all.
 
+use std::path::PathBuf;
+
 use serde::Serialize;
 
 use crate::panel_state::PanelState;
@@ -111,6 +113,21 @@ fn argv(parts: &[&str]) -> Vec<String> {
 impl ProviderDescriptor {
     pub fn status(&self) -> Vec<String> {
         argv(&[self.cli, "status", "--json"])
+    }
+
+    /// The unix socket the CLI reaches its daemon on, when its absence means the
+    /// daemon is down. NetBird's CLI spends ten seconds redialling a socket
+    /// that is not there before it says so, and every panel polls it. `env`
+    /// reads `NB_DAEMON_ADDR`, which the CLI takes for `--daemon-addr`; an
+    /// address that is not a unix socket cannot be checked this way.
+    pub fn daemon_socket(&self, env: impl Fn(&str) -> Option<String>) -> Option<PathBuf> {
+        if self.id != "netbird" {
+            return None;
+        }
+        let addr = env("NB_DAEMON_ADDR")
+            .filter(|a| !a.is_empty())
+            .unwrap_or_else(|| "unix:///var/run/netbird.sock".to_string());
+        addr.strip_prefix("unix://").map(PathBuf::from)
     }
 
     /// What `status()` printed, through the parser for this provider's shape.
@@ -316,6 +333,7 @@ pub fn provider_label_list() -> String {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
     use crate::panel_state::ProviderState;
 

@@ -117,6 +117,9 @@ impl Machine {
                     .expect("executable");
             }
         }
+        // A running NetBird daemon is a socket the binary checks for before
+        // asking the CLI, which redials a missing one for ten seconds.
+        std::fs::write(home.join("netbird.sock"), "").expect("the daemon's socket");
         Machine { home }
     }
 
@@ -142,7 +145,11 @@ impl Machine {
             .env("HOME", &self.home)
             .env("XDG_CACHE_HOME", self.home.join("cache"))
             .env("XDG_DATA_HOME", self.home.join("data"))
-            .env("XDG_CONFIG_HOME", self.home.join("config"));
+            .env("XDG_CONFIG_HOME", self.home.join("config"))
+            .env(
+                "NB_DAEMON_ADDR",
+                format!("unix://{}", self.home.join("netbird.sock").display()),
+            );
         command
     }
 

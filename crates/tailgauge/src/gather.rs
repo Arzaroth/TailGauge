@@ -67,6 +67,19 @@ fn probe() -> Vec<ProviderState> {
         .collect()
 }
 
+/// What the provider's `status` printed, or `None` as for a failed call. A
+/// daemon whose socket is missing is down, and asking it costs a timeout.
+pub fn status_output(provider: &ProviderDescriptor) -> Option<String> {
+    if provider
+        .daemon_socket(|key| std::env::var(key).ok())
+        .is_some_and(|socket| !socket.exists())
+    {
+        return None;
+    }
+    let argv = provider.status();
+    proc::output(&argv[0], &argv[1..])
+}
+
 /// Every installed provider's status, gathered at once. The bar describes the
 /// machine rather than the view, so the one being shown is not the only one
 /// worth asking.
@@ -75,8 +88,7 @@ fn statuses(installed: &[&'static ProviderDescriptor]) -> Vec<(&'static str, cor
         .iter()
         .map(|&provider| {
             thread::spawn(move || {
-                let argv = provider.status();
-                let raw = proc::output(&argv[0], &argv[1..]).unwrap_or_default();
+                let raw = status_output(provider).unwrap_or_default();
                 (provider.id, provider.parse_status(&raw))
             })
         })

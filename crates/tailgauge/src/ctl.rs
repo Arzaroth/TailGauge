@@ -61,8 +61,7 @@ fn announce(urgency: &str, summary: &str, body: &str) {
 
 /// The provider's own status, through whichever parser it needs.
 fn read(provider: &ProviderDescriptor) -> core::StatusResult {
-    let argv = provider.status();
-    let raw = proc::output(&argv[0], &argv[1..]).unwrap_or_default();
+    let raw = crate::gather::status_output(provider).unwrap_or_default();
     provider.parse_status(&raw)
 }
 
