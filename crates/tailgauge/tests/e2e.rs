@@ -54,6 +54,13 @@ impl Machine {
                 // A daemon that is installed but answering nothing, which is
                 // what a stopped service looks like.
                 "tailscale-down" => "#!/bin/sh\nexit 1\n".to_string(),
+                // Down until `tailscale-up` appears in its home.
+                "tailscale-switching" => format!(
+                    "#!/bin/sh\ncase \"$1 $2\" in\n\
+                     'status --json') [ -e \"$HOME/tailscale-up\" ] && /bin/cat '{f}/status.json' ;;\n\
+                     *) exit 1 ;;\nesac\n",
+                    f = fixtures().display()
+                ),
                 // `up` prints its login URL and then waits for the login, as
                 // the real one does; it notes whether the page was opened
                 // while it was still waiting.
@@ -97,7 +104,7 @@ impl Machine {
                 other => panic!("no fake {other}"),
             };
             let name = match *cli {
-                "tailscale-down" | "tailscale-login" => "tailscale",
+                "tailscale-down" | "tailscale-login" | "tailscale-switching" => "tailscale",
                 "netbird-switching" | "netbird-login" => "netbird",
                 other => other,
             };
@@ -305,6 +312,21 @@ fn the_bar_describes_the_machine_rather_than_the_provider_being_shown() {
         labels(section(&panel, "providers")),
         ["Tailscale", "NetBird"]
     );
+}
+
+#[test]
+fn the_bar_icon_stays_the_provider_that_connected_first() {
+    let machine = Machine::with(&["tailscale-switching", "netbird"]);
+    let panel = machine.panel("{}");
+    assert_eq!(panel["bar"]["providerId"], "netbird");
+    assert_eq!(panel["bar"]["badge"], "");
+
+    // Tailscale comes first in the registry, so only having seen NetBird come
+    // up first keeps it on the icon.
+    std::fs::write(machine.home.join("tailscale-up"), "").expect("the switch");
+    let panel = machine.panel(r#"{"activeProviderId":"tailscale"}"#);
+    assert_eq!(panel["bar"]["providerId"], "netbird");
+    assert_eq!(panel["bar"]["badge"], "2");
 }
 
 #[test]

@@ -327,6 +327,46 @@ mod tests {
         assert!(bar_state(&detected(&["tailscale"])).crossed);
     }
 
+    fn up(ids: &[&str]) -> Vec<ProviderSummary> {
+        providers::PROVIDERS
+            .iter()
+            .map(|p| ProviderSummary {
+                id: p.id.into(),
+                running: ids.contains(&p.id),
+                ..ProviderSummary::default()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_connection_order_keeps_who_came_first_and_forgets_who_left() {
+        let previous = ["netbird".to_string()];
+        assert_eq!(
+            connection_order(&previous, &up(&["tailscale", "netbird"])),
+            ["netbird", "tailscale"]
+        );
+        assert_eq!(
+            connection_order(&previous, &up(&["tailscale"])),
+            ["tailscale"]
+        );
+        assert!(connection_order(&previous, &up(&[])).is_empty());
+    }
+
+    #[test]
+    fn nothing_installed_names_no_provider() {
+        let bar = bar_state(&PanelState::default());
+        assert!(bar.provider_id.is_empty() && bar.badge.is_empty());
+    }
+
+    #[test]
+    fn nothing_up_draws_the_preferred_installed_provider() {
+        let state = PanelState {
+            summaries: Some(up(&[])),
+            ..detected(&["tailscale", "netbird"])
+        };
+        assert_eq!(bar_state(&state).provider_id, "tailscale");
+    }
+
     #[test]
     fn a_summary_reads_only_a_status_that_parsed() {
         let running =

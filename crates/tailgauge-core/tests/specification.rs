@@ -2100,6 +2100,89 @@ fn the_bar_goes_dark_only_when_every_provider_is_down() {
     assert!(!bar.connected && !bar.warning && bar.crossed);
 }
 
+fn summaries_from_the_fixtures(
+    tailscale: &str,
+    netbird: &str,
+) -> Vec<core::panel_state::ProviderSummary> {
+    vec![
+        core::bar::summarize_provider("tailscale", &core::parse_status(&fixture(tailscale))),
+        core::bar::summarize_provider("netbird", &core::parse_netbird_status(&fixture(netbird))),
+    ]
+}
+
+#[test]
+fn the_bar_icon_is_the_one_provider_that_is_up() {
+    let netbird_only = PanelState {
+        providers: Some(detected(&["tailscale", "netbird"])),
+        summaries: Some(vec![
+            core::panel_state::ProviderSummary {
+                id: "tailscale".into(),
+                label: "Tailscale".into(),
+                ..Default::default()
+            },
+            core::bar::summarize_provider(
+                "netbird",
+                &core::parse_netbird_status(&fixture("netbird-status.json")),
+            ),
+        ]),
+        ..PanelState::default()
+    };
+    let bar = core::bar::bar_state(&netbird_only);
+    assert_eq!(bar.provider_id, "netbird");
+    assert_eq!(bar.badge, "", "one connection is not counted");
+}
+
+#[test]
+fn two_connections_show_the_first_one_up_and_count_both() {
+    let both = PanelState {
+        providers: Some(detected(&["tailscale", "netbird"])),
+        summaries: Some(summaries_from_the_fixtures(
+            "status.json",
+            "netbird-status.json",
+        )),
+        connected_order: vec!["netbird".into()],
+        ..PanelState::default()
+    };
+    let bar = core::bar::bar_state(&both);
+    assert_eq!(
+        bar.provider_id, "netbird",
+        "NetBird was up before Tailscale joined it"
+    );
+    assert_eq!(bar.badge, "2");
+
+    let unwitnessed = PanelState {
+        connected_order: Vec::new(),
+        ..both
+    };
+    assert_eq!(
+        core::bar::bar_state(&unwitnessed).provider_id,
+        "tailscale",
+        "with no history, the registry's order decides"
+    );
+}
+
+#[test]
+fn with_nothing_up_the_icon_is_the_provider_asking_for_a_login() {
+    let state = PanelState {
+        providers: Some(detected(&["tailscale", "netbird"])),
+        summaries: Some(vec![
+            core::panel_state::ProviderSummary {
+                id: "tailscale".into(),
+                ..Default::default()
+            },
+            core::panel_state::ProviderSummary {
+                id: "netbird".into(),
+                needs_login: true,
+                ..Default::default()
+            },
+        ]),
+        ..PanelState::default()
+    };
+    let bar = core::bar::bar_state(&state);
+    assert_eq!(bar.provider_id, "netbird");
+    assert!(bar.warning && bar.badge.is_empty());
+}
+
 #[test]
 fn the_tooltip_says_what_each_installed_provider_is_doing_active_first() {
     let state = PanelState {
