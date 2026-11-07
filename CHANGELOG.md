@@ -14,6 +14,13 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
+- **The panel no longer takes ten seconds with NetBird stopped.** With the
+  NetBird CLI installed and its service not running, every refresh waited on
+  NetBird's CLI to give up, even while showing Tailscale. A stopped NetBird is
+  now read as disconnected at once.
+- **Switching provider shows the new one straight away, and never the old
+  one.** A switch made while a refresh was running waited for the next one,
+  and the running refresh then drew the previous provider's panel.
 - **The GNOME bar icon is drawn whole on GNOME 50.** The shell's theme padded
   it sideways, leaving a flat line where the mark should be.
 

@@ -57,6 +57,13 @@ below are the ones with an incident behind them.
   first on all three desktops (0.5.0).
   `the_optimistic_toggle_is_absent_rather_than_false`,
   `a_click_shows_what_was_asked_until_the_daemon_agrees`.
+- **A refresh asked while a poll is in flight is queued, never dropped, and an
+  answer asked for another provider is never drawn.** A poll is nearly always
+  in flight, so a provider switch went unanswered until the next tick while
+  the poll it raced drew the old provider's panel under the new one's name.
+  Each service records the provider it asked for and runs the queued refresh
+  when the poll lands. The QML harnesses and `provider.test.js` switch
+  mid-poll.
 - **Search keys come lowercased from the core; a frontend only tests the
   substring.** The panel call once took the machine and region queries, so
   every keystroke rebuilt the panel; since 0.5.0 the core hands each searchable
@@ -120,6 +127,14 @@ polls on its refresh interval (3 s while the panel is open), and refreshes once
 **0 on a change, 2 on expiry, 1 when no supported VPN CLI is installed**;
 frontends refresh only on 0: the shell watcher it replaced always reported
 expiry, so changes never reached the panels.
+
+**A NetBird whose socket is missing is not asked.** Its CLI redials a missing
+daemon socket for ten seconds before failing, and every panel polls every
+installed provider, so an installed but stopped NetBird made every panel
+call, Tailscale's included, take ten seconds. `gather::status_output` checks
+`ProviderDescriptor::daemon_socket` (the CLI's own `NB_DAEMON_ADDR`) first, for
+`panel`, `watch` and `ctl` alike. The e2e machines carry a socket file;
+`a_netbird_without_its_daemon_is_not_asked`.
 `a_change_exits_zero_and_an_expiry_does_not`,
 `watch_on_a_quiet_netbird_expires_rather_than_giving_up`. See
 `brain/architecture/overview.md`.

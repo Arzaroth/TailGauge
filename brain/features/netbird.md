@@ -40,6 +40,14 @@ quiet one lets the wait expire (exit 2), on a NetBird-only machine as well
 `ProviderDescriptor::watch` still returns `None` for NetBird, but nothing reads
 it outside its own test.
 
+A stopped NetBird is not asked at all. Its CLI redials a missing daemon socket
+for ten seconds, so `gather::status_output` first checks
+`ProviderDescriptor::daemon_socket` (`/var/run/netbird.sock`, or the unix
+address in `NB_DAEMON_ADDR`, the CLI's own `--daemon-addr`) and reads a missing
+one as the failed call it would have been. A TCP address is asked as before.
+`panel`, `watch` and `ctl` all go through it
+(`a_netbird_without_its_daemon_is_not_asked`).
+
 ## Several providers at once
 
 - `tailgauge panel` polls **every** installed provider's status in parallel;
@@ -73,3 +81,4 @@ Omarchy refreshes.
 - `crates/tailgauge/src/gather.rs` (`statuses`), `crates/tailgauge/src/ctl.rs` (`select_network`), `crates/tailgauge/src/watch.rs` (`poll`, `fingerprint_of_status`), `crates/tailgauge/tests/e2e.rs` (`watch_wakes_on_a_netbird_change`, `watch_on_a_quiet_netbird_expires_rather_than_giving_up`)
 - `omarchy/arzaroth.tailgauge/Panel.qml` (`cycleProvider`, `onPressed`), `plasma/org.tailgauge.plasmoid/contents/ui/main.qml` (`cycleProvider`), `plasma/org.tailgauge.plasmoid/contents/ui/CompactRep.qml`, `gnome/tailgauge@arzaroth.github.io/provider.ts` (`switchProvider`), `gnome/tailgauge@arzaroth.github.io/extension.ts` (`_cycleProvider`); `crates/tailgauge-core/tests/parity.rs` (`no_click_on_the_bar_icon_toggles_a_connection`)
 - `crates/tailgauge-core/tests/fixtures/netbird-status.json`, `netbird-status-idle.json`, `netbird-networks.txt`; `crates/tailgauge-core/tests/specification.rs` (`parse_netbird_status_offers_nothing_it_cannot_do`, `the_networks_section_belongs_to_the_provider_that_has_networks`)
+- `crates/tailgauge/src/gather.rs` (`status_output`), `crates/tailgauge-core/src/providers.rs` (`daemon_socket`)
