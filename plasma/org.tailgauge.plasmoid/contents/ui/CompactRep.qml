@@ -41,6 +41,8 @@ MouseArea {
             badgeColor: Kirigami.Theme.negativeTextColor
             crossed: root.barState.crossed
             warning: root.barState.warning
+            providerId: root.barState.providerId
+            badge: root.barState.badge
             Layout.alignment: Qt.AlignVCenter
         }
 

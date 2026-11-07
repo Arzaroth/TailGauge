@@ -4,6 +4,13 @@
     padding: 0;
 }
 
+.tailgauge-panel-count {
+    font-size: 0.9em;
+    font-weight: 800;
+    padding-left: 1px;
+    margin-top: 1px;
+}
+
 .tailgauge-panel-label {
     padding-left: 4px;
 }

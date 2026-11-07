@@ -83,12 +83,44 @@ function verticalAdjustment(view: St.ScrollView): St.Adjustment {
     return 'vadjustment' in loose ? loose.vadjustment : loose.vscroll.adjustment;
 }
 
-// Native rendering of the Tailscale mark from the SVG: a 3x3 dot grid with the
-// inactive dots faded, plus the disconnected slash and the needs-login badge.
+type PathStep = ['M' | 'L', number, number] | ['C', number, number, number, number, number, number];
+
+// NetBird's mark: the brand SVG's paths, unmodified but made absolute, since
+// cairo takes no path data. Its viewBox is "0.015 36.7 512 405.4".
+const NETBIRD_VIEW = {x: 0.015, y: 36.7, width: 512, height: 405.4};
+const NETBIRD_PATHS: PathStep[][] = [
+    [
+        ['M', 363.915, 69.9],
+        ['C', 302.115, 75.6, 271.415, 111.2, 259.815, 129.2],
+        ['L', 254.615, 138.3],
+        ['C', 254.215, 139.1, 254.015, 139.6, 254.015, 139.6],
+        ['L', 253.915, 139.5],
+        ['L', 79.115, 442.1],
+        ['L', 297.115, 442.1],
+        ['L', 512.015, 69.9],
+    ],
+    [
+        ['M', 297.115, 442.1],
+        ['L', 0.015, 126.9],
+        ['C', 0.015, 126.9, 336.015, 36.7, 368.715, 318.3],
+    ],
+    [
+        ['M', 253.115, 140.8],
+        ['L', 161.915, 298.7],
+        ['L', 297.115, 442.1],
+        ['L', 368.715, 318.1],
+        ['C', 357.415, 221.2, 310.215, 168.4, 253.115, 140.8],
+    ],
+];
+
+// Native rendering of the provider's mark: Tailscale's 3x3 dot grid with the
+// inactive dots faded, or NetBird's, plus the disconnected slash and the
+// needs-login badge.
 const TailGaugeIcon = GObject.registerClass(
 class TailGaugeIcon extends St.DrawingArea {
     declare _crossed: boolean;
     declare _warning: boolean;
+    declare _providerId: string;
 
     override _init(params: Loose = {}): void {
         super._init({
@@ -97,14 +129,16 @@ class TailGaugeIcon extends St.DrawingArea {
         });
         this._crossed = false;
         this._warning = false;
+        this._providerId = '';
         this.connect('repaint', () => this._repaint());
     }
 
-    setState(crossed: boolean, warning: boolean): void {
-        if (this._crossed === crossed && this._warning === warning)
+    setState(crossed: boolean, warning: boolean, providerId: string): void {
+        if (this._crossed === crossed && this._warning === warning && this._providerId === providerId)
             return;
         this._crossed = crossed;
         this._warning = warning;
+        this._providerId = providerId;
         this.queue_repaint();
     }
 
@@ -120,18 +154,39 @@ class TailGaugeIcon extends St.DrawingArea {
         const b = color.blue / 255;
         const a = color.alpha / 255;
 
-        const dot = Math.max(2, size * 0.24);
-        const radius = dot / 2;
-        const positions = [0, (size - dot) / 2, size - dot];
-        const faded = [[0, 0], [1, 0], [2, 0], [0, 2], [2, 2]];
-        const isFaded = (col: number, rowIndex: number) => faded.some(([c, rw]) => c === col && rw === rowIndex);
-
-        for (let rowIndex = 0; rowIndex < 3; rowIndex++) {
-            for (let col = 0; col < 3; col++) {
-                cr.setSourceRGBA(r, g, b, a * (isFaded(col, rowIndex) ? 0.24 : 1.0));
-                cr.arc(offsetX + positions[col] + radius, offsetY + positions[rowIndex] + radius,
-                       radius, 0, 2 * Math.PI);
+        if (this._providerId === 'netbird') {
+            const scale = size / Math.max(NETBIRD_VIEW.width, NETBIRD_VIEW.height);
+            const left = offsetX + (size - NETBIRD_VIEW.width * scale) / 2;
+            const top = offsetY + (size - NETBIRD_VIEW.height * scale) / 2;
+            const at = (x: number, y: number): [number, number] =>
+                [left + (x - NETBIRD_VIEW.x) * scale, top + (y - NETBIRD_VIEW.y) * scale];
+            cr.setSourceRGBA(r, g, b, a);
+            for (const path of NETBIRD_PATHS) {
+                for (const step of path) {
+                    if (step[0] === 'C')
+                        cr.curveTo(...at(step[1], step[2]), ...at(step[3], step[4]), ...at(step[5], step[6]));
+                    else if (step[0] === 'M')
+                        cr.moveTo(...at(step[1], step[2]));
+                    else
+                        cr.lineTo(...at(step[1], step[2]));
+                }
+                cr.closePath();
                 cr.fill();
+            }
+        } else {
+            const dot = Math.max(2, size * 0.24);
+            const radius = dot / 2;
+            const positions = [0, (size - dot) / 2, size - dot];
+            const faded = [[0, 0], [1, 0], [2, 0], [0, 2], [2, 2]];
+            const isFaded = (col: number, rowIndex: number) => faded.some(([c, rw]) => c === col && rw === rowIndex);
+
+            for (let rowIndex = 0; rowIndex < 3; rowIndex++) {
+                for (let col = 0; col < 3; col++) {
+                    cr.setSourceRGBA(r, g, b, a * (isFaded(col, rowIndex) ? 0.24 : 1.0));
+                    cr.arc(offsetX + positions[col] + radius, offsetY + positions[rowIndex] + radius,
+                           radius, 0, 2 * Math.PI);
+                    cr.fill();
+                }
             }
         }
 
@@ -140,8 +195,10 @@ class TailGaugeIcon extends St.DrawingArea {
             cr.setLineWidth(Math.max(2, size * 0.14));
             cr.setLineCap(1);
             const inset = size * 0.06;
-            cr.moveTo(offsetX + inset, offsetY + size - inset);
-            cr.lineTo(offsetX + size - inset, offsetY + inset);
+            // NetBird's mark runs along the usual slash and would swallow it.
+            const [from, to] = this._providerId === 'netbird' ? [inset, size - inset] : [size - inset, inset];
+            cr.moveTo(offsetX + inset, offsetY + from);
+            cr.lineTo(offsetX + size - inset, offsetY + to);
             cr.stroke();
         }
 
@@ -170,6 +227,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
     declare _mullvadEntry: St.Entry | null;
     declare _sections: Map<string, {header: PopupMenu.PopupSeparatorMenuItem; section: RowSection}>;
     declare _panelIcon: InstanceType<typeof TailGaugeIcon>;
+    declare _panelCount: St.Label;
     declare _panelLabel: St.Label;
     declare _headerItem: PopupMenu.PopupSwitchMenuItem;
     declare _headerToggledId: number;
@@ -213,11 +271,17 @@ class TailGaugeIndicator extends PanelMenu.Button {
 
         const panelBox = box(false, {style_class: 'panel-status-menu-box tailgauge-panel'});
         this._panelIcon = new TailGaugeIcon({width: 16, height: 16, y_align: Clutter.ActorAlign.CENTER});
+        this._panelCount = new St.Label({
+            style_class: 'tailgauge-panel-count',
+            y_align: Clutter.ActorAlign.START,
+            visible: false,
+        });
         this._panelLabel = new St.Label({
             style_class: 'tailgauge-panel-label',
             y_align: Clutter.ActorAlign.CENTER,
         });
         panelBox.add_child(this._panelIcon);
+        panelBox.add_child(this._panelCount);
         panelBox.add_child(this._panelLabel);
         this.add_child(panelBox);
 
@@ -393,8 +457,10 @@ class TailGaugeIndicator extends PanelMenu.Button {
 
     _syncPanel(panel: Panel.Panel): void {
         // The bar describes the machine, not the panel's current view.
-        this._panelIcon.setState(panel.bar.crossed, panel.bar.warning);
-        this._panelIcon.opacity = panel.header.dimmed ? 130 : 255;
+        this._panelIcon.setState(panel.bar.crossed, panel.bar.warning, panel.bar.providerId);
+        this._panelIcon.opacity = panel.bar.connected ? 255 : 130;
+        this._panelCount.text = panel.bar.badge;
+        this._panelCount.visible = panel.bar.badge !== '';
 
         const showName = this._settings.get_boolean('show-status-in-panel');
         const name = panel.header.toggleVisible ? panel.header.title : '';

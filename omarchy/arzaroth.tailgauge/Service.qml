@@ -22,7 +22,7 @@ Item {
   // derived. Everything bound downstream of it is unchanged.
   property var panel: _empty
   readonly property var _empty: ({
-    bar: { connected: false, warning: false, crossed: true, tooltip: [] },
+    bar: { connected: false, warning: false, crossed: true, providerId: "", badge: "", tooltip: [] },
     header: { id: "header", title: "TailGauge", providerId: "", icon: "", glyph: "",
               meta: "", action: "toggle", toggleVisible: false, toggleEnabled: false,
               toggleChecked: false, busy: false, toggleHint: "", crossed: true,

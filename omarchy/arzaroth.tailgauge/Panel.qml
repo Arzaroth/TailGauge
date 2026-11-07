@@ -418,12 +418,16 @@ Panel {
     iconComponent: Component {
       Item {
         TailGaugeIcon {
-          anchors.centerIn: parent
+          // The mark stays where a lone icon sits; the count hangs to its right.
+          x: (parent.width - iconSize) / 2
+          anchors.verticalCenter: parent.verticalCenter
           iconSize: Style.space(11)
           color: root.barIconColor
           badgeColor: root.urgent
           crossed: root.panel.bar.crossed
           warning: root.panel.bar.warning
+          providerId: root.panel.bar.providerId
+          badge: root.panel.bar.badge
         }
       }
     }
