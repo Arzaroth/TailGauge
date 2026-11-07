@@ -337,6 +337,29 @@ fn the_bar_icon_stays_the_provider_that_connected_first() {
 }
 
 #[test]
+fn a_netbird_without_its_daemon_is_not_asked() {
+    let machine = Machine::with(&["tailscale", "netbird-switching"]);
+    std::fs::remove_file(machine.home.join("netbird.sock")).expect("the daemon stops");
+    let started = std::time::Instant::now();
+    let panel = machine.panel(r#"{"activeProviderId":"netbird"}"#);
+    assert!(
+        !machine.home.join("read").exists(),
+        "the CLI was asked about a daemon that is not there"
+    );
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    assert_eq!(panel["header"]["providerId"], "netbird");
+    assert_eq!(
+        panel["bar"]["providerId"], "tailscale",
+        "Tailscale is still up"
+    );
+
+    let (code, stdout, _) = machine.run(&["ctl", "--provider", "netbird", "status"]);
+    assert!(stdout.contains("not answering"), "{stdout}");
+    assert_ne!(code, 0);
+    assert!(!machine.home.join("read").exists());
+}
+
+#[test]
 fn a_daemon_that_answers_nothing_reads_as_disconnected() {
     let machine = Machine::with(&["tailscale-down"]);
     let panel = machine.panel("{}");

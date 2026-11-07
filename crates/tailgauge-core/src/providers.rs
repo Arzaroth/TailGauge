@@ -333,6 +333,25 @@ pub fn provider_label_list() -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn only_netbird_has_a_socket_to_check_and_the_cli_s_own_address_wins() {
+        let netbird = provider_by_id("netbird").expect("netbird");
+        let tailscale = provider_by_id("tailscale").expect("tailscale");
+        assert_eq!(
+            netbird.daemon_socket(|_| None),
+            Some(PathBuf::from("/var/run/netbird.sock"))
+        );
+        assert_eq!(
+            netbird.daemon_socket(|_| Some("unix:///tmp/nb.sock".into())),
+            Some(PathBuf::from("/tmp/nb.sock"))
+        );
+        assert_eq!(
+            netbird.daemon_socket(|_| Some("tcp://127.0.0.1:41731".into())),
+            None,
+            "a TCP daemon cannot be checked by a file"
+        );
+        assert_eq!(tailscale.daemon_socket(|_| None), None);
+    }
 
     use super::*;
     use crate::panel_state::ProviderState;

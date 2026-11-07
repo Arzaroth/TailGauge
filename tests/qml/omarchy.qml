@@ -88,6 +88,23 @@ Item {
                 check.equal("and the last good panel stays", service.panel.header.title, "workstation")
             }
 
+            // A switch while a poll is in flight: that answer was asked for the
+            // old provider, so it is not drawn, and the new one is asked for as
+            // soon as it lands rather than on the next tick.
+            settle(panelJson)
+            Registry.clear()
+            service.refresh()
+            var before = Registry.find("panel --json")
+            service.switchProvider({id: "netbird"})
+            before.answer(panelJson, "", 0)
+            check.equal("the old provider's answer is not drawn",
+                        service.panel.header.title, "TailGauge")
+            var after = Registry.find("panel --json")
+            check.ok("the new provider is asked for at once", after && after.running)
+            if (after && after.running)
+                check.equal("asked with the new provider",
+                            JSON.parse(after.command[after.command.length - 1]).activeProviderId,
+                            "netbird")
         })
     }
 }
