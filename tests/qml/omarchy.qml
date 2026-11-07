@@ -9,6 +9,14 @@ Item {
     Check { id: check; name: "omarchy" }
     property var service: null
 
+    // Answer the poll in flight, and the one queued behind it, so the next
+    // step starts with nothing running.
+    function settle(json) {
+        for (var proc = Registry.find("panel --json"); proc && proc.running;
+             proc = Registry.find("panel --json"))
+            proc.answer(json, "", 0)
+    }
+
     Component.onCompleted: {
         service = check.load("../../omarchy/arzaroth.tailgauge/Service.qml", this)
         if (!service) return
@@ -37,6 +45,7 @@ Item {
             check.ok("the traversal arrived", service.panel.navigation.length > 1)
 
             // A click flips the local copy and says so on the next call.
+            settle(panelJson)
             Registry.clear()
             service.down()
             check.equal("the click shows immediately", service.active, false)
@@ -69,6 +78,7 @@ Item {
                      Registry.detachedCommands[1].indexOf("send --peer") !== -1)
 
             // Output that is not a panel is reported, not drawn.
+            settle(panelJson)
             Registry.clear()
             service.refresh()
             var broken = Registry.find("panel --json")
@@ -77,6 +87,7 @@ Item {
                 check.ok("unreadable output is reported", service.lastError.length > 0)
                 check.equal("and the last good panel stays", service.panel.header.title, "workstation")
             }
+
         })
     }
 }

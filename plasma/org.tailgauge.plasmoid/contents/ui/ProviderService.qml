@@ -145,6 +145,13 @@ Item {
 
     function _handle(kind, exitCode, stdout, stderr) {
         if (kind === "panel") {
+            // Asked for the provider the user has since switched away from.
+            var stale = root._askedProviderId !== root.activeProviderId
+            if (root._refreshAgain) {
+                root._refreshAgain = false
+                root.refresh()
+            }
+            if (stale) return
             if (exitCode !== 0) {
                 root.lastError = stderr.trim() || "The panel could not be read"
                 return
@@ -217,7 +224,18 @@ Item {
         return out
     }
 
+    // A poll is nearly always in flight, so a refresh asked during one waits
+    // for it rather than being dropped: a provider switch went unanswered
+    // until the next tick.
+    property bool _refreshAgain: false
+    property string _askedProviderId: ""
+
     function refresh() {
+        if (root._inflight["panel"]) {
+            root._refreshAgain = true
+            return
+        }
+        root._askedProviderId = root.activeProviderId
         _run("panel", ["tailgauge", "panel", "--json", "--ui", JSON.stringify(_ui())])
     }
 

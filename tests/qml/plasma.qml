@@ -9,6 +9,16 @@ Item {
     Check { id: check; name: "plasma" }
     property var service: null
 
+    // Answer the poll in flight, and the one queued behind it, so the next
+    // step starts with nothing running.
+    function settle(json) {
+        while (service._inflight["panel"]) {
+            var proc = Registry.find(service._inflight["panel"])
+            if (!proc) return
+            proc.answer(json, "", 0)
+        }
+    }
+
     Component.onCompleted: {
         service = check.load("../../plasma/org.tailgauge.plasmoid/contents/ui/ProviderService.qml", this)
         if (!service) return
@@ -35,6 +45,7 @@ Item {
             check.ok("the sections arrived", service.panel.sections.length === 7)
 
             // A click flips the local copy on the frame it was clicked.
+            settle(panelJson)
             Registry.clear()
             service.down()
             check.equal("the click shows immediately", service.active, false)
@@ -45,8 +56,7 @@ Item {
             // so the value is put where the frontend serialises one.
             // The click's own refresh is still outstanding, and the service
             // will not ask twice at once, so let it finish first.
-            var settled = Registry.find("panel")
-            if (settled) settled.answer(panelJson, "", 0)
+            settle(panelJson)
             Registry.clear()
             var hostile = "x'; rm -rf ~; echo 'pwned"
             service.activeProviderId = hostile
@@ -69,6 +79,7 @@ Item {
             service.activeProviderId = ""
 
             // Output that is not a panel is reported, not drawn.
+            settle(panelJson)
             Registry.clear()
             service.refresh()
             var broken = Registry.find("panel")
@@ -77,6 +88,7 @@ Item {
                 check.ok("unreadable output is reported", service.lastError.length > 0)
                 check.equal("and the last good panel stays", service.panel.header.title, "workstation")
             }
+
         })
     }
 }
