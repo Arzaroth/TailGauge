@@ -101,6 +101,12 @@ apart by `vadjustment`, never by `add_actor` (an extension that polyfills
 tall on 45. No CI test sees this: run `tests/gnome/shell/run.sh --gnome
 45` (and a recent one) on any `extension.ts` change that touches layout.
 
+**GNOME 50 pads status icons sideways.** Its theme gives `system-status-icon`
+horizontal padding, which left the 16px bar icon 4px to paint in: it drew as a
+flat line through 0.9.1. `stylesheet.css` zeroes it with a selector that
+outranks the theme's, and the shell probe fails with "the panel icon is drawn
+squashed" when the icon's content box shrinks again.
+
 `scripts/build.sh` refuses to package the extension without compiled schemas:
 GNOME reads the schema source the moment `schemas/` exists, and a half-built
 directory is worse than none (0.3.4).

@@ -4,6 +4,19 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **The bar icon shows which VPN is up.** It wears NetBird's mark when NetBird
+  is the one connected, rather than Tailscale's dots whatever was running.
+  With both up it shows the one that connected first, with a raised `2` beside
+  it. On GNOME the icon also dims only when nothing is connected, like Plasma
+  and Omarchy, rather than when the provider the menu shows is off.
+
+### Fixed
+
+- **The GNOME bar icon is drawn whole on GNOME 50.** The shell's theme padded
+  it sideways, leaving a flat line where the mark should be.
+
 ## [0.9.1]
 
 ### Fixed

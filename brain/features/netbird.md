@@ -46,6 +46,10 @@ it outside its own test.
   the bar icon and its tooltip describe all of them, the active one first
   (`the_bar_icon_describes_the_machine_not_the_panel_view`). The rest of the
   panel is the active provider.
+- The bar icon wears the mark of the provider that is up; with both up, the
+  one that came up first, with a raised `2` beside it
+  (`two_connections_show_the_first_one_up_and_count_both`,
+  `the_bar_icon_stays_the_provider_that_connected_first`).
 - With both installed and no choice, Tailscale wins (registry order). The
   **VPN** section (`providers`) lists the drivable providers with
   `action: switchProvider` and shows only when there are two or more

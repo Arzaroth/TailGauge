@@ -8,7 +8,7 @@ There is no daemon and no service to run. All three frontends ask one binary, `t
 
 ## Features
 
-- **Panel indicator**: the Tailscale mark drawn natively as a 3×3 dot grid, slashed when disconnected, badged when the device needs authorization. Optionally followed by the machine name.
+- **Panel indicator**: the mark of the VPN that is up, drawn natively (Tailscale's 3×3 dot grid or NetBird's bird), slashed when disconnected, badged when the device needs authorization. With both up it shows the one that connected first and a raised `2`. Optionally followed by the machine name.
 - **On/off**: a switch at the top of the panel. The UI flips optimistically the instant you click, then reconciles with the next `tailscale status`.
 - **Login**: when the device needs authorizing, the auth URL is scraped out of `tailscale up` as it prints and opened in your browser.
 - **This device**: your own machine at the top of the panel, with the same copy actions its peers get, because copying your own tailnet address is what you came for half the time.

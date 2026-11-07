@@ -23,7 +23,14 @@ named exactly as the JSON names it: there is nothing to generate it from.
   `Label  state · name · ip`, label column padded, then every line padded with
   no-break spaces to one width so a bar that centres each line still gets a
   left edge. Aggregate on purpose: switching which provider is shown must not
-  change the icon.
+  change the icon. `providerId` is whose mark the icon wears: the first of
+  `bar::connection_order` (running providers, the previous order kept, newcomers
+  in registry order), else the provider needing a login, else the first
+  installed, else the active one when nothing has reported. `badge` is the
+  number of providers up once it is two or more, empty otherwise. `gather`
+  keeps the order in `connected.json` in the cache directory and hands it in as
+  `PanelState::connected_order`
+  ([decision 0008](../decisions.md#0008-the-bar-icon-wears-the-mark-of-the-provider-that-connected-first)).
 - **`header`** (`panel_header`): `title` is the machine name when the provider
   is drivable and reported one, else the provider label. `meta` is
   `ACTIVE_PHRASES[phraseIndex rem 10]` while active, else `<Label> is

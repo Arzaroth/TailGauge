@@ -16,6 +16,9 @@ that blur it. Back to the root map: [BRAIN.md](BRAIN.md).
 - **Active provider** - the provider the panel is about, chosen from the
   frontend's `activeProviderId` or the first drivable one. The bar icon is not
   about it; it describes the machine. Avoid: current, selected VPN.
+- **Lead provider** - the provider whose mark the bar icon wears
+  (`bar.providerId`): the first one up by connection order, kept in
+  `connected.json`. Avoid: main provider, primary VPN.
 - **Capability** - a per-provider flag (`Capability`: exit nodes, Mullvad, file
   send, accounts, networks, connection quality) that decides which sections the
   panel shows for the active provider. Which commands a provider has is decided
