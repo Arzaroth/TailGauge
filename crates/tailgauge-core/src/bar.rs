@@ -14,6 +14,12 @@ pub struct BarState {
     pub connected: bool,
     pub warning: bool,
     pub crossed: bool,
+    /// Whose mark the icon is drawn as: the provider connected first, or with
+    /// nothing up, the one wanting a login, else the preferred installed one.
+    #[serde(rename = "providerId")]
+    pub provider_id: String,
+    /// How many providers are up, once there is more than one.
+    pub badge: String,
     pub tooltip: Vec<String>,
 }
 
@@ -136,20 +142,69 @@ pub fn bar_tooltip(state: &PanelState) -> Vec<String> {
     lines
 }
 
+/// The running providers, oldest connection first: `previous` keeps its order
+/// for those still up, and the ones that came up since follow in registry
+/// order.
+pub fn connection_order(previous: &[String], summaries: &[ProviderSummary]) -> Vec<String> {
+    let running = |id: &str| summaries.iter().any(|s| s.running && s.id == id);
+    let mut order: Vec<String> = previous.iter().filter(|id| running(id)).cloned().collect();
+    for provider in providers::PROVIDERS {
+        if running(provider.id) && !order.iter().any(|id| id == provider.id) {
+            order.push(provider.id.to_string());
+        }
+    }
+    for summary in summaries {
+        if summary.running && !order.contains(&summary.id) {
+            order.push(summary.id.clone());
+        }
+    }
+    order
+}
+
 pub fn bar_state(state: &PanelState) -> BarState {
-    let (connected, warning) = match state.summaries.as_ref() {
-        Some(summaries) if !summaries.is_empty() => (
-            summaries.iter().any(|s| s.running),
-            summaries.iter().any(|s| s.needs_login),
-        ),
+    let (connected, warning, provider_id, up) = match state.summaries.as_ref() {
+        Some(summaries) if !summaries.is_empty() => {
+            let order = connection_order(&state.connected_order, summaries);
+            let installed = providers::installed_providers(state);
+            let lead = order
+                .first()
+                .cloned()
+                .or_else(|| {
+                    installed
+                        .iter()
+                        .find(|p| summary_for(state, p.id).is_some_and(|s| s.needs_login))
+                        .or(installed.first())
+                        .map(|p| p.id.to_string())
+                })
+                .unwrap_or_default();
+            (
+                !order.is_empty(),
+                summaries.iter().any(|s| s.needs_login),
+                lead,
+                order.len(),
+            )
+        }
         // Nothing has reported yet: fall back to the active provider's own
         // state.
-        _ => (state.active, state.needs_login),
+        _ => (
+            state.active,
+            state.needs_login,
+            providers::active_provider(state)
+                .map(|p| p.id.to_string())
+                .unwrap_or_default(),
+            usize::from(state.active),
+        ),
     };
     BarState {
         connected,
         warning,
         crossed: !connected && !warning,
+        provider_id,
+        badge: if up > 1 {
+            up.to_string()
+        } else {
+            String::new()
+        },
         tooltip: bar_tooltip(state),
     }
 }

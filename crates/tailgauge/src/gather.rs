@@ -5,6 +5,8 @@
 //! frontends stop each having their own copy of it, and so the panel they draw
 //! is resolved once rather than three times.
 
+use std::fs;
+use std::path::PathBuf;
 use std::thread;
 
 use serde::Deserialize;
@@ -205,12 +207,12 @@ pub fn panel_state(ui: &Ui) -> PanelState {
 
     let installed = providers::installed_providers(&state);
     let gathered = statuses(&installed);
-    state.summaries = Some(
-        gathered
-            .iter()
-            .map(|(id, status)| core::bar::summarize_provider(id, status))
-            .collect(),
-    );
+    let summaries: Vec<_> = gathered
+        .iter()
+        .map(|(id, status)| core::bar::summarize_provider(id, status))
+        .collect();
+    state.connected_order = remember_connection_order(&summaries);
+    state.summaries = Some(summaries);
 
     let Some(active) = connect(&mut state, &gathered) else {
         return state;
@@ -231,6 +233,35 @@ pub fn panel_state(ui: &Ui) -> PanelState {
     }
 
     state
+}
+
+fn connection_order_file() -> PathBuf {
+    state::cache_dir(&TAILGAUGE).join("connected.json")
+}
+
+/// Which provider came up first is only known by having watched it happen, and
+/// nothing runs between two polls, so the order outlives the call in the cache.
+/// Losing the file only costs the order, so a failure to write it is not one.
+fn remember_connection_order(summaries: &[core::panel_state::ProviderSummary]) -> Vec<String> {
+    let path = connection_order_file();
+    let previous: Vec<String> = fs::read_to_string(&path)
+        .ok()
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or_default();
+    let order = core::bar::connection_order(&previous, summaries);
+    if order != previous
+        && let Some(parent) = path.parent()
+        && fs::create_dir_all(parent).is_ok()
+    {
+        let staged = path.with_extension(format!("tmp.{}", std::process::id()));
+        if serde_json::to_vec(&order)
+            .ok()
+            .is_some_and(|bytes| fs::write(&staged, bytes).is_ok())
+        {
+            let _ = fs::rename(&staged, &path);
+        }
+    }
+    order
 }
 
 /// Fills in the active provider's connection from the statuses gathered, and
