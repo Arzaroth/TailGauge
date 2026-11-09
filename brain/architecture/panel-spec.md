@@ -34,7 +34,8 @@ named exactly as the JSON names it: there is nothing to generate it from.
   be taken. Each snapshot is stamped on the clock since boot (`/proc/uptime`,
   with the `boot_id`), which never goes back; one no later than the stamp that
   last changed the order, a tie included, draws its own view but never writes
-  (`next_order`), and a new boot starts the comparison again. It
+  (`next_order`), and a new boot starts the comparison again. A snapshot with
+  no stamp (no `/proc`) never writes. It
   hands the order in as
   `PanelState::connected_order`
   ([decision 0008](../decisions.md#0008-the-bar-icon-wears-the-mark-of-the-provider-that-connected-first)).
