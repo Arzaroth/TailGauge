@@ -40,13 +40,18 @@ quiet one lets the wait expire (exit 2), on a NetBird-only machine as well
 `ProviderDescriptor::watch` still returns `None` for NetBird, but nothing reads
 it outside its own test.
 
-A stopped NetBird is not asked at all. Its CLI redials a missing daemon socket
-for ten seconds, so `gather::status_output` first checks
-`ProviderDescriptor::daemon_socket` (`/var/run/netbird.sock`, or the unix
-address in `NB_DAEMON_ADDR`, the CLI's own `--daemon-addr`) and reads a missing
-one as the failed call it would have been. A TCP address is asked as before.
+A stopped NetBird is not asked at all. Its CLI redials a socket nothing listens
+on for ten seconds, so `gather::status_output` first resolves the socket as the
+CLI does: `ProviderDescriptor::daemon_socket` (`NB_DAEMON_ADDR`, then the legacy
+`WT_DAEMON_ADDR`, then `/var/run/netbird.sock`), and when that is missing the
+only `.sock` in `instance_socket_dir` (`/var/run/netbird/`, where a
+`netbird@<instance>` service puts it; `providers::instance_socket`). It then
+connects: a missing socket or a refused connection (a socket file its daemon
+left behind) is read as the failed call it would have been, and anything else,
+a permission error included, goes to the CLI. A TCP address is asked as before.
 `panel`, `watch` and `ctl` all go through it
-(`a_netbird_without_its_daemon_is_not_asked`).
+(`a_netbird_without_its_daemon_is_not_asked`,
+`a_netbird_that_died_without_removing_its_socket_is_not_asked`).
 
 ## Several providers at once
 

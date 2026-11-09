@@ -28,7 +28,9 @@ named exactly as the JSON names it: there is nothing to generate it from.
   in registry order), else the provider needing a login, else the first
   installed, else the active one when nothing has reported. `badge` is the
   number of providers up once it is two or more, empty otherwise. `gather`
-  keeps the order in `connected.json` in the cache directory and hands it in as
+  keeps the order in `connected.json` in the cache directory, read and written
+  under a lock on `connected.lock` since panels on several monitors poll at
+  once, and hands it in as
   `PanelState::connected_order`
   ([decision 0008](../decisions.md#0008-the-bar-icon-wears-the-mark-of-the-provider-that-connected-first)).
 - **`header`** (`panel_header`): `title` is the machine name when the provider

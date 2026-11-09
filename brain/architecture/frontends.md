@@ -29,7 +29,8 @@ Each has one service file that owns the subprocesses (`ProviderService.qml`,
   `expandedPeerId`. The answer
   is push-assigned to `panel`; output without a `header` is ignored and the last
   good panel stays. One panel call runs at a time: a `refresh()` asked during
-  one sets `_refreshAgain` and runs when it lands, and an answer is dropped when
+  one sets `_refreshAgain` and runs when it lands, after that answer is taken
+  so it does not carry an override the answer settled, and an answer is dropped when
   `activeProviderId` has moved since it was asked (`_askedProviderId`, the
   `asked` closure in `provider.ts`), so a switch mid-poll never draws the old
   provider.

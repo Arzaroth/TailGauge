@@ -127,17 +127,22 @@ polls on its refresh interval (3 s while the panel is open), and refreshes once
 **0 on a change, 2 on expiry, 1 when no supported VPN CLI is installed**;
 frontends refresh only on 0: the shell watcher it replaced always reported
 expiry, so changes never reached the panels.
-
-**A NetBird whose socket is missing is not asked.** Its CLI redials a missing
-daemon socket for ten seconds before failing, and every panel polls every
-installed provider, so an installed but stopped NetBird made every panel
-call, Tailscale's included, take ten seconds. `gather::status_output` checks
-`ProviderDescriptor::daemon_socket` (the CLI's own `NB_DAEMON_ADDR`) first, for
-`panel`, `watch` and `ctl` alike. The e2e machines carry a socket file;
-`a_netbird_without_its_daemon_is_not_asked`.
 `a_change_exits_zero_and_an_expiry_does_not`,
 `watch_on_a_quiet_netbird_expires_rather_than_giving_up`. See
 `brain/architecture/overview.md`.
+
+**A NetBird with no daemon behind its socket is not asked.** Its CLI redials a
+socket nothing listens on for ten seconds before failing, and every panel
+polls every installed provider, so an installed but stopped NetBird made
+every panel call, Tailscale's included, take ten seconds.
+`gather::status_output` resolves the socket the way the CLI does
+(`NB_DAEMON_ADDR`, `WT_DAEMON_ADDR`, then the single `.sock` in
+`/var/run/netbird/` when the configured one is missing) and connects to it;
+only a missing socket or a refused connection skips the CLI, so a stale
+socket file counts as down and a permission error is left to the CLI. The
+e2e machines listen on a real socket;
+`a_netbird_without_its_daemon_is_not_asked`,
+`a_netbird_that_died_without_removing_its_socket_is_not_asked`.
 
 ## One binary, many names
 
