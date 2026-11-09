@@ -316,8 +316,9 @@ fn remember_connection_order(
         .ok()
         .and_then(|raw| serde_json::from_str(&raw).ok())
         .unwrap_or_default();
-    let (order, write) = next_order(&previous, summaries, observed_ms);
-    if let Some(next) = write {
+    let (order, write) = next_order(&previous, summaries, observed_ms, state::now_ms());
+    // Without the lock, writing is what lets an older snapshot win.
+    if let Some(next) = write.filter(|_| _lock.is_some()) {
         let staged = path.with_extension(format!("tmp.{}", std::process::id()));
         if serde_json::to_vec(&next)
             .ok()
@@ -335,13 +336,16 @@ fn next_order(
     previous: &RememberedOrder,
     summaries: &[core::panel_state::ProviderSummary],
     observed_ms: i64,
+    now_ms: i64,
 ) -> (Vec<String>, Option<RememberedOrder>) {
     let order = core::bar::connection_order(&previous.order, summaries);
-    let write =
-        (order != previous.order && observed_ms >= previous.observed_ms).then(|| RememberedOrder {
-            observed_ms,
-            order: order.clone(),
-        });
+    // A stamp later than now was written before the clock went back, and
+    // would otherwise hold the order until the clock caught up with it.
+    let newer = observed_ms >= previous.observed_ms || previous.observed_ms > now_ms;
+    let write = (order != previous.order && newer).then(|| RememberedOrder {
+        observed_ms,
+        order: order.clone(),
+    });
     (order, write)
 }
 
@@ -427,11 +431,11 @@ mod tests {
             observed_ms: 10,
             order: vec!["netbird".into(), "tailscale".into()],
         };
-        let (drawn, write) = next_order(&stored, &up(&["netbird"]), 7);
+        let (drawn, write) = next_order(&stored, &up(&["netbird"]), 7, 20);
         assert_eq!(drawn, ["netbird"], "it still draws what it saw");
         assert_eq!(write, None, "but leaves the newer order alone");
 
-        let (_, write) = next_order(&stored, &up(&["netbird"]), 12);
+        let (_, write) = next_order(&stored, &up(&["netbird"]), 12, 20);
         assert_eq!(
             write,
             Some(RememberedOrder {
@@ -441,7 +445,7 @@ mod tests {
             "a newer one that sees Tailscale gone records it"
         );
         assert_eq!(
-            next_order(&stored, &up(&["netbird", "tailscale"]), 12).1,
+            next_order(&stored, &up(&["netbird", "tailscale"]), 12, 20).1,
             None,
             "nothing changed, nothing written"
         );
