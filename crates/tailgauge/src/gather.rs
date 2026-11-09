@@ -108,10 +108,10 @@ fn refuses(socket: &std::path::Path) -> bool {
     let Ok(probe) = Socket::new(Domain::UNIX, Type::STREAM, None) else {
         return false;
     };
-    // An address no socket can have: the CLI cannot reach it either, and
-    // would spend its timeout trying.
+    // The CLI reads the address as a URL and may decode it into one that
+    // fits, so one that does not fit as written is still the CLI's to try.
     let Ok(addr) = SockAddr::unix(socket) else {
-        return true;
+        return false;
     };
     if probe.set_nonblocking(true).is_err() {
         return false;
@@ -490,12 +490,12 @@ mod tests {
     }
 
     #[test]
-    fn a_socket_nothing_can_reach_reads_as_down() {
+    fn a_missing_socket_reads_as_down_and_an_unparseable_one_goes_to_the_cli() {
         assert!(refuses(std::path::Path::new("/nonexistent/netbird.sock")));
         let overlong = format!("/tmp/{}.sock", "n".repeat(200));
         assert!(
-            refuses(std::path::Path::new(&overlong)),
-            "no socket address is that long, so the CLI could not reach it either"
+            !refuses(std::path::Path::new(&overlong)),
+            "the CLI may decode it into an address that fits, so it is the CLI's to try"
         );
     }
 
