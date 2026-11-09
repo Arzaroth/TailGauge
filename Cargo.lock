@@ -2170,7 +2170,7 @@ dependencies = [
 
 [[package]]
 name = "tailgauge"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -2185,7 +2185,7 @@ dependencies = [
 
 [[package]]
 name = "tailgauge-core"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "chrono",
  "serde",

@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.10.0]
+
 ### Added
 
 - **The bar icon shows which VPN is up.** It wears NetBird's mark when NetBird
