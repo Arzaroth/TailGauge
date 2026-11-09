@@ -46,9 +46,10 @@ CLI does: `ProviderDescriptor::daemon_socket` (`NB_DAEMON_ADDR`, then the legacy
 `WT_DAEMON_ADDR`, then `/var/run/netbird.sock`), and when that is missing the
 only `.sock` in `instance_socket_dir` (`/var/run/netbird/`, where a
 `netbird@<instance>` service puts it; `providers::instance_socket`). It then
-connects: a missing socket or a refused connection (a socket file its daemon
-left behind) is read as the failed call it would have been, and anything else,
-a permission error included, goes to the CLI. A TCP address is asked as before.
+connects, waiting at most a second: a missing socket or a refused connection
+(a socket file its daemon left behind) is read as the failed call it would have
+been, and anything else, a permission error or a connect that does not return
+included, goes to the CLI. A TCP address is asked as before.
 `panel`, `watch` and `ctl` all go through it
 (`a_netbird_without_its_daemon_is_not_asked`,
 `a_netbird_that_died_without_removing_its_socket_is_not_asked`).
