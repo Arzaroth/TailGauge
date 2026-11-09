@@ -8,7 +8,9 @@
 use std::fs;
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
+use std::sync::mpsc;
 use std::thread;
+use std::time::Duration;
 
 use serde::Deserialize;
 use tailgauge_core as core;
@@ -98,12 +100,18 @@ fn daemon_is_down(provider: &ProviderDescriptor) -> bool {
             .and_then(|entries| providers::instance_socket(&entries))
             .unwrap_or(configured)
     };
-    match UnixStream::connect(&socket) {
-        Ok(_) => false,
-        Err(e) => matches!(
+    // A connect to a listener whose backlog is full blocks, and std has no
+    // connect timeout; one that has not answered in a second is left to the CLI.
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        let _ = tx.send(UnixStream::connect(&socket).map(drop));
+    });
+    match rx.recv_timeout(Duration::from_secs(1)) {
+        Ok(Err(e)) => matches!(
             e.kind(),
             std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused
         ),
+        _ => false,
     }
 }
 
