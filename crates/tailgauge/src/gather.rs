@@ -283,15 +283,20 @@ fn connection_order_file() -> PathBuf {
 /// Losing the file only costs the order, so a failure to write it is not one.
 fn remember_connection_order(summaries: &[core::panel_state::ProviderSummary]) -> Vec<String> {
     let path = connection_order_file();
+    // Panels on several monitors poll at once; one read-modify-write at a time
+    // keeps an older snapshot from writing over a newer order.
+    let _lock = path.parent().and_then(|parent| {
+        fs::create_dir_all(parent).ok()?;
+        let lock = fs::File::create(path.with_extension("lock")).ok()?;
+        lock.lock().ok()?;
+        Some(lock)
+    });
     let previous: Vec<String> = fs::read_to_string(&path)
         .ok()
         .and_then(|raw| serde_json::from_str(&raw).ok())
         .unwrap_or_default();
     let order = core::bar::connection_order(&previous, summaries);
-    if order != previous
-        && let Some(parent) = path.parent()
-        && fs::create_dir_all(parent).is_ok()
-    {
+    if order != previous {
         let staged = path.with_extension(format!("tmp.{}", std::process::id()));
         if serde_json::to_vec(&order)
             .ok()
