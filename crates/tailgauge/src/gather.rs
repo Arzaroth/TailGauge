@@ -81,7 +81,11 @@ pub fn status_output(provider: &ProviderDescriptor) -> Option<String> {
 /// behind it, and the CLI would spend its timeout finding that out. Anything
 /// else, a permission error included, is left for the CLI to report.
 fn daemon_is_down(provider: &ProviderDescriptor) -> bool {
-    let Some(configured) = provider.daemon_socket(|key| std::env::var(key).ok()) else {
+    daemon_is_down_in(provider, |key| std::env::var(key).ok())
+}
+
+fn daemon_is_down_in(provider: &ProviderDescriptor, env: impl Fn(&str) -> Option<String>) -> bool {
+    let Some(configured) = provider.daemon_socket(env) else {
         return false;
     };
     let socket = if configured.exists() {
