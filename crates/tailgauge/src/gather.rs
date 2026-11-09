@@ -452,6 +452,20 @@ mod tests {
     }
 
     #[test]
+    fn a_stamp_from_before_the_clock_went_back_does_not_hold_the_order() {
+        let stored = RememberedOrder {
+            observed_ms: 1_000,
+            order: vec!["netbird".into(), "tailscale".into()],
+        };
+        let (_, write) = next_order(&stored, &up(&["netbird"]), 100, 150);
+        assert_eq!(
+            write.map(|w| w.order),
+            Some(vec!["netbird".to_string()]),
+            "the stored stamp is later than now, so it no longer outranks this snapshot"
+        );
+    }
+
+    #[test]
     fn the_ui_blob_is_optional_field_by_field() {
         // A frontend that has not learned a field yet must not blank the panel.
         let ui: Ui = serde_json::from_str("{}").expect("an empty object is a valid UI state");
