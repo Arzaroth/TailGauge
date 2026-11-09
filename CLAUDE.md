@@ -209,6 +209,12 @@ a clean distribution, and the release does not publish until it has.
 - **`verify` imports `packaging/tailgauge.asc` before it installs the `.rpm`.**
   Fedora's rpm once let a signature by an unknown key through; when
   `fedora:latest` stopped (`NOKEY`), the 0.8.1 tag failed to publish.
+- **A pull request's `.rpm` installs with `--nosignature`, a release's never.**
+  The rehearsal has no signing key, and `fedora:latest` moved to rpm 6.1,
+  which refuses an unsigned package outright; every pull request touching the
+  release paths went red (0.10.0). `verify` passes the flag only when
+  `dist/SHA256SUMS.asc` is missing, so a signed release is still installed
+  with every check.
 - **No package installs the Omarchy widget.** The shell loads third-party
   plugins from `~/.config/omarchy/plugins/` only.
 - **`packaging/tailgauge.asc` being committed is what turns signing on**, and
