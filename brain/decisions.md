@@ -68,9 +68,9 @@ See [architecture/providers.md](architecture/providers.md).
 up, or with several up, the one that came up first, with the number up raised
 beside it. With nothing up it is the provider asking for a login, else the
 preferred installed one. The order is kept in `connected.json` in the cache
-directory, rewritten only when it changes, under a lock and stamped with when
-its snapshot was taken, so a slow poll cannot write an older order over a newer
-one.
+directory, rewritten only when it changes, under a lock and stamped on the
+clock since boot, so a slow poll cannot write an older order over a newer one
+and a wall clock that goes back cannot either.
 
 **Why.** One fixed mark (Tailscale's dots) said nothing about which VPN was
 connected once NetBird was supported. Which one came first is only known by

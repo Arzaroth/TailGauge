@@ -31,9 +31,10 @@ named exactly as the JSON names it: there is nothing to generate it from.
   keeps the order in `connected.json` in the cache directory (`observedMs`,
   `order`), read and written under a lock on `connected.lock` since panels on
   several monitors poll at once, and not written at all when the lock cannot
-  be taken; a snapshot taken before the one that last changed the order draws
-  its own view but never writes (`next_order`), unless the stored stamp is
-  later than now, which only a clock that went back produces. It
+  be taken. Each snapshot is stamped on the clock since boot (`/proc/uptime`,
+  with the `boot_id`), which never goes back; one no later than the stamp that
+  last changed the order, a tie included, draws its own view but never writes
+  (`next_order`), and a new boot starts the comparison again. It
   hands the order in as
   `PanelState::connected_order`
   ([decision 0008](../decisions.md#0008-the-bar-icon-wears-the-mark-of-the-provider-that-connected-first)).
