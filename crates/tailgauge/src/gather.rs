@@ -334,7 +334,7 @@ fn remember_connection_order(
 
 /// When a snapshot was taken, on the clock since boot: it never goes back,
 /// unlike the wall clock, and the boot id says when it started again. `None`
-/// where `/proc` does not answer, and such a snapshot is not ordered at all.
+/// where `/proc` does not answer, and such a snapshot never writes.
 #[derive(Debug, Clone, PartialEq)]
 struct Stamp {
     boot: String,
@@ -360,12 +360,14 @@ fn next_order(
     observed: Option<&Stamp>,
 ) -> (Vec<String>, Option<RememberedOrder>) {
     let order = core::bar::connection_order(&previous.order, summaries);
-    let newer = observed.is_none_or(|s| s.boot != previous.boot || s.ms > previous.observed_ms);
-    let write = (order != previous.order && newer).then(|| RememberedOrder {
-        boot: observed.map(|s| s.boot.clone()).unwrap_or_default(),
-        observed_ms: observed.map_or(0, |s| s.ms),
-        order: order.clone(),
-    });
+    let newer = observed.is_some_and(|s| s.boot != previous.boot || s.ms > previous.observed_ms);
+    let write = observed
+        .filter(|_| order != previous.order && newer)
+        .map(|s| RememberedOrder {
+            boot: s.boot.clone(),
+            observed_ms: s.ms,
+            order: order.clone(),
+        });
     (order, write)
 }
 
