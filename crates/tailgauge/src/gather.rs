@@ -6,13 +6,11 @@
 //! is resolved once rather than three times.
 
 use std::fs;
-use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
-use std::sync::mpsc;
 use std::thread;
-use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
+use socket2::{Domain, SockAddr, Socket, Type};
 use tailgauge_core as core;
 use tailgauge_core::panel_state::{PanelState, ProviderState, UpdateInfo};
 use tailgauge_core::providers::{self, Capability, ProviderDescriptor};
@@ -100,18 +98,28 @@ fn daemon_is_down(provider: &ProviderDescriptor) -> bool {
             .and_then(|entries| providers::instance_socket(&entries))
             .unwrap_or(configured)
     };
-    // A connect to a listener whose backlog is full blocks, and std has no
-    // connect timeout; one that has not answered in a second is left to the CLI.
-    let (tx, rx) = mpsc::channel();
-    thread::spawn(move || {
-        let _ = tx.send(UnixStream::connect(&socket).map(drop));
-    });
-    match rx.recv_timeout(Duration::from_secs(1)) {
-        Ok(Err(e)) => matches!(
+    refuses(&socket)
+}
+
+/// Whether nothing listens on `socket`. Non-blocking, so a listener whose
+/// backlog is full answers at once rather than holding the poll: that is a
+/// daemon, busy, and the CLI is asked.
+fn refuses(socket: &std::path::Path) -> bool {
+    let Ok(probe) = Socket::new(Domain::UNIX, Type::STREAM, None) else {
+        return false;
+    };
+    let Ok(addr) = SockAddr::unix(socket) else {
+        return false;
+    };
+    if probe.set_nonblocking(true).is_err() {
+        return false;
+    }
+    match probe.connect(&addr) {
+        Ok(()) => false,
+        Err(e) => matches!(
             e.kind(),
             std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused
         ),
-        _ => false,
     }
 }
 

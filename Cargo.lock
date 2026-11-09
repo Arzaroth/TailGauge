@@ -2179,6 +2179,7 @@ dependencies = [
  "selvedge",
  "serde",
  "serde_json",
+ "socket2",
  "tailgauge-core",
 ]
 
