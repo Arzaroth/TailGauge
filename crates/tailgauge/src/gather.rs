@@ -502,6 +502,13 @@ mod tests {
     }
 
     #[test]
+    fn a_snapshot_without_a_stamp_draws_but_never_writes() {
+        let (drawn, write) = next_order(&stored(10), &up(&["netbird"]), None);
+        assert_eq!(drawn, ["netbird"]);
+        assert_eq!(write, None, "it cannot say it is the newer one");
+    }
+
+    #[test]
     fn a_tie_does_not_overwrite_the_order() {
         let (_, write) = next_order(&stored(10), &up(&["netbird"]), Some(&at("b1", 10)));
         assert_eq!(write, None, "neither snapshot is the newer one");
