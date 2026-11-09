@@ -511,6 +511,18 @@ mod tests {
     }
 
     #[test]
+    fn an_escaped_daemon_address_is_left_to_the_cli() {
+        let netbird = providers::provider_by_id("netbird").expect("netbird");
+        let escaped = |key: &str| {
+            (key == "NB_DAEMON_ADDR").then(|| "unix:///nonexistent/netbird%2Esock".to_string())
+        };
+        assert!(
+            !daemon_is_down_in(netbird, escaped),
+            "its raw path is not the socket, so the CLI decodes it"
+        );
+    }
+
+    #[test]
     fn a_snapshot_without_a_stamp_draws_but_never_writes() {
         let (drawn, write) = next_order(&stored(10), &up(&["netbird"]), None);
         assert_eq!(drawn, ["netbird"]);
