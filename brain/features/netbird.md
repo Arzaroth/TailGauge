@@ -49,9 +49,9 @@ only `.sock` in `instance_socket_dir` (`/var/run/netbird/`, where a
 connects without blocking (`refuses`): a missing socket or a refused
 connection (a socket file its daemon left behind) is read as the failed call it
 would have been, and anything else goes to the CLI, a permission error or a
-full backlog (a daemon, busy) included, and so is an address too long to be a
-socket as written, since the CLI reads it as a URL and may decode it into one
-that fits. A TCP address is asked as before.
+full backlog (a daemon, busy) included. The CLI reads the address as a URL,
+so one with `%` escapes is left to it whole; any other is a literal path, and
+one too long to be a socket address reads as down. A TCP address is asked as before.
 `panel`, `watch` and `ctl` all go through it
 (`a_netbird_without_its_daemon_is_not_asked`,
 `a_netbird_that_died_without_removing_its_socket_is_not_asked`).
