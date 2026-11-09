@@ -490,6 +490,32 @@ mod tests {
     }
 
     #[test]
+    fn a_socket_nothing_can_reach_reads_as_down() {
+        assert!(refuses(std::path::Path::new("/nonexistent/netbird.sock")));
+        let overlong = format!("/tmp/{}.sock", "n".repeat(200));
+        assert!(
+            refuses(std::path::Path::new(&overlong)),
+            "no socket address is that long, so the CLI could not reach it either"
+        );
+    }
+
+    #[test]
+    fn a_tie_does_not_overwrite_the_order() {
+        let (_, write) = next_order(&stored(10), &up(&["netbird"]), Some(&at("b1", 10)));
+        assert_eq!(write, None, "neither snapshot is the newer one");
+    }
+
+    #[test]
+    fn a_new_boot_starts_the_clock_again() {
+        let (_, write) = next_order(&stored(10_000), &up(&["netbird"]), Some(&at("b2", 5)));
+        assert_eq!(
+            write.map(|w| (w.boot, w.order)),
+            Some(("b2".to_string(), vec!["netbird".to_string()])),
+            "a stamp from the last boot does not outrank this one"
+        );
+    }
+
+    #[test]
     fn the_ui_blob_is_optional_field_by_field() {
         // A frontend that has not learned a field yet must not blank the panel.
         let ui: Ui = serde_json::from_str("{}").expect("an empty object is a valid UI state");
