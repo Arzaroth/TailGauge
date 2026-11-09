@@ -108,8 +108,10 @@ fn refuses(socket: &std::path::Path) -> bool {
     let Ok(probe) = Socket::new(Domain::UNIX, Type::STREAM, None) else {
         return false;
     };
+    // An address no socket can have: the CLI cannot reach it either, and
+    // would spend its timeout trying.
     let Ok(addr) = SockAddr::unix(socket) else {
-        return false;
+        return true;
     };
     if probe.set_nonblocking(true).is_err() {
         return false;
