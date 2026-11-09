@@ -24,6 +24,9 @@ fn fixtures() -> PathBuf {
 /// A machine with the given CLIs on its PATH and nothing else of ours.
 struct Machine {
     home: PathBuf,
+    /// The NetBird daemon's socket: listening, so the binary's probe finds a
+    /// daemon behind it and asks the fake CLI.
+    netbird_daemon: Option<std::os::unix::net::UnixListener>,
 }
 
 impl Machine {
@@ -117,10 +120,12 @@ impl Machine {
                     .expect("executable");
             }
         }
-        // A running NetBird daemon is a socket the binary checks for before
-        // asking the CLI, which redials a missing one for ten seconds.
-        std::fs::write(home.join("netbird.sock"), "").expect("the daemon's socket");
-        Machine { home }
+        let netbird_daemon = std::os::unix::net::UnixListener::bind(home.join("netbird.sock"))
+            .expect("the daemon's socket");
+        Machine {
+            home,
+            netbird_daemon: Some(netbird_daemon),
+        }
     }
 
     /// Run the shipped binary as a panel would, with only our fakes visible.
@@ -338,7 +343,8 @@ fn the_bar_icon_stays_the_provider_that_connected_first() {
 
 #[test]
 fn a_netbird_without_its_daemon_is_not_asked() {
-    let machine = Machine::with(&["tailscale", "netbird-switching"]);
+    let mut machine = Machine::with(&["tailscale", "netbird-switching"]);
+    machine.netbird_daemon = None;
     std::fs::remove_file(machine.home.join("netbird.sock")).expect("the daemon stops");
     let started = std::time::Instant::now();
     let panel = machine.panel(r#"{"activeProviderId":"netbird"}"#);

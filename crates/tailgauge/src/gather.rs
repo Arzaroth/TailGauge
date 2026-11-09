@@ -6,6 +6,7 @@
 //! is resolved once rather than three times.
 
 use std::fs;
+use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::thread;
 
@@ -67,17 +68,43 @@ fn probe() -> Vec<ProviderState> {
         .collect()
 }
 
-/// What the provider's `status` printed, or `None` as for a failed call. A
-/// daemon whose socket is missing is down, and asking it costs a timeout.
+/// What the provider's `status` printed, or `None` as for a failed call.
 pub fn status_output(provider: &ProviderDescriptor) -> Option<String> {
-    if provider
-        .daemon_socket(|key| std::env::var(key).ok())
-        .is_some_and(|socket| !socket.exists())
-    {
+    if daemon_is_down(provider) {
         return None;
     }
     let argv = provider.status();
     proc::output(&argv[0], &argv[1..])
+}
+
+/// A socket that is missing, or that refuses the connection, has no daemon
+/// behind it, and the CLI would spend its timeout finding that out. Anything
+/// else, a permission error included, is left for the CLI to report.
+fn daemon_is_down(provider: &ProviderDescriptor) -> bool {
+    let Some(configured) = provider.daemon_socket(|key| std::env::var(key).ok()) else {
+        return false;
+    };
+    let socket = if configured.exists() {
+        configured
+    } else {
+        provider
+            .instance_socket_dir()
+            .and_then(|dir| fs::read_dir(dir).ok())
+            .map(|entries| {
+                entries
+                    .filter_map(|e| e.ok().map(|e| e.path()))
+                    .collect::<Vec<_>>()
+            })
+            .and_then(|entries| providers::instance_socket(&entries))
+            .unwrap_or(configured)
+    };
+    match UnixStream::connect(&socket) {
+        Ok(_) => false,
+        Err(e) => matches!(
+            e.kind(),
+            std::io::ErrorKind::NotFound | std::io::ErrorKind::ConnectionRefused
+        ),
+    }
 }
 
 /// Every installed provider's status, gathered at once. The bar describes the
