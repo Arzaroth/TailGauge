@@ -263,13 +263,13 @@ pub fn panel_state(ui: &Ui) -> PanelState {
     };
 
     let installed = providers::installed_providers(&state);
-    let observed_ms = state::now_ms();
+    let observed = snapshot_stamp();
     let gathered = statuses(&installed);
     let summaries: Vec<_> = gathered
         .iter()
         .map(|(id, status)| core::bar::summarize_provider(id, status))
         .collect();
-    state.connected_order = remember_connection_order(&summaries, observed_ms);
+    state.connected_order = remember_connection_order(&summaries, observed.as_ref());
     state.summaries = Some(summaries);
 
     let Some(active) = connect(&mut state, &gathered) else {
@@ -302,7 +302,7 @@ fn connection_order_file() -> PathBuf {
 /// Losing the file only costs the order, so a failure to write it is not one.
 fn remember_connection_order(
     summaries: &[core::panel_state::ProviderSummary],
-    observed_ms: i64,
+    observed: Option<&Stamp>,
 ) -> Vec<String> {
     let path = connection_order_file();
     // Panels on several monitors poll at once; one read-modify-write at a time,
@@ -318,7 +318,7 @@ fn remember_connection_order(
         .ok()
         .and_then(|raw| serde_json::from_str(&raw).ok())
         .unwrap_or_default();
-    let (order, write) = next_order(&previous, summaries, observed_ms, state::now_ms());
+    let (order, write) = next_order(&previous, summaries, observed);
     // Without the lock, writing is what lets an older snapshot win.
     if let Some(next) = write.filter(|_| _lock.is_some()) {
         let staged = path.with_extension(format!("tmp.{}", std::process::id()));
@@ -332,20 +332,38 @@ fn remember_connection_order(
     order
 }
 
+/// When a snapshot was taken, on the clock since boot: it never goes back,
+/// unlike the wall clock, and the boot id says when it started again. `None`
+/// where `/proc` does not answer, and such a snapshot is not ordered at all.
+#[derive(Debug, Clone, PartialEq)]
+struct Stamp {
+    boot: String,
+    ms: i64,
+}
+
+fn snapshot_stamp() -> Option<Stamp> {
+    let boot = fs::read_to_string("/proc/sys/kernel/random/boot_id").ok()?;
+    let uptime = fs::read_to_string("/proc/uptime").ok()?;
+    let seconds: f64 = uptime.split_whitespace().next()?.parse().ok()?;
+    Some(Stamp {
+        boot: boot.trim().to_string(),
+        ms: (seconds * 1000.0) as i64,
+    })
+}
+
 /// The order this snapshot draws, and what to store when it is the newest
-/// snapshot to change it.
+/// snapshot to change it. A snapshot no later than the stored one, a tie
+/// included, draws without writing.
 fn next_order(
     previous: &RememberedOrder,
     summaries: &[core::panel_state::ProviderSummary],
-    observed_ms: i64,
-    now_ms: i64,
+    observed: Option<&Stamp>,
 ) -> (Vec<String>, Option<RememberedOrder>) {
     let order = core::bar::connection_order(&previous.order, summaries);
-    // A stamp later than now was written before the clock went back, and
-    // would otherwise hold the order until the clock caught up with it.
-    let newer = observed_ms >= previous.observed_ms || previous.observed_ms > now_ms;
+    let newer = observed.is_none_or(|s| s.boot != previous.boot || s.ms > previous.observed_ms);
     let write = (order != previous.order && newer).then(|| RememberedOrder {
-        observed_ms,
+        boot: observed.map(|s| s.boot.clone()).unwrap_or_default(),
+        observed_ms: observed.map_or(0, |s| s.ms),
         order: order.clone(),
     });
     (order, write)
@@ -354,6 +372,7 @@ fn next_order(
 #[derive(Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 struct RememberedOrder {
+    boot: String,
     #[serde(rename = "observedMs")]
     observed_ms: i64,
     order: Vec<String>,
@@ -427,43 +446,46 @@ mod tests {
             .collect()
     }
 
+    fn at(boot: &str, ms: i64) -> Stamp {
+        Stamp {
+            boot: boot.into(),
+            ms,
+        }
+    }
+
+    fn stored(ms: i64) -> RememberedOrder {
+        RememberedOrder {
+            boot: "b1".into(),
+            observed_ms: ms,
+            order: vec!["netbird".into(), "tailscale".into()],
+        }
+    }
+
     #[test]
     fn a_snapshot_older_than_the_last_change_does_not_write_its_order() {
-        let stored = RememberedOrder {
-            observed_ms: 10,
-            order: vec!["netbird".into(), "tailscale".into()],
-        };
-        let (drawn, write) = next_order(&stored, &up(&["netbird"]), 7, 20);
+        let (drawn, write) = next_order(&stored(10), &up(&["netbird"]), Some(&at("b1", 7)));
         assert_eq!(drawn, ["netbird"], "it still draws what it saw");
         assert_eq!(write, None, "but leaves the newer order alone");
 
-        let (_, write) = next_order(&stored, &up(&["netbird"]), 12, 20);
+        let (_, write) = next_order(&stored(10), &up(&["netbird"]), Some(&at("b1", 12)));
         assert_eq!(
             write,
             Some(RememberedOrder {
+                boot: "b1".into(),
                 observed_ms: 12,
                 order: vec!["netbird".into()],
             }),
             "a newer one that sees Tailscale gone records it"
         );
         assert_eq!(
-            next_order(&stored, &up(&["netbird", "tailscale"]), 12, 20).1,
+            next_order(
+                &stored(10),
+                &up(&["netbird", "tailscale"]),
+                Some(&at("b1", 12))
+            )
+            .1,
             None,
             "nothing changed, nothing written"
-        );
-    }
-
-    #[test]
-    fn a_stamp_from_before_the_clock_went_back_does_not_hold_the_order() {
-        let stored = RememberedOrder {
-            observed_ms: 1_000,
-            order: vec!["netbird".into(), "tailscale".into()],
-        };
-        let (_, write) = next_order(&stored, &up(&["netbird"]), 100, 150);
-        assert_eq!(
-            write.map(|w| w.order),
-            Some(vec!["netbird".to_string()]),
-            "the stored stamp is later than now, so it no longer outranks this snapshot"
         );
     }
 
