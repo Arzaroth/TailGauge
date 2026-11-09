@@ -25,7 +25,7 @@ Item {
     // on the far side of a process boundary now, so it arrives.
     property var panel: _empty
     readonly property var _empty: ({
-        bar: { connected: false, warning: false, crossed: true, tooltip: [] },
+        bar: { connected: false, warning: false, crossed: true, providerId: "", badge: "", tooltip: [] },
         header: { id: "header", title: "TailGauge", providerId: "", icon: "", glyph: "",
                   meta: "", action: "toggle", toggleVisible: false, toggleEnabled: false,
                   toggleChecked: false, busy: false, toggleHint: "", crossed: true,
@@ -143,24 +143,35 @@ Item {
         }
     }
 
+    function _land(exitCode, stdout, stderr) {
+        if (exitCode !== 0) {
+            root.lastError = stderr.trim() || "The panel could not be read"
+            return
+        }
+        var next = null
+        try {
+            next = JSON.parse(stdout)
+        } catch (e) {
+            root.lastError = "The panel could not be read"
+            return
+        }
+        if (!next || !next.header) return
+        root.panel = next
+        // The daemon caught up with the click, so stop overriding it.
+        if (root._desired !== -1 && next.header.toggleChecked === (root._desired === 1))
+            root._desired = -1
+    }
+
     function _handle(kind, exitCode, stdout, stderr) {
         if (kind === "panel") {
-            if (exitCode !== 0) {
-                root.lastError = stderr.trim() || "The panel could not be read"
-                return
+            // Asked for the provider the user has since switched away from.
+            if (root._askedProviderId === root.activeProviderId) _land(exitCode, stdout, stderr)
+            // After the answer is taken, so the next ask carries what it
+            // settled rather than the override it just cleared.
+            if (root._refreshAgain) {
+                root._refreshAgain = false
+                root.refresh()
             }
-            var next = null
-            try {
-                next = JSON.parse(stdout)
-            } catch (e) {
-                root.lastError = "The panel could not be read"
-                return
-            }
-            if (!next || !next.header) return
-            root.panel = next
-            // The daemon caught up with the click, so stop overriding it.
-            if (root._desired !== -1 && next.header.toggleChecked === (root._desired === 1))
-                root._desired = -1
             return
         }
 
@@ -217,7 +228,18 @@ Item {
         return out
     }
 
+    // A poll is nearly always in flight, so a refresh asked during one waits
+    // for it rather than being dropped: a provider switch went unanswered
+    // until the next tick.
+    property bool _refreshAgain: false
+    property string _askedProviderId: ""
+
     function refresh() {
+        if (root._inflight["panel"]) {
+            root._refreshAgain = true
+            return
+        }
+        root._askedProviderId = root.activeProviderId
         _run("panel", ["tailgauge", "panel", "--json", "--ui", JSON.stringify(_ui())])
     }
 

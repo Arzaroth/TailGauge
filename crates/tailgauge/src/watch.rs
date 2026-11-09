@@ -175,8 +175,7 @@ fn fingerprint(providers: &[&ProviderDescriptor]) -> Vec<Option<String>> {
             if provider.id == TAILSCALE {
                 return tailscale::status().as_ref().map(fingerprint_of);
             }
-            let argv = provider.status();
-            let raw = proc::output(&argv[0], &argv[1..])?;
+            let raw = crate::gather::status_output(provider)?;
             Some(fingerprint_of_status(&provider.parse_status(&raw)))
         })
         .collect()

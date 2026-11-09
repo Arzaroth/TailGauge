@@ -74,6 +74,8 @@ export interface BarState {
     connected: boolean;
     warning: boolean;
     crossed: boolean;
+    providerId: string;
+    badge: string;
     tooltip: string[];
 }
 
@@ -138,7 +140,7 @@ export const SECTION_IDS = [
 
 export function emptyPanel(): Panel {
     return {
-        bar: {connected: false, warning: false, crossed: true, tooltip: []},
+        bar: {connected: false, warning: false, crossed: true, providerId: '', badge: '', tooltip: []},
         header: {
             id: 'header', title: 'TailGauge', providerId: '', icon: '', glyph: '',
             meta: '', action: 'toggle', toggleVisible: false, toggleEnabled: false,

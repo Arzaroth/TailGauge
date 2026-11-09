@@ -57,6 +57,13 @@ below are the ones with an incident behind them.
   first on all three desktops (0.5.0).
   `the_optimistic_toggle_is_absent_rather_than_false`,
   `a_click_shows_what_was_asked_until_the_daemon_agrees`.
+- **A refresh asked while a poll is in flight is queued, never dropped, and an
+  answer asked for another provider is never drawn.** A poll is nearly always
+  in flight, so a provider switch went unanswered until the next tick while
+  the poll it raced drew the old provider's panel under the new one's name.
+  Each service records the provider it asked for and runs the queued refresh
+  when the poll lands. The QML harnesses and `provider.test.js` switch
+  mid-poll.
 - **Search keys come lowercased from the core; a frontend only tests the
   substring.** The panel call once took the machine and region queries, so
   every keystroke rebuilt the panel; since 0.5.0 the core hands each searchable
@@ -101,6 +108,12 @@ apart by `vadjustment`, never by `add_actor` (an extension that polyfills
 tall on 45. No CI test sees this: run `tests/gnome/shell/run.sh --gnome
 45` (and a recent one) on any `extension.ts` change that touches layout.
 
+**GNOME 50 pads status icons sideways.** Its theme gives `system-status-icon`
+horizontal padding, which left the 16px bar icon 4px to paint in: it drew as a
+flat line through 0.9.1. `stylesheet.css` zeroes it with a selector that
+outranks the theme's, and the shell probe fails with "the panel icon is drawn
+squashed" when the icon's content box shrinks again.
+
 `scripts/build.sh` refuses to package the extension without compiled schemas:
 GNOME reads the schema source the moment `schemas/` exists, and a half-built
 directory is worse than none (0.3.4).
@@ -117,6 +130,21 @@ expiry, so changes never reached the panels.
 `a_change_exits_zero_and_an_expiry_does_not`,
 `watch_on_a_quiet_netbird_expires_rather_than_giving_up`. See
 `brain/architecture/overview.md`.
+
+**A NetBird with no daemon behind its socket is not asked.** Its CLI redials a
+socket nothing listens on for ten seconds before failing, and every panel
+polls every installed provider, so an installed but stopped NetBird made
+every panel call, Tailscale's included, take ten seconds.
+`gather::status_output` resolves the socket the way the CLI does
+(`NB_DAEMON_ADDR`, `WT_DAEMON_ADDR`, then the single `.sock` in
+`/var/run/netbird/` when the configured one is missing) and connects to it;
+only a missing socket or a refused connection skips the CLI, so a stale
+socket file counts as down, and a permission error or a full backlog is left
+to the CLI. The connect is non-blocking: a blocking one hangs on a full
+backlog. The
+e2e machines listen on a real socket;
+`a_netbird_without_its_daemon_is_not_asked`,
+`a_netbird_that_died_without_removing_its_socket_is_not_asked`.
 
 ## One binary, many names
 
@@ -181,6 +209,12 @@ a clean distribution, and the release does not publish until it has.
 - **`verify` imports `packaging/tailgauge.asc` before it installs the `.rpm`.**
   Fedora's rpm once let a signature by an unknown key through; when
   `fedora:latest` stopped (`NOKEY`), the 0.8.1 tag failed to publish.
+- **A pull request's `.rpm` installs with `--nosignature`, a release's never.**
+  The rehearsal has no signing key, and `fedora:latest` moved to rpm 6.1,
+  which refuses an unsigned package outright; every pull request touching the
+  release paths went red (0.10.0). `verify` passes the flag only when
+  `dist/SHA256SUMS.asc` is missing, so a signed release is still installed
+  with every check.
 - **No package installs the Omarchy widget.** The shell loads third-party
   plugins from `~/.config/omarchy/plugins/` only.
 - **`packaging/tailgauge.asc` being committed is what turns signing on**, and

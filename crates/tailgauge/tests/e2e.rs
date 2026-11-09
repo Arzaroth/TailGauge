@@ -24,6 +24,9 @@ fn fixtures() -> PathBuf {
 /// A machine with the given CLIs on its PATH and nothing else of ours.
 struct Machine {
     home: PathBuf,
+    /// The NetBird daemon's socket: listening, so the binary's probe finds a
+    /// daemon behind it and asks the fake CLI.
+    netbird_daemon: Option<std::os::unix::net::UnixListener>,
 }
 
 impl Machine {
@@ -54,6 +57,13 @@ impl Machine {
                 // A daemon that is installed but answering nothing, which is
                 // what a stopped service looks like.
                 "tailscale-down" => "#!/bin/sh\nexit 1\n".to_string(),
+                // Down until `tailscale-up` appears in its home.
+                "tailscale-switching" => format!(
+                    "#!/bin/sh\ncase \"$1 $2\" in\n\
+                     'status --json') [ -e \"$HOME/tailscale-up\" ] && /bin/cat '{f}/status.json' ;;\n\
+                     *) exit 1 ;;\nesac\n",
+                    f = fixtures().display()
+                ),
                 // `up` prints its login URL and then waits for the login, as
                 // the real one does; it notes whether the page was opened
                 // while it was still waiting.
@@ -97,7 +107,7 @@ impl Machine {
                 other => panic!("no fake {other}"),
             };
             let name = match *cli {
-                "tailscale-down" | "tailscale-login" => "tailscale",
+                "tailscale-down" | "tailscale-login" | "tailscale-switching" => "tailscale",
                 "netbird-switching" | "netbird-login" => "netbird",
                 other => other,
             };
@@ -110,7 +120,12 @@ impl Machine {
                     .expect("executable");
             }
         }
-        Machine { home }
+        let netbird_daemon = std::os::unix::net::UnixListener::bind(home.join("netbird.sock"))
+            .expect("the daemon's socket");
+        Machine {
+            home,
+            netbird_daemon: Some(netbird_daemon),
+        }
     }
 
     /// Run the shipped binary as a panel would, with only our fakes visible.
@@ -135,7 +150,11 @@ impl Machine {
             .env("HOME", &self.home)
             .env("XDG_CACHE_HOME", self.home.join("cache"))
             .env("XDG_DATA_HOME", self.home.join("data"))
-            .env("XDG_CONFIG_HOME", self.home.join("config"));
+            .env("XDG_CONFIG_HOME", self.home.join("config"))
+            .env(
+                "NB_DAEMON_ADDR",
+                format!("unix://{}", self.home.join("netbird.sock").display()),
+            );
         command
     }
 
@@ -305,6 +324,68 @@ fn the_bar_describes_the_machine_rather_than_the_provider_being_shown() {
         labels(section(&panel, "providers")),
         ["Tailscale", "NetBird"]
     );
+}
+
+#[test]
+fn the_bar_icon_stays_the_provider_that_connected_first() {
+    let machine = Machine::with(&["tailscale-switching", "netbird"]);
+    let panel = machine.panel("{}");
+    assert_eq!(panel["bar"]["providerId"], "netbird");
+    assert_eq!(panel["bar"]["badge"], "");
+
+    // Tailscale comes first in the registry, so only having seen NetBird come
+    // up first keeps it on the icon.
+    std::fs::write(machine.home.join("tailscale-up"), "").expect("the switch");
+    let panel = machine.panel(r#"{"activeProviderId":"tailscale"}"#);
+    assert_eq!(panel["bar"]["providerId"], "netbird");
+    assert_eq!(panel["bar"]["badge"], "2");
+}
+
+#[test]
+fn a_netbird_without_its_daemon_is_not_asked() {
+    let mut machine = Machine::with(&["tailscale", "netbird-switching"]);
+    machine.netbird_daemon = None;
+    std::fs::remove_file(machine.home.join("netbird.sock")).expect("the daemon stops");
+    let started = std::time::Instant::now();
+    let panel = machine.panel(r#"{"activeProviderId":"netbird"}"#);
+    assert!(
+        !machine.home.join("read").exists(),
+        "the CLI was asked about a daemon that is not there"
+    );
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    assert_eq!(panel["header"]["providerId"], "netbird");
+    assert_eq!(
+        panel["bar"]["providerId"], "tailscale",
+        "Tailscale is still up"
+    );
+
+    let (code, stdout, _) = machine.run(&["ctl", "--provider", "netbird", "status"]);
+    assert!(stdout.contains("not answering"), "{stdout}");
+    assert_ne!(code, 0);
+    assert!(!machine.home.join("read").exists());
+}
+
+#[test]
+fn a_netbird_that_died_without_removing_its_socket_is_not_asked() {
+    let mut machine = Machine::with(&["tailscale", "netbird-switching"]);
+    machine.netbird_daemon = None;
+    assert!(
+        machine.home.join("netbird.sock").exists(),
+        "the socket outlives its daemon"
+    );
+    let started = std::time::Instant::now();
+    let panel = machine.panel(r#"{"activeProviderId":"netbird"}"#);
+    assert!(
+        !machine.home.join("read").exists(),
+        "the CLI was asked about a socket nothing listens on"
+    );
+    assert_eq!(
+        panel["header"]["toggleChecked"], false,
+        "and it reads as down"
+    );
+    assert_eq!(panel["bar"]["providerId"], "tailscale");
+    assert_eq!(panel["bar"]["badge"], "", "only Tailscale is up");
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
 }
 
 #[test]

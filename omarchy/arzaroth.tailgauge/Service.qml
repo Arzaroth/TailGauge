@@ -22,7 +22,7 @@ Item {
   // derived. Everything bound downstream of it is unchanged.
   property var panel: _empty
   readonly property var _empty: ({
-    bar: { connected: false, warning: false, crossed: true, tooltip: [] },
+    bar: { connected: false, warning: false, crossed: true, providerId: "", badge: "", tooltip: [] },
     header: { id: "header", title: "TailGauge", providerId: "", icon: "", glyph: "",
               meta: "", action: "toggle", toggleVisible: false, toggleEnabled: false,
               toggleChecked: false, busy: false, toggleHint: "", crossed: true,
@@ -96,8 +96,18 @@ Item {
     return out
   }
 
+  // A poll is nearly always in flight, so a refresh asked during one waits for
+  // it rather than being dropped: a provider switch went unanswered until the
+  // next tick.
+  property bool _refreshAgain: false
+  property string _askedProviderId: ""
+
   function refresh() {
-    if (panelProc.running) return
+    if (panelProc.running) {
+      _refreshAgain = true
+      return
+    }
+    _askedProviderId = activeProviderId
     panelProc.command = ["tailgauge", "panel", "--json", "--ui", JSON.stringify(_ui())]
     panelProc.running = true
   }
@@ -108,8 +118,15 @@ Item {
 
   Process {
     id: panelProc
+    onRunningChanged: {
+      if (running || !root._refreshAgain) return
+      root._refreshAgain = false
+      root.refresh()
+    }
     stdout: StdioCollector {
       onStreamFinished: {
+        // Asked for the provider the user has since switched away from.
+        if (root._askedProviderId !== root.activeProviderId) return
         var next = null
         try {
           next = JSON.parse(text)

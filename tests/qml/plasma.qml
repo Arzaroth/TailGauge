@@ -9,6 +9,16 @@ Item {
     Check { id: check; name: "plasma" }
     property var service: null
 
+    // Answer the poll in flight, and the one queued behind it, so the next
+    // step starts with nothing running.
+    function settle(json) {
+        while (service._inflight["panel"]) {
+            var proc = Registry.find(service._inflight["panel"])
+            if (!proc) return
+            proc.answer(json, "", 0)
+        }
+    }
+
     Component.onCompleted: {
         service = check.load("../../plasma/org.tailgauge.plasmoid/contents/ui/ProviderService.qml", this)
         if (!service) return
@@ -35,6 +45,7 @@ Item {
             check.ok("the sections arrived", service.panel.sections.length === 7)
 
             // A click flips the local copy on the frame it was clicked.
+            settle(panelJson)
             Registry.clear()
             service.down()
             check.equal("the click shows immediately", service.active, false)
@@ -45,8 +56,7 @@ Item {
             // so the value is put where the frontend serialises one.
             // The click's own refresh is still outstanding, and the service
             // will not ask twice at once, so let it finish first.
-            var settled = Registry.find("panel")
-            if (settled) settled.answer(panelJson, "", 0)
+            settle(panelJson)
             Registry.clear()
             var hostile = "x'; rm -rf ~; echo 'pwned"
             service.activeProviderId = hostile
@@ -69,6 +79,7 @@ Item {
             service.activeProviderId = ""
 
             // Output that is not a panel is reported, not drawn.
+            settle(panelJson)
             Registry.clear()
             service.refresh()
             var broken = Registry.find("panel")
@@ -77,6 +88,38 @@ Item {
                 check.ok("unreadable output is reported", service.lastError.length > 0)
                 check.equal("and the last good panel stays", service.panel.header.title, "workstation")
             }
+
+            // A refresh queued behind the answer that settles a click asks
+            // without the click: the daemon has agreed, so it decides again.
+            settle(panelJson)
+            Registry.clear()
+            service.down()
+            var settling = Registry.find("panel")
+            service.refresh()
+            var agreed = JSON.parse(panelJson)
+            agreed.header.toggleChecked = false
+            settling.answer(JSON.stringify(agreed), "", 0)
+            var queued = Registry.find("panel")
+            check.ok("the queued refresh went out", queued !== null && queued !== settling || (queued && queued.running))
+            if (queued)
+                check.equal("it no longer carries the override", JSON.parse(check.unquote(check.unquote(queued.commandLine.substring("sh -c ".length)).substring(check.unquote(queued.commandLine.substring("sh -c ".length)).indexOf("{") - 1))).active, undefined)
+
+            // A switch while a poll is in flight: that answer was asked for the
+            // old provider, so it is not drawn, and the new one is asked for as
+            // soon as it lands rather than on the next tick.
+            settle(panelJson)
+            Registry.clear()
+            service.refresh()
+            var before = Registry.find("panel")
+            service.switchProvider({id: "netbird"})
+            before.answer(panelJson, "", 0)
+            check.equal("the old provider's answer is not drawn",
+                        service.panel.header.title, "TailGauge")
+            var after = Registry.find("panel")
+            check.ok("the new provider is asked for at once", after !== null && after !== before)
+            if (after)
+                check.ok("asked with the new provider",
+                         after.commandLine.indexOf('"activeProviderId":"netbird"') !== -1)
         })
     }
 }

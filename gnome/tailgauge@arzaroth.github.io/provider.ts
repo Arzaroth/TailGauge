@@ -72,7 +72,7 @@ export const ProviderService = GObject.registerClass({
     declare settingExitNodeId: string;
     declare selectingNetworkId: string;
     declare _uiState: Panel.Ui;
-    declare _uiPending: boolean;
+    declare _refreshAgain: boolean;
 
     get installed(): boolean {
         return this.panel.header.toggleVisible;
@@ -110,7 +110,7 @@ export const ProviderService = GObject.registerClass({
         this.settingExitNodeId = '';
         this.selectingNetworkId = '';
         this._uiState = {};
-        this._uiPending = false;
+        this._refreshAgain = false;
 
         this._settingsChangedId = settings.connect('changed::refresh-interval',
             () => this._armPoll());
@@ -138,11 +138,7 @@ export const ProviderService = GObject.registerClass({
     /// picker, the expanded row. Assigning it re-asks.
     set ui(value: Panel.Ui) {
         this._uiState = value;
-        // A panel already in flight was asked with the old state.
-        if (this._cancellables.has('panel'))
-            this._uiPending = true;
-        else
-            this.refresh();
+        this.refresh();
     }
 
     get ui(): Panel.Ui {
@@ -173,30 +169,46 @@ export const ProviderService = GObject.registerClass({
     }
 
     refresh(): void {
+        // A panel already in flight was asked with the old state, and a poll is
+        // nearly always in flight: a provider switch went unanswered until the
+        // next tick.
+        if (this._cancellables.has('panel')) {
+            this._refreshAgain = true;
+            return;
+        }
+        const asked = this.activeProviderId;
         this._run('panel', ['tailgauge', 'panel', '--json', '--ui', JSON.stringify(this._ui())],
             (status, stdout, stderr) => {
-                if (this._uiPending) {
-                    this._uiPending = false;
+                // Asked for the provider the user has since switched away from.
+                if (asked === this.activeProviderId)
+                    this._land(status, stdout, stderr);
+                // After the answer is taken, so the next ask carries what it
+                // settled rather than the override it just cleared.
+                if (this._refreshAgain) {
+                    this._refreshAgain = false;
                     this.refresh();
                 }
-                if (status !== 0) {
-                    this.lastError = stderr.trim() || 'The panel could not be read';
-                    return;
-                }
-                let next: Panel.Panel | null = null;
-                try {
-                    next = JSON.parse(stdout) as Panel.Panel;
-                } catch (e) {
-                    this.lastError = `The panel could not be read: ${e}`;
-                    return;
-                }
-                if (!next?.header)
-                    return;
-                this.panel = next;
-                // The daemon caught up with the click, so stop overriding it.
-                if (this._desired !== -1 && next.header.toggleChecked === (this._desired === 1))
-                    this._desired = -1;
             });
+    }
+
+    _land(status: number, stdout: string, stderr: string): void {
+        if (status !== 0) {
+            this.lastError = stderr.trim() || 'The panel could not be read';
+            return;
+        }
+        let next: Panel.Panel | null = null;
+        try {
+            next = JSON.parse(stdout) as Panel.Panel;
+        } catch (e) {
+            this.lastError = `The panel could not be read: ${e}`;
+            return;
+        }
+        if (!next?.header)
+            return;
+        this.panel = next;
+        // The daemon caught up with the click, so stop overriding it.
+        if (this._desired !== -1 && next.header.toggleChecked === (this._desired === 1))
+            this._desired = -1;
     }
 
     _run(kind: string, argv: string[], callback: RunCallback): boolean {

@@ -57,6 +57,9 @@ pub struct PanelState {
     #[serde(rename = "activeProviderId")]
     pub active_provider_id: String,
     pub summaries: Option<Vec<ProviderSummary>>,
+    /// Oldest connection first.
+    #[serde(rename = "connectedOrder")]
+    pub connected_order: Vec<String>,
     pub installed: bool,
     pub running: bool,
     pub active: bool,

@@ -479,6 +479,50 @@ fn no_click_on_the_bar_icon_toggles_a_connection() {
     }
 }
 
+/// The bar icon is drawn as the provider the core names, with the count it
+/// hands over. A desktop that kept its one Tailscale mark would show a NetBird
+/// connection under Tailscale's face.
+#[test]
+fn every_desktop_draws_the_bar_as_the_provider_the_core_names() {
+    let desktops = [
+        (
+            "plasma",
+            source_of(PLASMA),
+            "barState.providerId",
+            "barState.badge",
+            repo_file("plasma/org.tailgauge.plasmoid/contents/ui/TailGaugeIcon.qml"),
+            "\"netbird\"",
+        ),
+        (
+            "gnome",
+            source_of(GNOME),
+            "bar.providerId",
+            "bar.badge",
+            repo_file("gnome/tailgauge@arzaroth.github.io/extension.ts"),
+            "'netbird'",
+        ),
+        (
+            "omarchy",
+            source_of(OMARCHY),
+            "bar.providerId",
+            "bar.badge",
+            repo_file("omarchy/arzaroth.tailgauge/TailGaugeIcon.qml"),
+            "\"netbird\"",
+        ),
+    ];
+    for (name, source, provider, badge, icon, netbird) in &desktops {
+        assert!(
+            source.contains(provider),
+            "{name}: the bar icon ignores which provider it is"
+        );
+        assert!(
+            source.contains(badge),
+            "{name}: the bar icon does not count the connections"
+        );
+        assert!(icon.contains(netbird), "{name}: no NetBird mark to draw");
+    }
+}
+
 /// Since GNOME 47 the switch item emits `toggled` from `setToggleState` as
 /// well as from a click, so mirroring the daemon onto the header switch toggled
 /// the connection, and the next poll mirrored that back: an endless on/off loop.

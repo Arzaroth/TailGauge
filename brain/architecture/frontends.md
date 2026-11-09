@@ -28,7 +28,12 @@ Each has one service file that owns the subprocesses (`ProviderService.qml`,
   `_pushUi` always sends `mullvadPickerOpen: true` and never sends
   `expandedPeerId`. The answer
   is push-assigned to `panel`; output without a `header` is ignored and the last
-  good panel stays.
+  good panel stays. One panel call runs at a time: a `refresh()` asked during
+  one sets `_refreshAgain` and runs when it lands, after that answer is taken
+  so it does not carry an override the answer settled, and an answer is dropped when
+  `activeProviderId` has moved since it was asked (`_askedProviderId`, the
+  `asked` closure in `provider.ts`), so a switch mid-poll never draws the old
+  provider.
 - **Acts** only through the binary: `_ctl(kind, action, extra)` builds
   `tailgauge ctl [--provider <id>] <action>` (`up`, `down`, `switch-account`,
   `exit-node --peer <payload>`, `select-network <id> [--leave]`, `authorize`);
@@ -58,7 +63,15 @@ Each has one service file that owns the subprocesses (`ProviderService.qml`,
 ## The bar icon
 
 It draws `panel.bar` (connected, crossed, warning badge) and its tooltip is
-`bar.tooltip`, so it describes the machine, not the provider shown.
+`bar.tooltip`, so it describes the machine, not the provider shown. The mark is
+`bar.providerId`'s: Tailscale's dot grid, or NetBird's (`NetBirdIcon.qml` on
+Plasma and Omarchy, `NETBIRD_PATHS` drawn with cairo on GNOME), and NetBird's
+disconnected slash runs the other way so the mark does not swallow it.
+`bar.badge` is drawn raised to the right of the mark, never over it: inside
+`TailGaugeIcon.qml`'s width on Plasma and Omarchy (Omarchy keeps the mark
+centred in its slot and lets the count hang out), as the `tailgauge-panel-count`
+label on GNOME. `every_desktop_draws_the_bar_as_the_provider_the_core_names`
+holds all three to it.
 
 | | Left | Middle | Right |
 | --- | --- | --- | --- |
@@ -134,6 +147,10 @@ that test existed.
   `vadjustment`, and `child` from 46 on (setting `child` on 45 drew the section
   one pixel tall, the GNOME 45 scroll fix). `tests/gnome/shell/run.sh --gnome 45` checks
   this in a real headless shell; it is local, not CI.
+- GNOME 50's theme pads `system-status-icon` sideways, which shrank the bar
+  icon's content box to 4x16 so it drew as a line. `stylesheet.css` zeroes the
+  padding on `.tailgauge-icon`; the shell probe records the icon's content box
+  and fails when it is drawn squashed.
 - Build: `tsc -p tsconfig.gnome.json` emits to `build/.ts/gnome`;
   `scripts/build.sh` copies the `.js` over the `.ts` into
   `build/tailgauge@arzaroth.github.io`, compiles the schemas with
@@ -191,3 +208,5 @@ a command. It has no watcher and no settings file. See
 - `crates/tailgauge/src/tui.rs`, `crates/tailgauge/src/copy.rs`
 - `scripts/build.sh`, `tsconfig.gnome.json`, `tests/qml/run.sh`, `tests/gnome/shell/run.sh`
 - `crates/tailgauge-core/tests/parity.rs` (`no_click_on_the_bar_icon_toggles_a_connection`), `tests/gnome/provider.test.js`, `crates/tailgauge/tests/e2e.rs` (`every_command_the_frontends_invoke_exists`)
+- `gnome/tailgauge@arzaroth.github.io/stylesheet.css` (`.tailgauge-icon`, `.tailgauge-panel-count`), `tests/gnome/shell/probe@tailgauge.test/extension.js`
+- `plasma/org.tailgauge.plasmoid/contents/ui/TailGaugeIcon.qml`, `NetBirdIcon.qml`; `omarchy/arzaroth.tailgauge/TailGaugeIcon.qml`, `NetBirdIcon.qml`

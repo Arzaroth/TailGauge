@@ -67,6 +67,27 @@ test('view state handed over mid-request is asked for once that request lands', 
     assert.equal(askedWith().phraseIndex, 4);
 });
 
+test('a provider switched mid-request is asked for once that request lands, and the old answer is not drawn', () => {
+    const {svc} = service();
+    svc.refresh();
+    const before = Gio.__find('panel');
+    svc.switchProvider({id: 'netbird'});
+    before.answer(PANEL, '', 0);
+    assert.equal(svc.panel.header.title, 'TailGauge', 'that answer was asked for the old provider');
+    assert.equal(askedWith().activeProviderId, 'netbird', 'and the new one is asked for at once');
+});
+
+test('a refresh queued behind the answer that settles a click does not carry the click', () => {
+    const {svc} = service();
+    svc.down();
+    const inFlight = Gio.__find('panel');
+    svc.refresh();
+    const off = JSON.parse(PANEL);
+    off.header.toggleChecked = false;
+    inFlight.answer(JSON.stringify(off), '', 0);
+    assert.equal(askedWith().active, undefined, 'the daemon agreed, so the next ask leaves it to the daemon');
+});
+
 test('an answer lands, and the derived properties follow it', () => {
     const {svc} = service();
     assert.equal(svc.panel.header.title, 'workstation');

@@ -433,6 +433,7 @@ Item {
                         badgeColor: Kirigami.Theme.negativeTextColor
                         crossed: full.panel.header.crossed
                         warning: full.panel.header.warning
+                        providerId: full.panel.header.providerId
                         opacity: full.panel.header.dimmed ? 0.5 : 1.0
                         Layout.alignment: Qt.AlignVCenter
                     }

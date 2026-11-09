@@ -40,12 +40,32 @@ quiet one lets the wait expire (exit 2), on a NetBird-only machine as well
 `ProviderDescriptor::watch` still returns `None` for NetBird, but nothing reads
 it outside its own test.
 
+A stopped NetBird is not asked at all. Its CLI redials a socket nothing listens
+on for ten seconds, so `gather::status_output` first resolves the socket as the
+CLI does: `ProviderDescriptor::daemon_socket` (`NB_DAEMON_ADDR`, then the legacy
+`WT_DAEMON_ADDR`, then `/var/run/netbird.sock`), and when that is missing the
+only `.sock` in `instance_socket_dir` (`/var/run/netbird/`, where a
+`netbird@<instance>` service puts it; `providers::instance_socket`). It then
+connects without blocking (`refuses`): a missing socket or a refused
+connection (a socket file its daemon left behind) is read as the failed call it
+would have been, and anything else goes to the CLI, a permission error or a
+full backlog (a daemon, busy) included. The CLI reads the address as a URL,
+so one with `%` escapes is left to it whole; any other is a literal path, and
+one too long to be a socket address reads as down. A TCP address is asked as before.
+`panel`, `watch` and `ctl` all go through it
+(`a_netbird_without_its_daemon_is_not_asked`,
+`a_netbird_that_died_without_removing_its_socket_is_not_asked`).
+
 ## Several providers at once
 
 - `tailgauge panel` polls **every** installed provider's status in parallel;
   the bar icon and its tooltip describe all of them, the active one first
   (`the_bar_icon_describes_the_machine_not_the_panel_view`). The rest of the
   panel is the active provider.
+- The bar icon wears the mark of the provider that is up; with both up, the
+  one that came up first, with a raised `2` beside it
+  (`two_connections_show_the_first_one_up_and_count_both`,
+  `the_bar_icon_stays_the_provider_that_connected_first`).
 - With both installed and no choice, Tailscale wins (registry order). The
   **VPN** section (`providers`) lists the drivable providers with
   `action: switchProvider` and shows only when there are two or more
@@ -69,3 +89,4 @@ Omarchy refreshes.
 - `crates/tailgauge/src/gather.rs` (`statuses`), `crates/tailgauge/src/ctl.rs` (`select_network`), `crates/tailgauge/src/watch.rs` (`poll`, `fingerprint_of_status`), `crates/tailgauge/tests/e2e.rs` (`watch_wakes_on_a_netbird_change`, `watch_on_a_quiet_netbird_expires_rather_than_giving_up`)
 - `omarchy/arzaroth.tailgauge/Panel.qml` (`cycleProvider`, `onPressed`), `plasma/org.tailgauge.plasmoid/contents/ui/main.qml` (`cycleProvider`), `plasma/org.tailgauge.plasmoid/contents/ui/CompactRep.qml`, `gnome/tailgauge@arzaroth.github.io/provider.ts` (`switchProvider`), `gnome/tailgauge@arzaroth.github.io/extension.ts` (`_cycleProvider`); `crates/tailgauge-core/tests/parity.rs` (`no_click_on_the_bar_icon_toggles_a_connection`)
 - `crates/tailgauge-core/tests/fixtures/netbird-status.json`, `netbird-status-idle.json`, `netbird-networks.txt`; `crates/tailgauge-core/tests/specification.rs` (`parse_netbird_status_offers_nothing_it_cannot_do`, `the_networks_section_belongs_to_the_provider_that_has_networks`)
+- `crates/tailgauge/src/gather.rs` (`status_output`), `crates/tailgauge-core/src/providers.rs` (`daemon_socket`)

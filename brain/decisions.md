@@ -62,6 +62,35 @@ a panel could show one provider and drive another (0.4.0).
 
 See [architecture/providers.md](architecture/providers.md).
 
+### 0008 The bar icon wears the mark of the provider that connected first
+
+**Decision.** The bar icon is drawn as one provider's mark: the one that is
+up, or with several up, the one that came up first, with the number up raised
+beside it. With nothing up it is the provider asking for a login, else the
+preferred installed one. The order is kept in `connected.json` in the cache
+directory, rewritten only when it changes, under a lock and stamped on the
+clock since boot, so a slow poll cannot write an older order over a newer one
+and a wall clock that goes back cannot either.
+
+**Why.** One fixed mark (Tailscale's dots) said nothing about which VPN was
+connected once NetBird was supported. Which one came first is only known by
+having watched it, and nothing runs between two polls, so the order has to
+outlive the call that saw it.
+
+**Rejected.**
+- *The active provider's mark*: the panel view would change the icon, against
+  [0002](#0002-the-bar-icon-describes-the-machine).
+- *Registry order alone*: Tailscale would take the icon from a NetBird that
+  had been up for hours the moment it joined.
+- *An order the frontend remembers and hands back in `--ui`*: three copies of
+  the same state, and the TUI and a fresh desktop session would disagree.
+
+**Consequences.** Only `panel_state` writes the file, so plain `tailgauge` and
+`watch` never touch it. A count drawn over the mark was illegible at 16 px; it
+sits beside it instead. NetBird's mark runs along the usual slash, so its
+disconnected slash goes the other way. See
+[architecture/panel-spec.md](architecture/panel-spec.md).
+
 - **The optimistic toggle is absent, not `false`.** A frontend sends `active`
   only while it shows a position the daemon has not confirmed. Reading absent
   as `false` gives a panel that never shows itself connected. See

@@ -4,6 +4,8 @@
 //! and the argv for each thing the panel asks of it. Nothing else in the crate
 //! names a provider, and no frontend does at all.
 
+use std::path::PathBuf;
+
 use serde::Serialize;
 
 use crate::panel_state::PanelState;
@@ -104,6 +106,18 @@ pub const PROVIDERS: &[ProviderDescriptor] = &[
 
 const DEFAULT_PROVIDER_ID: &str = "tailscale";
 
+/// The socket NetBird's CLI falls back to among `instance_socket_dir`'s
+/// entries: the only `.sock` there, or none when there are several.
+pub fn instance_socket(entries: &[PathBuf]) -> Option<PathBuf> {
+    let mut sockets = entries
+        .iter()
+        .filter(|e| e.extension().is_some_and(|x| x == "sock"));
+    match (sockets.next(), sockets.next()) {
+        (Some(only), None) => Some(only.clone()),
+        _ => None,
+    }
+}
+
 fn argv(parts: &[&str]) -> Vec<String> {
     parts.iter().map(|p| p.to_string()).collect()
 }
@@ -111,6 +125,29 @@ fn argv(parts: &[&str]) -> Vec<String> {
 impl ProviderDescriptor {
     pub fn status(&self) -> Vec<String> {
         argv(&[self.cli, "status", "--json"])
+    }
+
+    /// The unix socket the CLI is configured to reach its daemon on, read the
+    /// way NetBird's CLI reads `--daemon-addr`: `NB_DAEMON_ADDR`, then the
+    /// legacy `WT_DAEMON_ADDR`, then the default. NetBird's CLI redials a
+    /// socket nothing listens on for ten seconds before failing, and every
+    /// panel polls it, so the binary probes the socket first. An address that
+    /// is not a unix socket cannot be probed that way.
+    pub fn daemon_socket(&self, env: impl Fn(&str) -> Option<String>) -> Option<PathBuf> {
+        if self.id != "netbird" {
+            return None;
+        }
+        let addr = ["NB_DAEMON_ADDR", "WT_DAEMON_ADDR"]
+            .into_iter()
+            .find_map(|key| env(key).filter(|a| !a.is_empty()))
+            .unwrap_or_else(|| "unix:///var/run/netbird.sock".to_string());
+        addr.strip_prefix("unix://").map(PathBuf::from)
+    }
+
+    /// Where the CLI looks when the configured socket is missing: a
+    /// `netbird@<instance>` service puts its socket there instead.
+    pub fn instance_socket_dir(&self) -> Option<&'static str> {
+        (self.id == "netbird").then_some("/var/run/netbird")
     }
 
     /// What `status()` printed, through the parser for this provider's shape.
@@ -316,6 +353,71 @@ pub fn provider_label_list() -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn only_netbird_has_a_socket_to_check_and_the_cli_s_own_address_wins() {
+        let netbird = provider_by_id("netbird").expect("netbird");
+        let tailscale = provider_by_id("tailscale").expect("tailscale");
+        assert_eq!(
+            netbird.daemon_socket(|_| None),
+            Some(PathBuf::from("/var/run/netbird.sock"))
+        );
+        assert_eq!(
+            netbird.daemon_socket(|_| Some("unix:///tmp/nb.sock".into())),
+            Some(PathBuf::from("/tmp/nb.sock"))
+        );
+        assert_eq!(
+            netbird.daemon_socket(|_| Some("tcp://127.0.0.1:41731".into())),
+            None,
+            "a TCP daemon cannot be checked by a file"
+        );
+        assert_eq!(tailscale.daemon_socket(|_| None), None);
+    }
+
+    #[test]
+    fn the_legacy_daemon_address_counts_but_the_current_one_wins() {
+        let netbird = provider_by_id("netbird").expect("netbird");
+        let legacy = |key: &str| (key == "WT_DAEMON_ADDR").then(|| "unix:///old.sock".to_string());
+        assert_eq!(
+            netbird.daemon_socket(legacy),
+            Some(PathBuf::from("/old.sock"))
+        );
+        let both = |key: &str| {
+            Some(
+                if key == "NB_DAEMON_ADDR" {
+                    "unix:///new.sock"
+                } else {
+                    "unix:///old.sock"
+                }
+                .to_string(),
+            )
+        };
+        assert_eq!(
+            netbird.daemon_socket(both),
+            Some(PathBuf::from("/new.sock"))
+        );
+    }
+
+    #[test]
+    fn an_instance_socket_is_used_only_when_it_is_the_only_one() {
+        let path = |p: &str| PathBuf::from(p);
+        assert_eq!(
+            instance_socket(&[
+                path("/var/run/netbird/main.sock"),
+                path("/var/run/netbird/main.pid")
+            ]),
+            Some(path("/var/run/netbird/main.sock"))
+        );
+        assert_eq!(
+            instance_socket(&[
+                path("/var/run/netbird/a.sock"),
+                path("/var/run/netbird/b.sock")
+            ]),
+            None,
+            "the CLI asks for --daemon-addr rather than guess"
+        );
+        assert_eq!(instance_socket(&[]), None);
+    }
+
     use super::*;
     use crate::panel_state::ProviderState;
 
