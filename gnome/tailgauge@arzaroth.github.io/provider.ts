@@ -179,31 +179,36 @@ export const ProviderService = GObject.registerClass({
         const asked = this.activeProviderId;
         this._run('panel', ['tailgauge', 'panel', '--json', '--ui', JSON.stringify(this._ui())],
             (status, stdout, stderr) => {
+                // Asked for the provider the user has since switched away from.
+                if (asked === this.activeProviderId)
+                    this._land(status, stdout, stderr);
+                // After the answer is taken, so the next ask carries what it
+                // settled rather than the override it just cleared.
                 if (this._refreshAgain) {
                     this._refreshAgain = false;
                     this.refresh();
                 }
-                // Asked for the provider the user has since switched away from.
-                if (asked !== this.activeProviderId)
-                    return;
-                if (status !== 0) {
-                    this.lastError = stderr.trim() || 'The panel could not be read';
-                    return;
-                }
-                let next: Panel.Panel | null = null;
-                try {
-                    next = JSON.parse(stdout) as Panel.Panel;
-                } catch (e) {
-                    this.lastError = `The panel could not be read: ${e}`;
-                    return;
-                }
-                if (!next?.header)
-                    return;
-                this.panel = next;
-                // The daemon caught up with the click, so stop overriding it.
-                if (this._desired !== -1 && next.header.toggleChecked === (this._desired === 1))
-                    this._desired = -1;
             });
+    }
+
+    _land(status: number, stdout: string, stderr: string): void {
+        if (status !== 0) {
+            this.lastError = stderr.trim() || 'The panel could not be read';
+            return;
+        }
+        let next: Panel.Panel | null = null;
+        try {
+            next = JSON.parse(stdout) as Panel.Panel;
+        } catch (e) {
+            this.lastError = `The panel could not be read: ${e}`;
+            return;
+        }
+        if (!next?.header)
+            return;
+        this.panel = next;
+        // The daemon caught up with the click, so stop overriding it.
+        if (this._desired !== -1 && next.header.toggleChecked === (this._desired === 1))
+            this._desired = -1;
     }
 
     _run(kind: string, argv: string[], callback: RunCallback): boolean {
