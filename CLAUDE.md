@@ -139,8 +139,9 @@ every panel call, Tailscale's included, take ten seconds.
 (`NB_DAEMON_ADDR`, `WT_DAEMON_ADDR`, then the single `.sock` in
 `/var/run/netbird/` when the configured one is missing) and connects to it;
 only a missing socket or a refused connection skips the CLI, so a stale
-socket file counts as down, and a permission error or a connect still
-blocked after a second is left to the CLI. The
+socket file counts as down, and a permission error or a full backlog is left
+to the CLI. The connect is non-blocking: a blocking one hangs on a full
+backlog. The
 e2e machines listen on a real socket;
 `a_netbird_without_its_daemon_is_not_asked`,
 `a_netbird_that_died_without_removing_its_socket_is_not_asked`.
