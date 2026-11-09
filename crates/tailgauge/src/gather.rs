@@ -402,6 +402,43 @@ pub fn resolve_options(ui: &Ui) -> core::panel::ResolveOptions {
 mod tests {
     use super::*;
 
+    fn up(ids: &[&str]) -> Vec<core::panel_state::ProviderSummary> {
+        ["tailscale", "netbird"]
+            .iter()
+            .map(|id| core::panel_state::ProviderSummary {
+                id: (*id).into(),
+                running: ids.contains(id),
+                ..Default::default()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_snapshot_older_than_the_last_change_does_not_write_its_order() {
+        let stored = RememberedOrder {
+            observed_ms: 10,
+            order: vec!["netbird".into(), "tailscale".into()],
+        };
+        let (drawn, write) = next_order(&stored, &up(&["netbird"]), 7);
+        assert_eq!(drawn, ["netbird"], "it still draws what it saw");
+        assert_eq!(write, None, "but leaves the newer order alone");
+
+        let (_, write) = next_order(&stored, &up(&["netbird"]), 12);
+        assert_eq!(
+            write,
+            Some(RememberedOrder {
+                observed_ms: 12,
+                order: vec!["netbird".into()],
+            }),
+            "a newer one that sees Tailscale gone records it"
+        );
+        assert_eq!(
+            next_order(&stored, &up(&["netbird", "tailscale"]), 12).1,
+            None,
+            "nothing changed, nothing written"
+        );
+    }
+
     #[test]
     fn the_ui_blob_is_optional_field_by_field() {
         // A frontend that has not learned a field yet must not blank the panel.

@@ -374,11 +374,17 @@ fn a_netbird_that_died_without_removing_its_socket_is_not_asked() {
         "the socket outlives its daemon"
     );
     let started = std::time::Instant::now();
-    machine.panel(r#"{"activeProviderId":"netbird"}"#);
+    let panel = machine.panel(r#"{"activeProviderId":"netbird"}"#);
     assert!(
         !machine.home.join("read").exists(),
         "the CLI was asked about a socket nothing listens on"
     );
+    assert_eq!(
+        panel["header"]["toggleChecked"], false,
+        "and it reads as down"
+    );
+    assert_eq!(panel["bar"]["providerId"], "tailscale");
+    assert_eq!(panel["bar"]["badge"], "", "only Tailscale is up");
     assert!(started.elapsed() < std::time::Duration::from_secs(5));
 }
 
