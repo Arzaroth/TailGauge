@@ -373,6 +373,51 @@ mod tests {
         assert_eq!(tailscale.daemon_socket(|_| None), None);
     }
 
+    #[test]
+    fn the_legacy_daemon_address_counts_but_the_current_one_wins() {
+        let netbird = provider_by_id("netbird").expect("netbird");
+        let legacy = |key: &str| (key == "WT_DAEMON_ADDR").then(|| "unix:///old.sock".to_string());
+        assert_eq!(
+            netbird.daemon_socket(legacy),
+            Some(PathBuf::from("/old.sock"))
+        );
+        let both = |key: &str| {
+            Some(
+                if key == "NB_DAEMON_ADDR" {
+                    "unix:///new.sock"
+                } else {
+                    "unix:///old.sock"
+                }
+                .to_string(),
+            )
+        };
+        assert_eq!(
+            netbird.daemon_socket(both),
+            Some(PathBuf::from("/new.sock"))
+        );
+    }
+
+    #[test]
+    fn an_instance_socket_is_used_only_when_it_is_the_only_one() {
+        let path = |p: &str| PathBuf::from(p);
+        assert_eq!(
+            instance_socket(&[
+                path("/var/run/netbird/main.sock"),
+                path("/var/run/netbird/main.pid")
+            ]),
+            Some(path("/var/run/netbird/main.sock"))
+        );
+        assert_eq!(
+            instance_socket(&[
+                path("/var/run/netbird/a.sock"),
+                path("/var/run/netbird/b.sock")
+            ]),
+            None,
+            "the CLI asks for --daemon-addr rather than guess"
+        );
+        assert_eq!(instance_socket(&[]), None);
+    }
+
     use super::*;
     use crate::panel_state::ProviderState;
 

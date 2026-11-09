@@ -366,6 +366,23 @@ fn a_netbird_without_its_daemon_is_not_asked() {
 }
 
 #[test]
+fn a_netbird_that_died_without_removing_its_socket_is_not_asked() {
+    let mut machine = Machine::with(&["tailscale", "netbird-switching"]);
+    machine.netbird_daemon = None;
+    assert!(
+        machine.home.join("netbird.sock").exists(),
+        "the socket outlives its daemon"
+    );
+    let started = std::time::Instant::now();
+    machine.panel(r#"{"activeProviderId":"netbird"}"#);
+    assert!(
+        !machine.home.join("read").exists(),
+        "the CLI was asked about a socket nothing listens on"
+    );
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+}
+
+#[test]
 fn a_daemon_that_answers_nothing_reads_as_disconnected() {
     let machine = Machine::with(&["tailscale-down"]);
     let panel = machine.panel("{}");

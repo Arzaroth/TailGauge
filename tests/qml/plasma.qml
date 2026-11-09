@@ -89,6 +89,21 @@ Item {
                 check.equal("and the last good panel stays", service.panel.header.title, "workstation")
             }
 
+            // A refresh queued behind the answer that settles a click asks
+            // without the click: the daemon has agreed, so it decides again.
+            settle(panelJson)
+            Registry.clear()
+            service.down()
+            var settling = Registry.find("panel")
+            service.refresh()
+            var agreed = JSON.parse(panelJson)
+            agreed.header.toggleChecked = false
+            settling.answer(JSON.stringify(agreed), "", 0)
+            var queued = Registry.find("panel")
+            check.ok("the queued refresh went out", queued !== null && queued !== settling || (queued && queued.running))
+            if (queued)
+                check.equal("it no longer carries the override", JSON.parse(check.unquote(check.unquote(queued.commandLine.substring("sh -c ".length)).substring(check.unquote(queued.commandLine.substring("sh -c ".length)).indexOf("{") - 1))).active, undefined)
+
             // A switch while a poll is in flight: that answer was asked for the
             // old provider, so it is not drawn, and the new one is asked for as
             // soon as it lands rather than on the next tick.
