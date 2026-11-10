@@ -76,6 +76,62 @@ impl Backend for ZeroTier {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::{ExitStatus, Output};
+
+    /// What `zerotier-cli -j <command>` answers, per command.
+    fn answering(
+        answers: &[(&str, i32, &str, &str)],
+    ) -> impl Fn(&[String]) -> Option<Output> + use<> {
+        let answers: Vec<(String, i32, String, String)> = answers
+            .iter()
+            .map(|(c, code, out, err)| (c.to_string(), *code, out.to_string(), err.to_string()))
+            .collect();
+        move |argv: &[String]| {
+            let command = argv.last()?;
+            let (_, code, out, err) = answers.iter().find(|(c, ..)| c == command)?;
+            Some(Output {
+                status: ExitStatus::from_raw(code << 8),
+                stdout: out.clone().into_bytes(),
+                stderr: err.clone().into_bytes(),
+            })
+        }
+    }
+
+    #[test]
+    fn a_refusal_on_any_of_the_three_calls_is_access_denied() {
+        let refused_late = answering(&[
+            ("info", 0, r#"{"address":"a1b2c3d4e5","online":true}"#, ""),
+            ("listnetworks", 1, "401 listnetworks {}", ""),
+            ("peers", 0, "[]", ""),
+        ]);
+        assert_eq!(
+            ZeroTier.read_status(&refused_late).as_deref(),
+            Some(ACCESS_DENIED)
+        );
+    }
+
+    #[test]
+    fn a_service_that_is_down_is_no_answer_and_a_full_one_is_read() {
+        let down = "Error connecting to the ZeroTier service: connection failed";
+        let stopped = answering(&[
+            ("info", 1, down, ""),
+            ("listnetworks", 1, down, ""),
+            ("peers", 1, down, ""),
+        ]);
+        assert_eq!(ZeroTier.read_status(&stopped), None);
+
+        let up = answering(&[
+            ("info", 0, r#"{"address":"a1b2c3d4e5","online":true}"#, ""),
+            ("listnetworks", 0, "[]", ""),
+            ("peers", 0, "[]", ""),
+        ]);
+        let raw = ZeroTier.read_status(&up).expect("an answer");
+        assert!(matches!(
+            ZeroTier.parse_status(&raw),
+            StatusResult::Ok(ok) if ok.self_name == "a1b2c3d4e5" && !ok.running
+        ));
+    }
 
     #[test]
     fn only_the_read_of_the_token_runs_as_root() {
