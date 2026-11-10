@@ -6,6 +6,7 @@
 //! provider, and no frontend does at all.
 
 use std::path::PathBuf;
+use std::process::Output;
 
 use serde::Serialize;
 
@@ -61,6 +62,16 @@ impl Capabilities {
 /// provider's binary.
 pub trait Backend: Sync + std::fmt::Debug {
     fn status(&self) -> Vec<String>;
+
+    /// What `parse_status` reads, gathered through `run`, which runs an argv
+    /// and hands back what it printed. `None` is a daemon that did not answer.
+    /// One call to `status()` unless the provider needs several.
+    fn read_status(&self, run: &dyn Fn(&[String]) -> Option<Output>) -> Option<String> {
+        let out = run(&self.status())?;
+        out.status
+            .success()
+            .then(|| String::from_utf8_lossy(&out.stdout).trim_end().to_string())
+    }
 
     /// The unix socket the CLI reaches its daemon on, when the binary should
     /// probe it before asking the CLI.

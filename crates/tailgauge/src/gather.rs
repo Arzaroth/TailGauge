@@ -73,8 +73,9 @@ pub fn status_output(provider: &ProviderDescriptor) -> Option<String> {
     if daemon_is_down(provider) {
         return None;
     }
-    let argv = provider.backend.status();
-    proc::output(&argv[0], &argv[1..])
+    provider
+        .backend
+        .read_status(&|argv| proc::run(&argv[0], &argv[1..]).ok())
 }
 
 /// A socket that is missing, or that refuses the connection, has no daemon
