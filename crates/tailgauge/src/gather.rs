@@ -6,8 +6,11 @@
 //! is resolved once rather than three times.
 
 use std::fs;
+use std::io::Read;
 use std::path::PathBuf;
+use std::process::{Command, Output, Stdio};
 use std::thread;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use socket2::{Domain, SockAddr, Socket, Type};
@@ -68,6 +71,11 @@ fn probe() -> Vec<ProviderState> {
         .collect()
 }
 
+/// How long one status read may take. Every panel call waits on every
+/// installed provider, so a daemon that hangs would hold Tailscale's panel as
+/// long as its CLI waits (a frozen zerotier-one: 60 s).
+pub const READ_LIMIT: Duration = Duration::from_secs(5);
+
 /// What the provider's `status` printed, or `None` as for a failed call.
 pub fn status_output(provider: &ProviderDescriptor) -> Option<String> {
     if daemon_is_down(provider) {
@@ -75,7 +83,59 @@ pub fn status_output(provider: &ProviderDescriptor) -> Option<String> {
     }
     provider
         .backend
-        .read_status(&|argv| proc::run(&argv[0], &argv[1..]).ok())
+        .read_status(&|argv| run_bounded(argv, READ_LIMIT))
+}
+
+/// Run `argv` to completion, or kill it at `limit` and answer `None`, as for
+/// a call that failed. Both streams are drained while it runs, so a large
+/// answer cannot fill a pipe and stall it.
+pub fn run_bounded(argv: &[String], limit: Duration) -> Option<Output> {
+    let (program, args) = argv.split_first()?;
+    let mut child = Command::new(program)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .ok()?;
+    let drain = |pipe: Option<Box<dyn Read + Send>>| {
+        thread::spawn(move || {
+            let mut bytes = Vec::new();
+            if let Some(mut pipe) = pipe {
+                let _ = pipe.read_to_end(&mut bytes);
+            }
+            bytes
+        })
+    };
+    let stdout = drain(
+        child
+            .stdout
+            .take()
+            .map(|p| Box::new(p) as Box<dyn Read + Send>),
+    );
+    let stderr = drain(
+        child
+            .stderr
+            .take()
+            .map(|p| Box::new(p) as Box<dyn Read + Send>),
+    );
+    let deadline = Instant::now() + limit;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(10)),
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return None;
+            }
+        }
+    };
+    Some(Output {
+        status,
+        stdout: stdout.join().unwrap_or_default(),
+        stderr: stderr.join().unwrap_or_default(),
+    })
 }
 
 /// A socket that is missing, or that refuses the connection, has no daemon
@@ -205,7 +265,10 @@ fn extras(provider: &'static ProviderDescriptor) -> Extras {
     });
     let networks = thread::spawn(move || {
         networks_argv.map(|argv| {
-            let raw = proc::output(&argv[0], &argv[1..]).unwrap_or_default();
+            let raw = run_bounded(&argv, READ_LIMIT)
+                .filter(|out| out.status.success())
+                .map(|out| String::from_utf8_lossy(&out.stdout).into_owned())
+                .unwrap_or_default();
             provider.backend.parse_networks(&raw)
         })
     });
@@ -460,6 +523,27 @@ pub fn resolve_options(ui: &Ui) -> core::panel::ResolveOptions {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_read_that_hangs_is_cut_off_and_reads_as_failed() {
+        let argv = |parts: &[&str]| parts.iter().map(|p| p.to_string()).collect::<Vec<_>>();
+        let started = Instant::now();
+        assert!(run_bounded(&argv(&["sleep", "5"]), Duration::from_millis(200)).is_none());
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "killed at the limit"
+        );
+
+        let big = run_bounded(
+            &argv(&["sh", "-c", "head -c 300000 /dev/zero; echo done >&2"]),
+            Duration::from_secs(5),
+        )
+        .expect("a read that finishes");
+        assert!(big.status.success());
+        assert_eq!(big.stdout.len(), 300_000, "a full pipe does not stall it");
+        assert_eq!(big.stderr, b"done\n");
+        assert!(run_bounded(&[], Duration::from_secs(1)).is_none());
+    }
 
     fn up(ids: &[&str]) -> Vec<core::panel_state::ProviderSummary> {
         ["tailscale", "netbird"]

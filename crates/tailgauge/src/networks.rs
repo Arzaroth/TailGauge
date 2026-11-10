@@ -12,8 +12,6 @@ use serde::{Deserialize, Serialize};
 use tailgauge_core::Network;
 use tailgauge_core::providers::ProviderDescriptor;
 
-use selvedge::proc;
-
 /// A network this user has joined. `wanted` holds until the user leaves it on
 /// its own, so turning the switch on brings back what turning it off took
 /// away, and not what the user left by hand.
@@ -141,8 +139,12 @@ pub fn to_rejoin<'a>(known: &'a [Known], joined: &[Network]) -> Vec<&'a Known> {
 /// answer.
 pub fn joined(provider: &ProviderDescriptor) -> Option<Vec<Network>> {
     let argv = provider.backend.networks()?;
-    let raw = proc::output(&argv[0], &argv[1..])?;
-    Some(provider.backend.parse_networks(&raw))
+    let out = crate::gather::run_bounded(&argv, crate::gather::READ_LIMIT)?;
+    out.status.success().then(|| {
+        provider
+            .backend
+            .parse_networks(&String::from_utf8_lossy(&out.stdout))
+    })
 }
 
 #[cfg(test)]
