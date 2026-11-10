@@ -237,7 +237,7 @@ Item {
     if (_ctl(selectNetworkProc, "select-network", argv)) selectingNetworkId = id
   }
 
-  function authorizeTailscaleOperator() {
+  function authorizeOperator() {
     if (!installed) return
     if (_ctl(operatorProc, "authorize")) actionStatus = "Authorizing the operator…"
   }

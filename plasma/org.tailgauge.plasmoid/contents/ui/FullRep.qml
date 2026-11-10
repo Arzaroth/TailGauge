@@ -203,7 +203,7 @@ Item {
             service.toggleTailscale()
             break
         case "authorize":
-            service.authorizeTailscaleOperator()
+            service.authorizeOperator()
             break
         case "switchAccount":
             service.switchAccount(row.payload.id)

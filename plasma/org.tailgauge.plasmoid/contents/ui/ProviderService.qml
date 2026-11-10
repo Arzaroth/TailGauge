@@ -327,7 +327,7 @@ Item {
         if (_ctl("network", "select-network", argv)) selectingNetworkId = id
     }
 
-    function authorizeTailscaleOperator() {
+    function authorizeOperator() {
         if (!installed) return
         if (_ctl("operator", "authorize")) actionStatus = "Authorizing the operator…"
     }

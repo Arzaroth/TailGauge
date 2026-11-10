@@ -183,7 +183,7 @@ Panel {
       tailscale.toggleTailscale()
       break
     case "authorize":
-      tailscale.authorizeTailscaleOperator()
+      tailscale.authorizeOperator()
       break
     case "switchAccount":
       tailscale.switchAccount(row.payload.id)

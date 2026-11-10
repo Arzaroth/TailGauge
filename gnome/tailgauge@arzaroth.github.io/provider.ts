@@ -353,7 +353,7 @@ export const ProviderService = GObject.registerClass({
             this.selectingNetworkId = id;
     }
 
-    authorizeTailscaleOperator(): void {
+    authorizeOperator(): void {
         if (!this.installed)
             return;
         if (this._ctl('operator', 'authorize'))
