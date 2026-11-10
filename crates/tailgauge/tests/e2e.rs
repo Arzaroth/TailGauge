@@ -126,7 +126,7 @@ impl Machine {
                          listnetworks) sep=''; printf '['\n\
                              for n in \"$HOME\"/zt-net-*.json; do id=${{n##*/zt-net-}}; id=${{id%.json}}\n\
                              [ -e \"$HOME/zt-joined-$id\" ] || continue\n\
-                             printf '%s' \"$sep\"; /bin/cat \"$n\"; sep=','; done; printf ']' ;;\n\
+                             printf '%s' \"$sep\"; /bin/cat \"$n\"; sep=','; done; printf ']'; : > \"$HOME/read\" ;;\n\
                          join) : > \"$HOME/zt-joined-$2\"; echo '200 join OK' ;;\n\
                          leave) /bin/rm -f \"$HOME/zt-joined-$2\"; echo '200 leave OK' ;;\n\
                          *) exit 1 ;;\nesac\n",
@@ -913,5 +913,60 @@ fn the_zerotier_switch_says_why_it_has_nothing_to_join() {
     assert!(
         stderr.contains("there is no network to join yet"),
         "{stderr}"
+    );
+}
+
+#[test]
+fn watch_wakes_when_a_zerotier_network_is_left_while_another_stays_up() {
+    let machine = Machine::with(&["zerotier"]);
+    let mut watch = machine
+        .command(&["watch", "20"])
+        .spawn()
+        .expect("the watcher runs");
+    let started = std::time::Instant::now();
+    while !machine.home.join("read").exists() {
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(10),
+            "the watcher never read ZeroTier's networks"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    std::fs::remove_file(machine.home.join("zt-joined-e0edd2bebdfce22e")).expect("office is left");
+
+    let started = std::time::Instant::now();
+    let code = loop {
+        if let Some(status) = watch.try_wait().expect("the watcher is waited on") {
+            break status.code();
+        }
+        if started.elapsed() > std::time::Duration::from_secs(10) {
+            let _ = watch.kill();
+            panic!("leaving one network while homelab stayed up did not wake the watcher");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    };
+    assert_eq!(code, Some(0));
+}
+
+#[test]
+fn the_last_zerotier_network_left_by_hand_keeps_its_row_to_join_it_back() {
+    let machine = Machine::with(&["zerotier"]);
+    machine.panel(ZEROTIER);
+    for id in ["e0edd2bebde885d3", "e0edd2bebdfce22e"] {
+        let (code, _, stderr) = machine.run(&[
+            "ctl",
+            "--provider",
+            "zerotier",
+            "select-network",
+            id,
+            "--leave",
+        ]);
+        assert_eq!(code, 0, "{stderr}");
+    }
+    let panel = machine.panel(ZEROTIER);
+    assert_eq!(panel["header"]["toggleChecked"], false);
+    assert_eq!(section(&panel, "networks")["visible"], true);
+    assert_eq!(
+        rows(&panel, "networks"),
+        [("homelab", "Join"), ("office", "Join")]
     );
 }
