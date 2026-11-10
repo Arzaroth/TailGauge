@@ -171,8 +171,10 @@ captured rather than calling it unchanged.
 network status word (`network_state` names the known ones), the wording of
 the CLI's refusals (`is_access_denied`), and `join` / `leave`. **Noise** - the
 controller API, Central, the Windows and mobile clients. Re-run
-`tests/zerotier/record.sh` against the newest `zerotier/zerotier` image tag
-and diff the captures it writes.
+`tests/zerotier/record.sh --image <tag>` with the newest tag on Docker Hub
+(`zerotier/zerotier`, the release number, never `latest`) and diff the
+captures it writes; when they still parse, bump the script's default `tag`
+to it.
 
 ## Desktop shells
 

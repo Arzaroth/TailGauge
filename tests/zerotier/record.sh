@@ -3,8 +3,10 @@
 # read, from two real ZeroTier nodes in containers. No ZeroTier account: one
 # node's built-in network controller hosts the networks the other joins.
 #
-#   tests/zerotier/record.sh            record into the core's fixtures
-#   tests/zerotier/record.sh --keep     and leave the containers running
+#   tests/zerotier/record.sh                 record into the core's fixtures
+#   tests/zerotier/record.sh --keep          and leave the containers running
+#   tests/zerotier/record.sh --image TAG     record another zerotier/zerotier tag
+#                                            (default 1.14.2, the captured one)
 #
 # Needs docker (rootless works) with /dev/net/tun, and python3. The member's
 # public address, which ZeroTier reports in `info`, is replaced with a
@@ -15,12 +17,20 @@ set -euo pipefail
 
 here="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 fixtures="$here/../../crates/tailgauge-core/tests/fixtures"
-image="zerotier/zerotier:1.14.2"
+tag="1.14.2"
 net="tailgauge-zt"
 controller="tailgauge-zt-controller"
 member="tailgauge-zt-member"
 keep=false
-[[ ${1:-} == --keep ]] && keep=true
+while (($#)); do
+  case $1 in
+    --keep) keep=true ;;
+    --image) tag=${2:?--image needs a tag}; shift ;;
+    *) echo "record: unknown argument $1" >&2; exit 64 ;;
+  esac
+  shift
+done
+image="zerotier/zerotier:$tag"
 
 raw_info=$(mktemp)
 teardown() {
