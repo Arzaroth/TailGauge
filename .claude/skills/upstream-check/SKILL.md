@@ -13,7 +13,8 @@ they accept. Nothing tells us when any of them moves except this check.
 | --- | --- | --- |
 | [basecamp/omarchy](https://github.com/basecamp/omarchy) (MIT, default branch `quattro`) | the parsers in `crates/tailgauge-core` from their `Model.js` (ported through a TypeScript `shared/model.ts`, now Rust), Taildrop send and receive (`crates/tailgauge/src/send.rs`, `receive.rs`) from their `omarchy-tailscale-*` scripts, and `omarchy/arzaroth.tailgauge` rides on the shell's own QML components | Their widget grows a feature ours lacks or fixes a parse bug still in ours; the shell APIs our widget imports move, and the project is `4.x.alpha` with no stability promise |
 | [tailscale/tailscale](https://github.com/tailscale/tailscale) | Nothing copied. `tailgauge-core` parses `status --json`, `exit-node list`, `switch --list --json`, and the binary drives `file get` and `debug watch-ipn` | A field is renamed or dropped, the exit-node table changes columns, a flag moves. Every frontend goes blank at once and CI cannot see it |
-| [netbirdio/netbird](https://github.com/netbirdio/netbird) | Nothing copied. `crates/tailgauge-core/src/netbird.rs` parses `status --json` and the human-readable `networks list`, and `providers.rs` drives `up`, `down` and `networks select` / `deselect` | The same as Tailscale, with a faster release train (several minors a month) and a text table for networks |
+| [netbirdio/netbird](https://github.com/netbirdio/netbird) | Nothing copied. `crates/tailgauge-core/src/netbird.rs` parses `status --json` and the human-readable `networks list`, and `providers/netbird.rs` drives `up`, `down` and `networks select` / `deselect` | The same as Tailscale, with a faster release train (several minors a month) and a text table for networks |
+| [zerotier/ZeroTierOne](https://github.com/zerotier/ZeroTierOne) | Nothing copied. `crates/tailgauge-core/src/zerotier.rs` parses `zerotier-cli -j info`, `-j listnetworks` and `-j peers`, and `providers/zerotier.rs` drives `join` / `leave` | The JSON field names it reads, the network status words, the CLI's refusal messages (`authtoken.secret ... not found or readable`, a `401` line), and where a user's token copy is looked for (`~/.zeroTierOneAuthToken`) |
 | [GNOME Shell](https://gitlab.gnome.org/GNOME/gnome-shell) and [Plasma](https://invent.kde.org/plasma/plasma-workspace) | Nothing copied. The extension's `metadata.json` lists every `shell-version` it accepts; the plasmoid declares `X-Plasma-API-Minimum-Version` | A new GNOME major is refused outright until it is listed; a Plasma major can drop QML API the plasmoid imports |
 | [Arzaroth/selvedge](https://github.com/Arzaroth/selvedge) | The updater, pinned by tag in the workspace `Cargo.toml` | A fix to fetching or installing lands there and never reaches us until the pin moves |
 | Peer frontends: [tsui](https://github.com/neuralinkcorp/tsui), [trayscale](https://github.com/DeedleFake/trayscale), [KTailctl](https://github.com/f-koehler/KTailctl) | The TUI's layout and keys are tsui's (`brain/features/tui.md`); nothing from the others | Nothing breaks. They fix bugs and grow rows we might want, and tsui's are often ours too |
@@ -157,11 +158,21 @@ done
 `iceCandidateEndpoint.remote`, `transferReceived`, `transferSent`), the
 daemon states `netbird.rs` reads as "needs login", the layout of
 `networks list` (the `- ID:` / `Network:` / `Domains:` blocks), and any flag
-`providers.rs` passes. **Noise** - the management server, relay, signal, the
+`providers/netbird.rs` passes. **Noise** - the management server, relay, signal, the
 proxy and the GUI. Check the live CLI against
 `tests/fixtures/netbird-status.json` and `netbird-networks.txt`;
 `networks list` needs a connected client, so say so when it could not be
 captured rather than calling it unchanged.
+
+**ZeroTier.** Signal: a change to the `-j` output `zerotier.rs` reads (`info`:
+`address`, `online`; `listnetworks`: `nwid`, `name`, `status`,
+`assignedAddresses`, `authenticationURL`; `peers`: `address`, `role`,
+`latency`, `paths[].active` / `expired` / `preferred` / `address`), a new
+network status word (`network_state` names the known ones), the wording of
+the CLI's refusals (`is_access_denied`), and `join` / `leave`. **Noise** - the
+controller API, Central, the Windows and mobile clients. Re-run
+`tests/zerotier/record.sh` against the newest `zerotier/zerotier` image tag
+and diff the captures it writes.
 
 ## Desktop shells
 
