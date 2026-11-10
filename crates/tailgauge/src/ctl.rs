@@ -391,8 +391,19 @@ pub fn select_network(provider: &ProviderDescriptor, network_id: &str, join: boo
     if proc::run_quiet(&argv[0], &argv[1..]) {
         // What the user joins or leaves by hand is what the switch brings
         // back, or leaves alone, the next time it comes on.
-        if provider.backend.switch().by_networks() {
-            let _ = crate::networks::want(provider, network_id, join);
+        if provider.backend.switch().by_networks()
+            && let Err(e) = crate::networks::want(provider, network_id, join)
+        {
+            let done = if join { "Joined" } else { "Left" };
+            announce(
+                "critical",
+                &format!("{done} {network_id}, but could not remember it"),
+                "The switch may not bring it back as you left it",
+            );
+            return Outcome::Failed(format!(
+                "{} {network_id}, but could not remember it ({e})",
+                done.to_lowercase()
+            ));
         }
         return Outcome::Ok;
     }
