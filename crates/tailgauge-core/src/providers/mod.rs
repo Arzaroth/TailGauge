@@ -315,8 +315,21 @@ pub fn provider_ready(state: &PanelState) -> bool {
     active_provider(state).is_some_and(|p| p.supported)
 }
 
+/// What the provider can do at all, narrowed by what its daemon reports this
+/// connection allows. A self-hosted control server (Headscale) runs the same
+/// CLI with no Mullvad behind it, and an admin can switch Taildrop off: both
+/// reach the panel here, the same way a provider without the feature does.
 pub fn provider_supports(state: &PanelState, capability: Capability) -> bool {
-    active_provider(state).is_some_and(|p| p.capabilities.has(capability))
+    active_provider(state)
+        .is_some_and(|p| p.capabilities.has(capability) && reported(state, capability))
+}
+
+fn reported(state: &PanelState, capability: Capability) -> bool {
+    match capability {
+        Capability::FileSend => state.file_sharing,
+        Capability::Mullvad => !state.mullvad_regions.is_empty(),
+        _ => true,
+    }
 }
 
 /// The name the panel calls the thing it is driving. Falls back to the product
@@ -500,7 +513,10 @@ mod tests {
 
     #[test]
     fn capabilities_follow_the_provider_being_driven() {
-        let tailscale = detected(&["tailscale"]);
+        let tailscale = PanelState {
+            mullvad_regions: vec![crate::peer::Peer::default()],
+            ..detected(&["tailscale"])
+        };
         assert!(provider_supports(&tailscale, Capability::Mullvad));
         assert!(!provider_supports(&tailscale, Capability::Networks));
 
@@ -514,6 +530,30 @@ mod tests {
             &PanelState::default(),
             Capability::Mullvad
         ));
+    }
+
+    #[test]
+    fn what_the_daemon_reports_narrows_what_the_provider_can_do() {
+        let tailscale = detected(&["tailscale"]);
+        assert!(!provider_supports(&tailscale, Capability::Mullvad));
+        assert!(!provider_supports(&tailscale, Capability::FileSend));
+        assert!(provider_supports(&tailscale, Capability::ExitNodes));
+
+        let granted = PanelState {
+            file_sharing: true,
+            ..detected(&["tailscale"])
+        };
+        assert!(provider_supports(&granted, Capability::FileSend));
+
+        let netbird = PanelState {
+            active_provider_id: "netbird".into(),
+            file_sharing: true,
+            ..detected(&["netbird"])
+        };
+        assert!(
+            !provider_supports(&netbird, Capability::FileSend),
+            "a report never grants what the provider cannot do"
+        );
     }
 
     #[test]

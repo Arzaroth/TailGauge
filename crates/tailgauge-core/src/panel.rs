@@ -194,7 +194,7 @@ pub fn can_send_files(state: &PanelState, peer: &Peer) -> bool {
     if !providers::provider_supports(state, Capability::FileSend) {
         return false;
     }
-    if !state.file_sharing || !state.running || !peer.online {
+    if !state.running || !peer.online {
         return false;
     }
     // The KDE Store ships a kpackage and EGO ships an extension zip; neither

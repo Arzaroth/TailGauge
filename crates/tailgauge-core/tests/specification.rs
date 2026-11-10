@@ -1530,10 +1530,12 @@ fn capabilities_are_read_from_the_active_provider_not_its_name() {
     use core::providers::Capability;
     let ts = PanelState {
         providers: Some(detected(&["tailscale"])),
+        mullvad_regions: MULLVAD_REGIONS.clone(),
         ..PanelState::default()
     };
     let nb = PanelState {
         providers: Some(detected(&["netbird"])),
+        mullvad_regions: MULLVAD_REGIONS.clone(),
         ..PanelState::default()
     };
     assert!(core::providers::provider_supports(&ts, Capability::Mullvad));
