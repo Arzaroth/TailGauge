@@ -589,16 +589,37 @@ mod tests {
             "a spent budget starts nothing"
         );
 
+        let pid_file = std::env::temp_dir().join(format!("tg-bounded-{}", std::process::id()));
         let started = Instant::now();
         assert!(
             run_bounded(
-                &argv(&["sh", "-c", "sleep 30 & echo early"]),
+                &argv(&[
+                    "sh",
+                    "-c",
+                    &format!("sleep 30 & echo $! > '{}'; echo early", pid_file.display()),
+                ]),
                 Duration::from_millis(300)
             )
             .is_none(),
             "a descendant holding the pipe does not hold the read"
         );
         assert!(started.elapsed() < Duration::from_secs(2));
+        let descendant: libc::pid_t = std::fs::read_to_string(&pid_file)
+            .expect("the descendant's pid")
+            .trim()
+            .parse()
+            .expect("a pid");
+        let _ = std::fs::remove_file(&pid_file);
+        // Gone once init has reaped it: kill(pid, 0) then fails with ESRCH.
+        let gone = (0..100).any(|_| {
+            // SAFETY: signal 0 only asks whether the process exists.
+            let alive = unsafe { libc::kill(descendant, 0) } == 0;
+            if alive {
+                thread::sleep(Duration::from_millis(20));
+            }
+            !alive
+        });
+        assert!(gone, "the descendant outlived the read it held");
     }
 
     fn up(ids: &[&str]) -> Vec<core::panel_state::ProviderSummary> {
