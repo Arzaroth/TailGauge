@@ -176,7 +176,7 @@ fn fingerprint(providers: &[&ProviderDescriptor]) -> Vec<Option<String>> {
                 return tailscale::status().as_ref().map(fingerprint_of);
             }
             let raw = crate::gather::status_output(provider)?;
-            Some(fingerprint_of_status(&provider.parse_status(&raw)))
+            Some(fingerprint_of_status(&provider.backend.parse_status(&raw)))
         })
         .collect()
 }
@@ -253,8 +253,16 @@ mod tests {
         };
         let netbird = tailgauge_core::providers::provider_by_id("netbird").expect("netbird");
         assert_ne!(
-            fingerprint_of_status(&netbird.parse_status(&fixture("netbird-status-idle.json"))),
-            fingerprint_of_status(&netbird.parse_status(&fixture("netbird-status.json")))
+            fingerprint_of_status(
+                &netbird
+                    .backend
+                    .parse_status(&fixture("netbird-status-idle.json"))
+            ),
+            fingerprint_of_status(
+                &netbird
+                    .backend
+                    .parse_status(&fixture("netbird-status.json"))
+            )
         );
     }
 

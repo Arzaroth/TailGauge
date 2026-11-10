@@ -1582,36 +1582,40 @@ fn a_provider_without_a_feature_never_shows_the_section_that_needs_it() {
 fn every_provider_the_registry_calls_drivable_has_what_driving_needs() {
     for provider in PROVIDERS.iter().filter(|p| p.supported) {
         assert!(
-            !provider.status().is_empty(),
+            !provider.backend.status().is_empty(),
             "{} has no status command",
             provider.id
         );
         assert!(
-            !provider.up().is_empty(),
+            !provider.backend.up().is_empty(),
             "{} has no up command",
             provider.id
         );
         assert!(
-            !provider.down().is_empty(),
+            !provider.backend.down().is_empty(),
             "{} has no down command",
             provider.id
         );
         assert_eq!(
-            provider.status()[0],
+            provider.backend.status()[0],
             provider.cli,
             "{} polls a binary other than the one detection probes",
             provider.id
         );
         if provider.capabilities.exit_nodes {
-            assert!(provider.exit_node_list().is_some(), "{}", provider.id);
+            assert!(
+                provider.backend.exit_node_list().is_some(),
+                "{}",
+                provider.id
+            );
         }
         if provider.capabilities.accounts {
-            assert!(provider.accounts().is_some(), "{}", provider.id);
+            assert!(provider.backend.accounts().is_some(), "{}", provider.id);
         }
         if provider.capabilities.networks {
-            assert!(provider.networks().is_some(), "{}", provider.id);
+            assert!(provider.backend.networks().is_some(), "{}", provider.id);
             assert!(
-                provider.select_network("x", true).is_some(),
+                provider.backend.select_network("x", true).is_some(),
                 "{}",
                 provider.id
             );
@@ -1719,17 +1723,23 @@ fn the_panel_names_the_provider_it_is_driving() {
 fn the_argv_comes_from_the_registry_not_the_caller() {
     let tailscale = core::providers::provider_by_id("tailscale").expect("tailscale");
     let netbird = core::providers::provider_by_id("netbird").expect("netbird");
-    assert_eq!(tailscale.status(), ["tailscale", "status", "--json"]);
-    assert_eq!(netbird.status(), ["netbird", "status", "--json"]);
     assert_eq!(
-        tailscale.switch_account("abc").expect("switch"),
+        tailscale.backend.status(),
+        ["tailscale", "status", "--json"]
+    );
+    assert_eq!(netbird.backend.status(), ["netbird", "status", "--json"]);
+    assert_eq!(
+        tailscale.backend.switch_account("abc").expect("switch"),
         ["tailscale", "switch", "abc"]
     );
     assert_eq!(
-        netbird.select_network("office", true).expect("select"),
+        netbird
+            .backend
+            .select_network("office", true)
+            .expect("select"),
         ["netbird", "networks", "select", "office"]
     );
-    assert!(netbird.switch_account("abc").is_none());
+    assert!(netbird.backend.switch_account("abc").is_none());
 }
 
 #[test]

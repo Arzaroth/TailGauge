@@ -62,7 +62,7 @@ fn announce(urgency: &str, summary: &str, body: &str) {
 /// The provider's own status, through whichever parser it needs.
 fn read(provider: &ProviderDescriptor) -> core::StatusResult {
     let raw = crate::gather::status_output(provider).unwrap_or_default();
-    provider.parse_status(&raw)
+    provider.backend.parse_status(&raw)
 }
 
 pub fn status(provider: &ProviderDescriptor) -> Outcome {
@@ -110,7 +110,7 @@ fn connected_line(self_name: &str, self_ip: &str) -> String {
 }
 
 pub fn up(provider: &ProviderDescriptor) -> Outcome {
-    let argv = provider.up();
+    let argv = provider.backend.up();
     if attended() {
         return match Command::new(&argv[0]).args(&argv[1..]).status() {
             Ok(s) if s.success() => Outcome::Ok,
@@ -121,7 +121,7 @@ pub fn up(provider: &ProviderDescriptor) -> Outcome {
     // Bound to a key there is no terminal for `tailscale up` to print its
     // login URL on, so it is scraped out of the stream the way the panels do.
     // `up` waits for the login to finish, so the page opens while it waits.
-    run_opening_login(&argv, provider.unattended_up_env(), |url| {
+    run_opening_login(&argv, provider.backend.unattended_up_env(), |url| {
         announce(
             "normal",
             "Authorize this device",
@@ -197,7 +197,7 @@ fn login_url(line: &str) -> Option<String> {
 }
 
 pub fn down(provider: &ProviderDescriptor) -> Outcome {
-    let argv = provider.down();
+    let argv = provider.backend.down();
     if proc::run_quiet(&argv[0], &argv[1..]) {
         return Outcome::Ok;
     }
@@ -256,7 +256,7 @@ pub fn exit_node(provider: &ProviderDescriptor, target: Option<&str>) -> Outcome
         return Outcome::Ok;
     };
 
-    let Some(argv) = provider.set_exit_node(requested_node(target)) else {
+    let Some(argv) = provider.backend.set_exit_node(requested_node(target)) else {
         return Outcome::Failed(format!("{} cannot set an exit node", provider.label));
     };
     if proc::run_quiet(&argv[0], &argv[1..]) {
@@ -276,7 +276,7 @@ fn requested_node(target: &str) -> &str {
 }
 
 pub fn switch_account(provider: &ProviderDescriptor, account_id: &str) -> Outcome {
-    let Some(argv) = provider.switch_account(account_id) else {
+    let Some(argv) = provider.backend.switch_account(account_id) else {
         return Outcome::Failed(format!("{} has no profiles to switch", provider.label));
     };
     if proc::run_quiet(&argv[0], &argv[1..]) {
@@ -287,7 +287,7 @@ pub fn switch_account(provider: &ProviderDescriptor, account_id: &str) -> Outcom
 }
 
 pub fn select_network(provider: &ProviderDescriptor, network_id: &str, join: bool) -> Outcome {
-    let Some(argv) = provider.select_network(network_id, join) else {
+    let Some(argv) = provider.backend.select_network(network_id, join) else {
         return Outcome::Failed(format!("{} has no networks", provider.label));
     };
     if proc::run_quiet(&argv[0], &argv[1..]) {
@@ -335,7 +335,7 @@ fn authorize_command(cli: &str) -> String {
 }
 
 pub fn exit_nodes(provider: &ProviderDescriptor) -> Outcome {
-    let Some(argv) = provider.exit_node_list() else {
+    let Some(argv) = provider.backend.exit_node_list() else {
         return Outcome::Failed(format!("{} has no exit nodes", provider.label));
     };
     match proc::run(&argv[0], &argv[1..]) {

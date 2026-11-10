@@ -73,7 +73,7 @@ pub fn status_output(provider: &ProviderDescriptor) -> Option<String> {
     if daemon_is_down(provider) {
         return None;
     }
-    let argv = provider.status();
+    let argv = provider.backend.status();
     proc::output(&argv[0], &argv[1..])
 }
 
@@ -85,7 +85,7 @@ fn daemon_is_down(provider: &ProviderDescriptor) -> bool {
 }
 
 fn daemon_is_down_in(provider: &ProviderDescriptor, env: impl Fn(&str) -> Option<String>) -> bool {
-    let Some(configured) = provider.daemon_socket(env) else {
+    let Some(configured) = provider.backend.daemon_socket(&env) else {
         return false;
     };
     // The CLI reads the address as a URL; one with escapes is the CLI's to
@@ -97,6 +97,7 @@ fn daemon_is_down_in(provider: &ProviderDescriptor, env: impl Fn(&str) -> Option
         configured
     } else {
         provider
+            .backend
             .instance_socket_dir()
             .and_then(|dir| fs::read_dir(dir).ok())
             .map(|entries| {
@@ -143,7 +144,7 @@ fn statuses(installed: &[&'static ProviderDescriptor]) -> Vec<(&'static str, cor
         .map(|&provider| {
             thread::spawn(move || {
                 let raw = status_output(provider).unwrap_or_default();
-                (provider.id, provider.parse_status(&raw))
+                (provider.id, provider.backend.parse_status(&raw))
             })
         })
         .collect();
@@ -165,17 +166,17 @@ fn extras(provider: &'static ProviderDescriptor) -> Extras {
     let exit_nodes = provider
         .capabilities
         .exit_nodes
-        .then(|| provider.exit_node_list())
+        .then(|| provider.backend.exit_node_list())
         .flatten();
     let accounts_argv = provider
         .capabilities
         .accounts
-        .then(|| provider.accounts())
+        .then(|| provider.backend.accounts())
         .flatten();
     let networks_argv = provider
         .capabilities
         .networks
-        .then(|| provider.networks())
+        .then(|| provider.backend.networks())
         .flatten();
 
     let mullvad = thread::spawn(move || {
