@@ -15,6 +15,7 @@ use crate::status::StatusResult;
 
 mod netbird;
 mod tailscale;
+mod zerotier;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -87,7 +88,9 @@ pub trait Backend: Sync + std::fmt::Debug {
     /// What `status()` printed, through the parser for this provider's shape.
     fn parse_status(&self, raw: &str) -> StatusResult;
 
-    fn up(&self) -> Vec<String>;
+    /// `None` for a provider with no connection of its own to bring up,
+    /// whose switch joins and leaves its networks instead.
+    fn up(&self) -> Option<Vec<String>>;
 
     /// What `up` is run with when TailGauge opens the login page itself, so
     /// the CLI does not open it too.
@@ -95,7 +98,7 @@ pub trait Backend: Sync + std::fmt::Debug {
         &[]
     }
 
-    fn down(&self) -> Vec<String>;
+    fn down(&self) -> Option<Vec<String>>;
 
     fn exit_node_list(&self) -> Option<Vec<String>> {
         None
@@ -107,6 +110,11 @@ pub trait Backend: Sync + std::fmt::Debug {
 
     fn networks(&self) -> Option<Vec<String>> {
         None
+    }
+
+    /// What `networks()` printed.
+    fn parse_networks(&self, _raw: &str) -> Vec<crate::netbird::Network> {
+        Vec::new()
     }
 
     /// A stream that prints a line per daemon notification, for a provider
@@ -221,6 +229,26 @@ pub const PROVIDERS: &[ProviderDescriptor] = &[
             live_watch: false,
         },
         backend: &netbird::NetBird,
+    },
+    ProviderDescriptor {
+        id: "zerotier",
+        label: "ZeroTier",
+        cli: "zerotier-cli",
+        supported: true,
+        icon: "network-wired-symbolic",
+        glyph: "\u{f0c26}",
+        capabilities: Capabilities {
+            exit_nodes: false,
+            mullvad: false,
+            file_send: false,
+            accounts: false,
+            networks: true,
+            // A preferred path is direct; without one the peer is reached
+            // through a root.
+            connection_quality: true,
+            live_watch: false,
+        },
+        backend: &zerotier::ZeroTier,
     },
 ];
 
@@ -472,7 +500,7 @@ mod tests {
         // `which` reports misses on stderr, and a shell that prints its own
         // diagnostic on stdout must not read as a provider.
         let probe = parse_provider_probe(
-            "/usr/bin/tailscale\nwhich: no netbird in (/usr/bin)\n  /opt/bin/netbird  \n",
+            "/usr/bin/tailscale\nwhich: no netbird in (/usr/bin)\n  /opt/bin/netbird  \n/usr/sbin/zerotier-cli\n",
         );
         assert_eq!(probe.len(), PROVIDERS.len());
         assert!(probe.iter().all(|p| p.installed));
@@ -588,7 +616,7 @@ mod tests {
     fn an_empty_panel_still_says_what_it_is() {
         assert_eq!(provider_label(&PanelState::default()), "TailGauge");
         assert_eq!(provider_label(&detected(&["netbird"])), "NetBird");
-        assert_eq!(provider_label_list(), "Tailscale, NetBird");
+        assert_eq!(provider_label_list(), "Tailscale, NetBird, ZeroTier");
     }
 
     #[test]
@@ -629,7 +657,7 @@ mod tests {
     #[test]
     fn only_tailgauge_opens_the_login_page() {
         let netbird = provider_by_id("netbird").unwrap();
-        assert_eq!(netbird.backend.up(), ["netbird", "up"]);
+        assert_eq!(netbird.backend.up().unwrap(), ["netbird", "up"]);
         assert_eq!(
             netbird.backend.unattended_up_env(),
             [("NB_NO_BROWSER", "true")]

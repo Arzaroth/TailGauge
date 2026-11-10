@@ -1190,7 +1190,7 @@ fn every_user_visible_string_arrives_finished() {
     let panel = resolve(&bare);
     assert_eq!(
         panel.status.text,
-        "No supported VPN CLI on PATH. Looked for Tailscale, NetBird."
+        "No supported VPN CLI on PATH. Looked for Tailscale, NetBird, ZeroTier."
     );
     assert!(
         !panel.header.toggle_hint.is_empty(),
@@ -1450,10 +1450,10 @@ fn the_switch_is_disabled_only_when_there_is_no_cli_to_drive() {
 #[test]
 fn the_registry_names_every_provider_and_the_cli_that_proves_it() {
     let ids: Vec<&str> = PROVIDERS.iter().map(|p| p.id).collect();
-    assert_eq!(ids, ["tailscale", "netbird"]);
+    assert_eq!(ids, ["tailscale", "netbird", "zerotier"]);
     assert_eq!(
         core::providers::provider_cli_names(),
-        ["tailscale", "netbird"]
+        ["tailscale", "netbird", "zerotier-cli"]
     );
     assert_eq!(
         core::providers::provider_by_id("netbird")
@@ -1614,16 +1614,18 @@ fn every_provider_the_registry_calls_drivable_has_what_driving_needs() {
             "{} has no status command",
             provider.id
         );
-        assert!(
-            !provider.backend.up().is_empty(),
-            "{} has no up command",
-            provider.id
-        );
-        assert!(
-            !provider.backend.down().is_empty(),
-            "{} has no down command",
-            provider.id
-        );
+        match (provider.backend.up(), provider.backend.down()) {
+            (Some(up), Some(down)) => {
+                assert_eq!(up[0], provider.cli, "{}", provider.id);
+                assert_eq!(down[0], provider.cli, "{}", provider.id);
+            }
+            (None, None) => assert!(
+                provider.capabilities.networks,
+                "{} has no switch and no networks to switch it by",
+                provider.id
+            ),
+            _ => panic!("{} can turn only one way", provider.id),
+        }
         assert_eq!(
             provider.backend.status()[0],
             provider.cli,
@@ -1698,8 +1700,13 @@ fn the_probe_reads_which_stdout_not_its_exit_code() {
             .map(|p| (p.id, p.installed))
             .collect()
     };
-    let named =
-        |ts: bool, nb: bool| vec![("tailscale".to_string(), ts), ("netbird".to_string(), nb)];
+    let named = |ts: bool, nb: bool| {
+        vec![
+            ("tailscale".to_string(), ts),
+            ("netbird".to_string(), nb),
+            ("zerotier".to_string(), false),
+        ]
+    };
 
     assert_eq!(
         probe("/usr/bin/tailscale\n/usr/bin/netbird\n"),
@@ -2265,7 +2272,7 @@ fn the_tooltip_falls_back_rather_than_lying_about_what_it_knows() {
     let nothing = core::bar::bar_tooltip(&PanelState::default());
     assert_eq!(
         nothing,
-        ["No supported VPN CLI on PATH. Looked for Tailscale, NetBird."]
+        ["No supported VPN CLI on PATH. Looked for Tailscale, NetBird, ZeroTier."]
     );
 
     let unreported = PanelState {
@@ -2747,7 +2754,7 @@ fn login_plan_turns_on_whatever_provider_it_was_handed() {
 #[test]
 fn the_switcher_never_offers_a_provider_it_cannot_drive() {
     let both = PanelState {
-        providers: Some(detected(&["tailscale", "netbird"])),
+        providers: Some(detected(&["tailscale", "netbird", "zerotier"])),
         ..PanelState::default()
     };
     assert_eq!(

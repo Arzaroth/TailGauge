@@ -110,7 +110,9 @@ fn connected_line(self_name: &str, self_ip: &str) -> String {
 }
 
 pub fn up(provider: &ProviderDescriptor) -> Outcome {
-    let argv = provider.backend.up();
+    let Some(argv) = provider.backend.up() else {
+        return rejoin(provider);
+    };
     if attended() {
         return match Command::new(&argv[0]).args(&argv[1..]).status() {
             Ok(s) if s.success() => Outcome::Ok,
@@ -197,7 +199,9 @@ fn login_url(line: &str) -> Option<String> {
 }
 
 pub fn down(provider: &ProviderDescriptor) -> Outcome {
-    let argv = provider.backend.down();
+    let Some(argv) = provider.backend.down() else {
+        return leave_all(provider);
+    };
     if proc::run_quiet(&argv[0], &argv[1..]) {
         return Outcome::Ok;
     }
@@ -207,6 +211,70 @@ pub fn down(provider: &ProviderDescriptor) -> Outcome {
         "Run tailgauge ctl down for the reason",
     );
     Outcome::Failed(format!("could not turn {} off", provider.label))
+}
+
+/// A provider with no connection of its own comes up by joining again every
+/// network it was taken off, and every one it has joined is remembered first.
+fn rejoin(provider: &ProviderDescriptor) -> Outcome {
+    let Some(joined) = crate::networks::joined(provider) else {
+        return Outcome::Failed(format!("{} is not answering", provider.label));
+    };
+    let known = crate::networks::remember(provider, &joined);
+    if known.is_empty() {
+        announce(
+            "critical",
+            &format!("Could not turn {} on", provider.label),
+            "There is no network to join yet",
+        );
+        return Outcome::Failed(format!(
+            "no {} network to join yet: join one with tailgauge ctl --provider {} select-network ID",
+            provider.label, provider.id
+        ));
+    }
+    let failed: Vec<&str> = crate::networks::to_rejoin(&known, &joined)
+        .into_iter()
+        .filter(|n| !switch_network(provider, &n.id, true))
+        .map(|n| n.id.as_str())
+        .collect();
+    if failed.is_empty() {
+        return Outcome::Ok;
+    }
+    announce(
+        "critical",
+        &format!("Could not turn {} on", provider.label),
+        &format!("Could not join {}", failed.join(", ")),
+    );
+    Outcome::Failed(format!("could not join {}", failed.join(", ")))
+}
+
+/// Leave every network joined, remembering each so `rejoin` can bring it
+/// back.
+fn leave_all(provider: &ProviderDescriptor) -> Outcome {
+    let Some(joined) = crate::networks::joined(provider) else {
+        return Outcome::Failed(format!("{} is not answering", provider.label));
+    };
+    crate::networks::remember(provider, &joined);
+    let failed: Vec<&str> = joined
+        .iter()
+        .filter(|n| !switch_network(provider, &n.id, false))
+        .map(|n| n.id.as_str())
+        .collect();
+    if failed.is_empty() {
+        return Outcome::Ok;
+    }
+    announce(
+        "critical",
+        &format!("Could not turn {} off", provider.label),
+        &format!("Could not leave {}", failed.join(", ")),
+    );
+    Outcome::Failed(format!("could not leave {}", failed.join(", ")))
+}
+
+fn switch_network(provider: &ProviderDescriptor, network_id: &str, join: bool) -> bool {
+    provider
+        .backend
+        .select_network(network_id, join)
+        .is_some_and(|argv| proc::run_quiet(&argv[0], &argv[1..]))
 }
 
 pub fn toggle(provider: &ProviderDescriptor) -> Outcome {
@@ -291,6 +359,21 @@ pub fn select_network(provider: &ProviderDescriptor, network_id: &str, join: boo
         return Outcome::Failed(format!("{} has no networks", provider.label));
     };
     if proc::run_quiet(&argv[0], &argv[1..]) {
+        // What the user joins or leaves by hand is what the switch brings
+        // back, or leaves alone, the next time it comes on.
+        if provider.backend.up().is_none() {
+            if join {
+                crate::networks::remember(
+                    provider,
+                    &[core::Network {
+                        id: network_id.into(),
+                        ..core::Network::default()
+                    }],
+                );
+            } else {
+                crate::networks::unwant(provider, network_id);
+            }
+        }
         return Outcome::Ok;
     }
     let what = if join { "join" } else { "leave" };

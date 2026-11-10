@@ -27,8 +27,8 @@ impl Backend for NetBird {
         crate::netbird::parse_netbird_status(raw)
     }
 
-    fn up(&self) -> Vec<String> {
-        argv(&["netbird", "up"])
+    fn up(&self) -> Option<Vec<String>> {
+        Some(argv(&["netbird", "up"]))
     }
 
     /// An environment variable rather than a flag: a NetBird older than
@@ -37,12 +37,16 @@ impl Backend for NetBird {
         &[("NB_NO_BROWSER", "true")]
     }
 
-    fn down(&self) -> Vec<String> {
-        argv(&["netbird", "down"])
+    fn down(&self) -> Option<Vec<String>> {
+        Some(argv(&["netbird", "down"]))
     }
 
     fn networks(&self) -> Option<Vec<String>> {
         Some(argv(&["netbird", "networks", "list"]))
+    }
+
+    fn parse_networks(&self, raw: &str) -> Vec<crate::netbird::Network> {
+        crate::netbird::parse_netbird_networks(raw).networks
     }
 
     fn select_network(&self, network_id: &str, selected: bool) -> Option<Vec<String>> {

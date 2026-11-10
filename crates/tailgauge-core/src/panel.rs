@@ -867,7 +867,7 @@ fn networks_section(state: &PanelState) -> PanelSection {
         .map(|network| PanelRow {
             id: format!("network:{}", network.id),
             kind: "network".into(),
-            label: network.id.clone(),
+            label: crate::netbird::network_label(network),
             sublabel: crate::netbird::network_subtitle(network),
             icon: if network.selected {
                 "checkmark-symbolic"

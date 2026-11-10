@@ -234,7 +234,7 @@ mod tests {
         let tooltip = bar_tooltip(&PanelState::default());
         assert_eq!(
             tooltip,
-            ["No supported VPN CLI on PATH. Looked for Tailscale, NetBird."]
+            ["No supported VPN CLI on PATH. Looked for Tailscale, NetBird, ZeroTier."]
         );
     }
 

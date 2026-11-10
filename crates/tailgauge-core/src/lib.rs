@@ -18,6 +18,7 @@ pub mod panel_state;
 pub mod peer;
 pub mod providers;
 pub mod status;
+pub mod zerotier;
 
 pub use accounts::{Account, AccountsResult, account_label, parse_accounts};
 pub use exit_nodes::{mullvad_region_key, mullvad_region_options, parse_exit_node_list};

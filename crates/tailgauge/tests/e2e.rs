@@ -196,7 +196,7 @@ fn a_machine_with_no_vpn_cli_is_told_what_would_work() {
 
     assert_eq!(
         panel["status"]["text"],
-        "No supported VPN CLI on PATH. Looked for Tailscale, NetBird."
+        "No supported VPN CLI on PATH. Looked for Tailscale, NetBird, ZeroTier."
     );
     assert_eq!(panel["header"]["title"], "TailGauge");
     assert_eq!(panel["header"]["toggleVisible"], false);

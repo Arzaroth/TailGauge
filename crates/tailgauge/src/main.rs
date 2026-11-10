@@ -9,6 +9,7 @@ mod copy;
 mod ctl;
 mod file_select;
 mod gather;
+mod networks;
 mod notify;
 mod project;
 mod receive;

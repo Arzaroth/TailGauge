@@ -206,7 +206,7 @@ fn extras(provider: &'static ProviderDescriptor) -> Extras {
     let networks = thread::spawn(move || {
         networks_argv.map(|argv| {
             let raw = proc::output(&argv[0], &argv[1..]).unwrap_or_default();
-            core::parse_netbird_networks(&raw).networks
+            provider.backend.parse_networks(&raw)
         })
     });
 
@@ -298,7 +298,15 @@ pub fn panel_state(ui: &Ui) -> PanelState {
         state.selected_account_id = extras.accounts.selected_account_id.clone();
         state.accounts = extras.accounts.accounts;
         state.accounts_access_denied = extras.accounts_access_denied;
-        state.networks = extras.networks;
+        state.networks = if active.backend.up().is_none() {
+            let remembered: Vec<_> = crate::networks::remember(active, &extras.networks)
+                .iter()
+                .map(crate::networks::Known::network)
+                .collect();
+            core::zerotier::with_left_networks(&extras.networks, &remembered)
+        } else {
+            extras.networks
+        };
     }
 
     state

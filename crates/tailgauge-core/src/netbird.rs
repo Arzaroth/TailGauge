@@ -181,6 +181,9 @@ pub fn parse_netbird_status(raw: &str) -> StatusResult {
 #[serde(default)]
 pub struct Network {
     pub id: String,
+    /// What the network is called, where the provider names it; the id
+    /// otherwise.
+    pub name: String,
     pub range: String,
     pub domains: Vec<String>,
     pub selected: bool,
@@ -295,12 +298,24 @@ pub fn parse_netbird_networks(raw: &str) -> NetworksResult {
 }
 
 /// What a network row shows under its name: the range if it routes one, the
-/// domains if it resolves them instead.
+/// domains if it resolves them instead, and its state when it has neither yet.
 pub fn network_subtitle(network: &Network) -> String {
     if !network.range.is_empty() {
         return network.range.clone();
     }
-    network.domains.join(", ")
+    if !network.domains.is_empty() {
+        return network.domains.join(", ");
+    }
+    network.status.clone()
+}
+
+/// A network's row label: its name, or its id where it has none.
+pub fn network_label(network: &Network) -> String {
+    if network.name.is_empty() {
+        network.id.clone()
+    } else {
+        network.name.clone()
+    }
 }
 
 #[cfg(test)]
