@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::accounts::Account;
-use crate::netbird::Network;
+use crate::network::Network;
 use crate::peer::Peer;
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

@@ -861,14 +861,14 @@ fn exit_nodes_section(
 
 fn networks_section(state: &PanelState) -> PanelSection {
     let supported = providers::provider_supports(state, Capability::Networks);
-    let networks: &[crate::netbird::Network] = if supported { &state.networks } else { &[] };
+    let networks: &[crate::network::Network] = if supported { &state.networks } else { &[] };
     let rows: Vec<PanelRow> = networks
         .iter()
         .map(|network| PanelRow {
             id: format!("network:{}", network.id),
             kind: "network".into(),
-            label: crate::netbird::network_label(network),
-            sublabel: crate::netbird::network_subtitle(network),
+            label: crate::network::network_label(network),
+            sublabel: crate::network::network_subtitle(network),
             icon: if network.selected {
                 "checkmark-symbolic"
             } else {

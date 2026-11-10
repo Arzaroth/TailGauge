@@ -110,7 +110,7 @@ pub trait Backend: Sync + std::fmt::Debug {
     }
 
     /// What `networks()` printed.
-    fn parse_networks(&self, _raw: &str) -> Vec<crate::netbird::Network> {
+    fn parse_networks(&self, _raw: &str) -> Vec<crate::network::Network> {
         Vec::new()
     }
 

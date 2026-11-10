@@ -44,7 +44,7 @@ impl Backend for NetBird {
         Some(argv(&["netbird", "networks", "list"]))
     }
 
-    fn parse_networks(&self, raw: &str) -> Vec<crate::netbird::Network> {
+    fn parse_networks(&self, raw: &str) -> Vec<crate::network::Network> {
         crate::netbird::parse_netbird_networks(raw).networks
     }
 

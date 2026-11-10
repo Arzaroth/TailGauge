@@ -2982,7 +2982,7 @@ fn a_zerotier_network_waiting_for_its_controller_says_so() {
 fn a_zerotier_network_left_stays_on_the_panel_to_be_joined_again() {
     let mut state = zerotier_state("zerotier-listnetworks.json", "zerotier-peers.json");
     let joined = state.networks.clone();
-    state.networks = core::zerotier::with_left_networks(&joined[..1], &joined);
+    state.networks = core::network::with_left_networks(&joined[..1], &joined);
     let rows = rows_of(&resolve(&state), "networks").to_vec();
     assert_eq!(
         rows.iter()

@@ -9,7 +9,7 @@
 
 use serde_json::{Value, json};
 
-use crate::netbird::Network;
+use crate::network::Network;
 use crate::peer::{self, Peer};
 use crate::status::{StatusError, StatusOk, StatusResult, StatusUnavailable};
 
@@ -81,25 +81,6 @@ pub fn parse_zerotier_networks(raw: &str) -> Vec<Network> {
         .and_then(Value::as_array)
         .map(|networks| networks.iter().map(zerotier_network).collect())
         .unwrap_or_default()
-}
-
-/// What a network row list shows: the networks joined, then the ones this
-/// user joined before and has since left, so the switch and the rows can
-/// bring them back. ZeroTier forgets a network the moment it is left.
-pub fn with_left_networks(joined: &[Network], remembered: &[Network]) -> Vec<Network> {
-    let mut rows = joined.to_vec();
-    for network in remembered {
-        if !joined.iter().any(|j| j.id == network.id) {
-            rows.push(Network {
-                selected: false,
-                range: String::new(),
-                domains: Vec::new(),
-                status: "Not joined".into(),
-                ..network.clone()
-            });
-        }
-    }
-    rows
 }
 
 /// The path the CLI calls DIRECT: the one the node prefers, while it is
@@ -335,25 +316,6 @@ mod tests {
         let odd = &parse_zerotier_networks(&network("SOMETHING_NEW"))[0];
         assert_eq!(odd.status, "SOMETHING_NEW");
         assert!(parse_zerotier_networks("not json").is_empty());
-    }
-
-    #[test]
-    fn a_network_left_stays_listed_to_be_joined_again() {
-        let joined = parse_zerotier_networks(&network("OK"));
-        let office = Network {
-            id: "8056c2e21c000002".into(),
-            name: "office".into(),
-            selected: true,
-            ..Network::default()
-        };
-        let rows = with_left_networks(&joined, &[joined[0].clone(), office]);
-        assert_eq!(
-            rows.iter()
-                .map(|n| (n.name.as_str(), n.selected))
-                .collect::<Vec<_>>(),
-            [("lab", true), ("office", false)]
-        );
-        assert_eq!(rows[1].status, "Not joined");
     }
 
     #[test]

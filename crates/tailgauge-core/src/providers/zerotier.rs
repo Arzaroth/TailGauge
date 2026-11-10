@@ -1,5 +1,5 @@
 use super::{Authorization, Backend, Switch, argv};
-use crate::netbird::Network;
+use crate::network::Network;
 use crate::status::StatusResult;
 use crate::zerotier::{self as zt, ACCESS_DENIED};
 

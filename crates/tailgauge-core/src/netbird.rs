@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::network::Network;
 use crate::peer::{self, Peer};
 use crate::status::{StatusError, StatusOk, StatusResult, StatusUnavailable};
 
@@ -179,19 +180,6 @@ pub fn parse_netbird_status(raw: &str) -> StatusResult {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-pub struct Network {
-    pub id: String,
-    /// What the network is called, where the provider names it; the id
-    /// otherwise.
-    pub name: String,
-    pub range: String,
-    pub domains: Vec<String>,
-    pub selected: bool,
-    pub status: String,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
 pub struct NetworksResult {
     pub ok: bool,
     pub networks: Vec<Network>,
@@ -297,30 +285,10 @@ pub fn parse_netbird_networks(raw: &str) -> NetworksResult {
     }
 }
 
-/// What a network row shows under its name: the range if it routes one, the
-/// domains if it resolves them instead, and its state when it has neither yet.
-pub fn network_subtitle(network: &Network) -> String {
-    if !network.range.is_empty() {
-        return network.range.clone();
-    }
-    if !network.domains.is_empty() {
-        return network.domains.join(", ");
-    }
-    network.status.clone()
-}
-
-/// A network's row label: its name, or its id where it has none.
-pub fn network_label(network: &Network) -> String {
-    if network.name.is_empty() {
-        network.id.clone()
-    } else {
-        network.name.clone()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::network::network_subtitle;
 
     fn ok(raw: &str) -> StatusOk {
         match parse_netbird_status(raw) {

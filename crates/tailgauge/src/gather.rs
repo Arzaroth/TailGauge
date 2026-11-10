@@ -303,7 +303,7 @@ pub fn panel_state(ui: &Ui) -> PanelState {
                 .iter()
                 .map(crate::networks::Known::network)
                 .collect();
-            core::zerotier::with_left_networks(&extras.networks, &remembered)
+            core::network::with_left_networks(&extras.networks, &remembered)
         } else {
             extras.networks
         };
