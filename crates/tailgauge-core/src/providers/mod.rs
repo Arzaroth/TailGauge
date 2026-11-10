@@ -138,6 +138,12 @@ pub trait Backend: Sync + std::fmt::Debug {
         None
     }
 
+    /// A network id as the provider lists it, so one typed differently is
+    /// not remembered twice.
+    fn network_id(&self, id: &str) -> String {
+        id.to_string()
+    }
+
     /// How a user the CLI refuses is let in, for a provider that can refuse
     /// one.
     fn authorization(&self) -> Option<Authorization> {

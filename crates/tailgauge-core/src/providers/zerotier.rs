@@ -46,6 +46,11 @@ impl Backend for ZeroTier {
         zt::parse_zerotier_networks(raw)
     }
 
+    /// ZeroTier lists ids in lowercase hex and accepts them in any case.
+    fn network_id(&self, id: &str) -> String {
+        id.trim().to_ascii_lowercase()
+    }
+
     fn select_network(&self, network_id: &str, selected: bool) -> Option<Vec<String>> {
         Some(argv(&[
             "zerotier-cli",

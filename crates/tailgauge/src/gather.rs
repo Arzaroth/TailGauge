@@ -362,7 +362,7 @@ pub fn panel_state(ui: &Ui) -> PanelState {
         state.accounts = extras.accounts.accounts;
         state.accounts_access_denied = extras.accounts_access_denied;
         state.networks = if active.backend.switch().by_networks() {
-            let remembered: Vec<_> = crate::networks::remember(active, &extras.networks)
+            let remembered: Vec<_> = crate::networks::observe(active, &extras.networks)
                 .iter()
                 .map(crate::networks::Known::network)
                 .collect();
