@@ -481,7 +481,8 @@ fn no_click_on_the_bar_icon_toggles_a_connection() {
 
 /// The bar icon is drawn as the provider the core names, with the count it
 /// hands over. A desktop that kept its one Tailscale mark would show a NetBird
-/// connection under Tailscale's face.
+/// connection under Tailscale's face, and one that learned NetBird's alone
+/// would show ZeroTier's the same way.
 #[test]
 fn every_desktop_draws_the_bar_as_the_provider_the_core_names() {
     let desktops = [
@@ -491,7 +492,7 @@ fn every_desktop_draws_the_bar_as_the_provider_the_core_names() {
             "barState.providerId",
             "barState.badge",
             repo_file("plasma/org.tailgauge.plasmoid/contents/ui/TailGaugeIcon.qml"),
-            "\"netbird\"",
+            '"',
         ),
         (
             "gnome",
@@ -499,7 +500,7 @@ fn every_desktop_draws_the_bar_as_the_provider_the_core_names() {
             "bar.providerId",
             "bar.badge",
             repo_file("gnome/tailgauge@arzaroth.github.io/extension.ts"),
-            "'netbird'",
+            '\'',
         ),
         (
             "omarchy",
@@ -507,10 +508,10 @@ fn every_desktop_draws_the_bar_as_the_provider_the_core_names() {
             "bar.providerId",
             "bar.badge",
             repo_file("omarchy/arzaroth.tailgauge/TailGaugeIcon.qml"),
-            "\"netbird\"",
+            '"',
         ),
     ];
-    for (name, source, provider, badge, icon, netbird) in &desktops {
+    for (name, source, provider, badge, icon, quote) in &desktops {
         assert!(
             source.contains(provider),
             "{name}: the bar icon ignores which provider it is"
@@ -519,7 +520,18 @@ fn every_desktop_draws_the_bar_as_the_provider_the_core_names() {
             source.contains(badge),
             "{name}: the bar icon does not count the connections"
         );
-        assert!(icon.contains(netbird), "{name}: no NetBird mark to draw");
+        // Tailscale's dots are what a provider without a mark of its own
+        // falls back to, so every other provider is named.
+        for p in tailgauge_core::providers::PROVIDERS
+            .iter()
+            .filter(|p| p.id != "tailscale")
+        {
+            assert!(
+                icon.contains(&format!("{quote}{}{quote}", p.id)),
+                "{name}: no {} mark to draw",
+                p.label
+            );
+        }
     }
 }
 
