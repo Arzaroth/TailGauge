@@ -4,6 +4,22 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **ZeroTier.** TailGauge drives `zerotier-cli` on every desktop and in the
+  TUI, with ZeroTier's own mark. ZeroTier has no connection to turn on or off,
+  so the switch leaves every network you have joined and joins them back;
+  TailGauge remembers them, since ZeroTier forgets a network once it is left.
+  The panel lists your networks by name with their addresses (or what they
+  are waiting for, such as the controller's authorization), lets you join or
+  leave each one, and shows the machines this node reaches by their ZeroTier
+  address. A network you leave from its row stays listed and stays off when
+  the switch comes back on. `tailgauge ctl --provider zerotier select-network
+  <id>` joins a new one.
+- **Letting your user read ZeroTier.** `zerotier-cli` needs the service's token,
+  which only root can read. The panel offers "Allow access to ZeroTier", which
+  copies it to `~/.zeroTierOneAuthToken` after a password prompt.
+
 ## [0.10.0]
 
 ### Added

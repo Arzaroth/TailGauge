@@ -1,6 +1,6 @@
 # TailGauge for Omarchy
 
-A bar widget for the Omarchy 4 Quickshell shell, for Tailscale and NetBird:
+A bar widget for the Omarchy 4 Quickshell shell, for Tailscale, NetBird and ZeroTier:
 connection state, on/off, account switching, exit nodes including Mullvad
 regions, machine browsing with copy actions, and Taildrop file sending.
 
@@ -58,8 +58,8 @@ package upgrade.
 
 ## Interactions
 
-- Bar icon: left = panel, right = switch provider (when both Tailscale and
-  NetBird are installed), middle = refresh.
+- Bar icon: left = panel, right = switch provider (when more than one of
+  Tailscale, NetBird and ZeroTier is installed), middle = refresh.
 - Panel: `j`/`k` or arrows move the cursor, Enter activates, `t` toggles, `r`
   refreshes, `c` / `n` / `d` copy the selected machine's IP, name and MagicDNS
   name, `s` sends files to it, Tab moves to the neighbouring bar panel, Esc
