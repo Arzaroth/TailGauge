@@ -95,6 +95,10 @@ pub struct PanelState {
     pub setting_exit_node_id: String,
     #[serde(rename = "accountsAccessDenied")]
     pub accounts_access_denied: bool,
+    /// The provider's CLI refuses this user outright, so nothing it knows can
+    /// be read until the user is let in.
+    #[serde(rename = "accessDenied")]
+    pub access_denied: bool,
     #[serde(rename = "actionStatus")]
     pub action_status: String,
     #[serde(rename = "lastError")]

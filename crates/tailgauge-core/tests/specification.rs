@@ -451,6 +451,32 @@ fn the_operator_prompt_leads_the_connections_section() {
 }
 
 #[test]
+fn a_cli_that_refuses_this_user_asks_for_it_whether_or_not_there_are_accounts() {
+    let refused = PanelState {
+        running: false,
+        active: false,
+        accounts: Vec::new(),
+        access_denied: true,
+        ..state()
+    };
+    let panel = resolve(&refused);
+    assert!(section(&panel, "connections").visible);
+    let rows = rows_of(&panel, "connections");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].action, "authorize");
+    assert_eq!(rows[0].label, "Authorize Tailscale operator");
+
+    let netbird = PanelState {
+        access_denied: true,
+        ..netbird_state()
+    };
+    assert!(
+        !section(&resolve(&netbird), "connections").visible,
+        "a provider with no way to let the user in offers none"
+    );
+}
+
+#[test]
 fn the_selected_account_is_the_current_row() {
     let panel = resolve(&state());
     let selected: Vec<&PanelRow> = rows_of(&panel, "connections")

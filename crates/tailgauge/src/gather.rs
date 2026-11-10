@@ -399,9 +399,14 @@ fn connect(
 ) -> Option<&'static ProviderDescriptor> {
     let active = providers::active_provider(state)?;
     state.installed = true;
-    if let Some((_, core::StatusResult::Ok(status))) =
-        gathered.iter().find(|(id, _)| *id == active.id)
-    {
+    let answer = gathered
+        .iter()
+        .find(|(id, _)| *id == active.id)
+        .map(|(_, status)| status);
+    if let Some(core::StatusResult::Unavailable(unavailable)) = answer {
+        state.access_denied = unavailable.access_denied;
+    }
+    if let Some(core::StatusResult::Ok(status)) = answer {
         state.running = status.running;
         state.needs_login = status.needs_login;
         state.self_name = status.self_name.clone();

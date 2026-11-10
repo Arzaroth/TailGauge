@@ -85,6 +85,7 @@ pub fn parse_netbird_status(raw: &str) -> StatusResult {
             ok: true,
             unavailable: true,
             message: "Disconnected".into(),
+            access_denied: false,
         });
     }
 

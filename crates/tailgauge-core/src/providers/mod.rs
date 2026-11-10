@@ -132,6 +132,23 @@ pub trait Backend: Sync + std::fmt::Debug {
     fn select_network(&self, _network_id: &str, _selected: bool) -> Option<Vec<String>> {
         None
     }
+
+    /// How a user the CLI refuses is let in, for a provider that can refuse
+    /// one.
+    fn authorization(&self) -> Option<Authorization> {
+        None
+    }
+}
+
+/// Letting this user drive a provider that refuses them: a shell line run as
+/// the user, which elevates itself, and the row that offers it. The user is
+/// resolved by that shell rather than here: a widget started without one in
+/// its environment would otherwise authorize nobody.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Authorization {
+    pub command: &'static str,
+    pub label: &'static str,
+    pub sublabel: &'static str,
 }
 
 /// Serialized as a row payload, so a frontend can read the id off the row it

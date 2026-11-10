@@ -1,4 +1,4 @@
-use super::{Backend, argv};
+use super::{Authorization, Backend, argv};
 use crate::status::StatusResult;
 
 #[derive(Debug)]
@@ -44,6 +44,14 @@ impl Backend for Tailscale {
 
     fn switch_account(&self, account_id: &str) -> Option<Vec<String>> {
         Some(argv(&["tailscale", "switch", account_id]))
+    }
+
+    fn authorization(&self) -> Option<Authorization> {
+        Some(Authorization {
+            command: r#"pkexec tailscale set --operator="$(id -un)""#,
+            label: "Authorize Tailscale operator",
+            sublabel: "Allow this user to operate this Tailscale profile",
+        })
     }
 
     fn set_exit_node(&self, target: &str) -> Option<Vec<String>> {

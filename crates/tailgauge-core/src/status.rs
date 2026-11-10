@@ -53,6 +53,9 @@ pub struct StatusUnavailable {
     pub ok: bool,
     pub unavailable: bool,
     pub message: String,
+    /// The daemon is up and refuses this user, rather than not answering.
+    #[serde(rename = "accessDenied", skip_serializing_if = "std::ops::Not::not")]
+    pub access_denied: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -72,6 +75,7 @@ pub fn parse_status(raw: &str) -> StatusResult {
             ok: true,
             unavailable: true,
             message: "Disconnected".into(),
+            access_denied: false,
         });
     }
 
@@ -231,6 +235,7 @@ mod tests {
                 ok: true,
                 unavailable: true,
                 message: "Disconnected".into(),
+                access_denied: false,
             })
         );
     }

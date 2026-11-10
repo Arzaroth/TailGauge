@@ -693,12 +693,15 @@ fn row_label(peer: &Peer) -> String {
 
 fn connections_section(state: &PanelState) -> PanelSection {
     let mut rows = Vec::new();
-    if state.accounts_access_denied {
+    let authorization = providers::active_provider(state)
+        .and_then(|p| p.backend.authorization())
+        .filter(|_| state.accounts_access_denied || state.access_denied);
+    if let Some(authorization) = authorization {
         rows.push(PanelRow {
             id: "auth".into(),
             kind: "auth".into(),
-            label: "Authorize Tailscale operator".into(),
-            sublabel: "Allow this user to operate this Tailscale profile".into(),
+            label: authorization.label.into(),
+            sublabel: authorization.sublabel.into(),
             icon: "security-medium-symbolic".into(),
             glyph: "\u{f0483}".into(),
             action: "authorize".into(),
@@ -734,8 +737,9 @@ fn connections_section(state: &PanelState) -> PanelSection {
     PanelSection {
         id: "connections".into(),
         title: "Connections".into(),
-        visible: providers::provider_supports(state, Capability::Accounts)
-            && (state.accounts.len() > 1 || state.accounts_access_denied),
+        visible: (authorization.is_some() && state.access_denied)
+            || (providers::provider_supports(state, Capability::Accounts)
+                && (state.accounts.len() > 1 || state.accounts_access_denied)),
         empty: String::new(),
         rows,
     }

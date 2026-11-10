@@ -304,11 +304,11 @@ pub fn select_network(provider: &ProviderDescriptor, network_id: &str, join: boo
 /// that runs it rather than read here: a widget started without one in its
 /// environment would otherwise authorize nobody.
 pub fn authorize(provider: &ProviderDescriptor) -> Outcome {
-    if !provider.capabilities.has(Capability::Accounts) {
-        return Outcome::Failed(format!("{} has no profiles to operate", provider.label));
-    }
+    let Some(authorization) = provider.backend.authorization() else {
+        return Outcome::Failed(format!("{} has no user to authorize", provider.label));
+    };
     let mut command = Command::new("sh");
-    command.arg("-c").arg(authorize_command(provider.cli));
+    command.arg("-c").arg(authorization.command);
     if !attended() {
         // pkexec would otherwise draw its own prompt over whatever is on
         // screen, and there is no way to type into it from here.
@@ -322,16 +322,12 @@ pub fn authorize(provider: &ProviderDescriptor) -> Outcome {
         _ => {
             announce(
                 "critical",
-                &format!("Could not authorize the {} operator", provider.label),
+                &format!("Could not authorize {}", provider.label),
                 "Run tailgauge ctl authorize for the reason",
             );
-            Outcome::Failed("could not authorize the operator".into())
+            Outcome::Failed(format!("could not authorize {}", provider.label))
         }
     }
-}
-
-fn authorize_command(cli: &str) -> String {
-    format!(r#"pkexec {cli} set --operator="$(id -un)""#)
 }
 
 pub fn exit_nodes(provider: &ProviderDescriptor) -> Outcome {
@@ -450,7 +446,11 @@ mod tests {
     fn the_operator_is_the_user_running_the_command_rather_than_the_one_here() {
         // Resolved by the shell that runs it: a widget started without a user
         // in its environment would otherwise authorize nobody.
-        let command = authorize_command("tailscale");
+        let command = tailscale()
+            .backend
+            .authorization()
+            .expect("tailscale")
+            .command;
         assert!(command.starts_with("pkexec tailscale set --operator="));
         assert!(command.contains("$(id -un)"));
     }
@@ -508,7 +508,7 @@ mod tests {
         );
         assert_eq!(
             why(authorize(netbird())),
-            "NetBird has no profiles to operate"
+            "NetBird has no user to authorize"
         );
         assert_eq!(
             why(select_network(tailscale(), "net-1", true)),
