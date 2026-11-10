@@ -564,38 +564,13 @@ Panel {
               // provider the panel is showing, drawn as that provider's own
               // mark rather than as a font glyph standing in for one.
               iconComponent: Component {
-                Loader {
-                  readonly property color tint: root.panel.header.warning
+                TailGaugeIcon {
+                  providerId: root.panel.header.providerId
+                  iconSize: Style.font.display
+                  color: root.panel.header.warning
                     ? root.urgent
                     : (root.panel.header.dimmed ? root.dim : root.foreground)
-                  sourceComponent: root.panel.header.providerId === "netbird"
-                    ? netbirdMark
-                    : root.panel.header.providerId === "zerotier" ? zerotierMark : tailscaleMark
-
-                  Component {
-                    id: tailscaleMark
-                    TailGaugeIcon {
-                      iconSize: Style.font.display
-                      color: parent ? parent.tint : root.foreground
-                      badgeColor: root.urgent
-                    }
-                  }
-
-                  Component {
-                    id: netbirdMark
-                    NetBirdIcon {
-                      iconSize: Style.font.display
-                      color: parent ? parent.tint : root.foreground
-                    }
-                  }
-
-                  Component {
-                    id: zerotierMark
-                    ZeroTierIcon {
-                      iconSize: Style.font.display
-                      color: parent ? parent.tint : root.foreground
-                    }
-                  }
+                  badgeColor: root.urgent
                 }
               }
 
