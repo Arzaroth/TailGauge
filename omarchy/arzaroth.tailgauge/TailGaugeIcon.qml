@@ -42,7 +42,7 @@ Item {
 
     Item {
       anchors.fill: parent
-      visible: root.providerId !== "netbird"
+      visible: root.providerId !== "netbird" && root.providerId !== "zerotier"
 
       Dot { x: 0;         y: 0;         opacity: 0.24 }
       Dot { x: mark.mid;  y: 0;         opacity: 0.24 }
@@ -60,6 +60,17 @@ Item {
       active: root.providerId === "netbird"
       sourceComponent: Component {
         NetBirdIcon {
+          iconSize: root.iconSize
+          color: root.color
+        }
+      }
+    }
+
+    Loader {
+      anchors.fill: parent
+      active: root.providerId === "zerotier"
+      sourceComponent: Component {
+        ZeroTierIcon {
           iconSize: root.iconSize
           color: root.color
         }

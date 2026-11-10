@@ -113,9 +113,57 @@ const NETBIRD_PATHS: PathStep[][] = [
     ],
 ];
 
+// ZeroTier's mark (Simple Icons, CC0-1.0) in its 24x24 viewBox: a rounded
+// square with the T and its ring cut out. Cairo takes no path data, so it is
+// drawn from its shapes: the square, the cut-outs erased, the halves of the
+// disc inside the ring filled back.
+const ZEROTIER_VIEW = 24;
+function drawZeroTier(cr: Loose, left: number, top: number, size: number): void {
+    const k = size / ZEROTIER_VIEW;
+    const disc = (x: number, y: number, radius: number) => {
+        cr.newSubPath();
+        cr.arc(left + x * k, top + y * k, radius * k, 0, 2 * Math.PI);
+    };
+    const box = (x0: number, y0: number, x1: number, y1: number) =>
+        cr.rectangle(left + x0 * k, top + y0 * k, (x1 - x0) * k, (y1 - y0) * k);
+
+    cr.pushGroup();
+    const corner = 4;
+    cr.newSubPath();
+    cr.arc(left + (ZEROTIER_VIEW - corner) * k, top + corner * k, corner * k, -Math.PI / 2, 0);
+    cr.arc(left + (ZEROTIER_VIEW - corner) * k, top + (ZEROTIER_VIEW - corner) * k, corner * k, 0, Math.PI / 2);
+    cr.arc(left + corner * k, top + (ZEROTIER_VIEW - corner) * k, corner * k, Math.PI / 2, Math.PI);
+    cr.arc(left + corner * k, top + corner * k, corner * k, Math.PI, 1.5 * Math.PI);
+    cr.closePath();
+    cr.fill();
+
+    cr.setOperator(0);
+    box(3.338, 2.834, 20.664, 3.971);
+    disc(3.338, 3.4025, 0.5685);
+    disc(20.664, 3.4025, 0.5685);
+    cr.fill();
+    box(11.432, 3.4, 12.568, 20.597);
+    disc(12, 20.597, 0.568);
+    cr.fill();
+    disc(12, 12, 6.057);
+    cr.fill();
+
+    cr.setOperator(2);
+    for (const [x0, x1] of [[0, 11.432], [12.568, ZEROTIER_VIEW]]) {
+        cr.save();
+        box(x0, 0, x1, ZEROTIER_VIEW);
+        cr.clip();
+        disc(12, 12, 4.889);
+        cr.fill();
+        cr.restore();
+    }
+    cr.popGroupToSource();
+    cr.paint();
+}
+
 // Native rendering of the provider's mark: Tailscale's 3x3 dot grid with the
-// inactive dots faded, or NetBird's, plus the disconnected slash and the
-// needs-login badge.
+// inactive dots faded, NetBird's or ZeroTier's, plus the disconnected slash
+// and the needs-login badge.
 const TailGaugeIcon = GObject.registerClass(
 class TailGaugeIcon extends St.DrawingArea {
     declare _crossed: boolean;
@@ -173,6 +221,9 @@ class TailGaugeIcon extends St.DrawingArea {
                 cr.closePath();
                 cr.fill();
             }
+        } else if (this._providerId === 'zerotier') {
+            cr.setSourceRGBA(r, g, b, a);
+            drawZeroTier(cr, offsetX, offsetY, size);
         } else {
             const dot = Math.max(2, size * 0.24);
             const radius = dot / 2;

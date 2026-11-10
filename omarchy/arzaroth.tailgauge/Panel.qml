@@ -569,7 +569,8 @@ Panel {
                     ? root.urgent
                     : (root.panel.header.dimmed ? root.dim : root.foreground)
                   sourceComponent: root.panel.header.providerId === "netbird"
-                    ? netbirdMark : tailscaleMark
+                    ? netbirdMark
+                    : root.panel.header.providerId === "zerotier" ? zerotierMark : tailscaleMark
 
                   Component {
                     id: tailscaleMark
@@ -583,6 +584,14 @@ Panel {
                   Component {
                     id: netbirdMark
                     NetBirdIcon {
+                      iconSize: Style.font.display
+                      color: parent ? parent.tint : root.foreground
+                    }
+                  }
+
+                  Component {
+                    id: zerotierMark
+                    ZeroTierIcon {
                       iconSize: Style.font.display
                       color: parent ? parent.tint : root.foreground
                     }
