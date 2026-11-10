@@ -22,6 +22,11 @@ All notable changes to this project are documented here.
   your permission and offers "Allow access to ZeroTier", which copies the
   token to `~/.zeroTierOneAuthToken` after a password prompt.
 
+### Changed
+
+- **An empty machines list reads "No other machines found."** It said "on this
+  tailnet", a Tailscale word, whichever VPN the panel showed.
+
 ### Fixed
 
 - **One stuck VPN no longer freezes the panel.** Every refresh waited on every
