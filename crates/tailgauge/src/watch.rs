@@ -190,8 +190,16 @@ fn fingerprint(providers: &[&ProviderDescriptor]) -> Vec<Option<String>> {
 fn fingerprint_of_status(status: &StatusResult) -> String {
     match status {
         StatusResult::Ok(ok) => format!(
-            "{}|{}|{}|{}",
-            ok.daemon_state, ok.running, ok.needs_login, ok.exit_node_id
+            "{}|{}|{}|{}|{}",
+            ok.daemon_state,
+            ok.running,
+            ok.needs_login,
+            ok.exit_node_id,
+            ok.networks
+                .iter()
+                .map(|n| format!("{}:{}", n.id, n.status))
+                .collect::<Vec<_>>()
+                .join(",")
         ),
         StatusResult::Unavailable(_) => "unavailable".into(),
         StatusResult::Error(_) => "error".into(),

@@ -249,6 +249,7 @@ pub fn parse_zerotier_status(raw: &str) -> StatusResult {
         peers,
         exit_nodes: Vec::new(),
         exit_node_id: String::new(),
+        networks: raw_networks.iter().map(zerotier_network).collect(),
     }))
 }
 

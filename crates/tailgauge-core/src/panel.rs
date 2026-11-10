@@ -890,10 +890,14 @@ fn networks_section(state: &PanelState) -> PanelSection {
             ..PanelRow::default()
         })
         .collect();
+    // A provider switched by its networks keeps its rows while off: the one
+    // left by hand is the row that joins it back.
+    let by_networks =
+        providers::active_provider(state).is_some_and(|p| p.backend.switch().by_networks());
     PanelSection {
         id: "networks".into(),
         title: "Networks".into(),
-        visible: supported && state.active && !rows.is_empty(),
+        visible: supported && (state.active || by_networks) && !rows.is_empty(),
         empty: String::new(),
         rows,
     }

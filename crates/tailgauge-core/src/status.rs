@@ -46,6 +46,10 @@ pub struct StatusOk {
     /// in `peers`. Empty without one.
     #[serde(rename = "exitNodeId", skip_serializing_if = "String::is_empty")]
     pub exit_node_id: String,
+    /// The networks joined, for a provider whose status names them
+    /// (ZeroTier). Empty for the rest, which list theirs on their own.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub networks: Vec<crate::network::Network>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -148,6 +152,7 @@ pub fn parse_status(raw: &str) -> StatusResult {
             .and_then(Value::as_str)
             .unwrap_or("")
             .to_string(),
+        networks: Vec::new(),
     }))
 }
 

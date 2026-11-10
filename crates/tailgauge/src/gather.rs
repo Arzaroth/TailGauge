@@ -234,11 +234,11 @@ fn extras(provider: &'static ProviderDescriptor) -> Extras {
         .accounts
         .then(|| provider.backend.accounts())
         .flatten();
-    let networks_argv = provider
-        .capabilities
-        .networks
-        .then(|| provider.backend.networks())
-        .flatten();
+    // A provider switched by its networks already named them in its status.
+    let networks_argv = (provider.capabilities.networks
+        && !provider.backend.switch().by_networks())
+    .then(|| provider.backend.networks())
+    .flatten();
 
     let mullvad = thread::spawn(move || {
         exit_nodes.map(|argv| {
@@ -361,15 +361,24 @@ pub fn panel_state(ui: &Ui) -> PanelState {
         state.selected_account_id = extras.accounts.selected_account_id.clone();
         state.accounts = extras.accounts.accounts;
         state.accounts_access_denied = extras.accounts_access_denied;
-        state.networks = if active.backend.switch().by_networks() {
-            let remembered: Vec<_> = crate::networks::observe(active, &extras.networks)
-                .iter()
-                .map(crate::networks::Known::network)
-                .collect();
-            core::network::with_left_networks(&extras.networks, &remembered)
-        } else {
-            extras.networks
-        };
+        if !active.backend.switch().by_networks() {
+            state.networks = extras.networks;
+        }
+    }
+
+    // A provider switched by its networks names them in its status, and its
+    // rows include the ones left, on or off: a network left by hand is the
+    // row that joins it back. Only from an answer: a provider that did not
+    // answer has no networks to set the remembered ones against.
+    let answered = gathered
+        .iter()
+        .any(|(id, status)| *id == active.id && matches!(status, core::StatusResult::Ok(_)));
+    if active.backend.switch().by_networks() && answered {
+        let remembered: Vec<_> = crate::networks::observe(active, &state.networks)
+            .iter()
+            .map(crate::networks::Known::network)
+            .collect();
+        state.networks = core::network::with_left_networks(&state.networks, &remembered);
     }
 
     state
@@ -487,6 +496,7 @@ fn connect(
         state.file_sharing = status.file_sharing;
         state.peers = status.peers.clone();
         state.own_exit_nodes = status.exit_nodes.clone();
+        state.networks = status.networks.clone();
     }
     Some(active)
 }

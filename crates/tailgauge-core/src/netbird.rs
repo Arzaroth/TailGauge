@@ -171,6 +171,7 @@ pub fn parse_netbird_status(raw: &str) -> StatusResult {
         peers,
         exit_nodes: Vec::new(),
         exit_node_id: String::new(),
+        networks: Vec::new(),
     }))
 }
 
