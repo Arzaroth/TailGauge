@@ -48,6 +48,7 @@ MouseArea {
 
         PlasmaComponents3.Label {
             visible: root.showStatusInPanel && !compact.vertical && text !== ""
+            textFormat: Text.PlainText
             text: compact.service.installed ? (compact.service.selfName || "") : ""
             elide: Text.ElideRight
             Layout.maximumWidth: Kirigami.Units.gridUnit * 8

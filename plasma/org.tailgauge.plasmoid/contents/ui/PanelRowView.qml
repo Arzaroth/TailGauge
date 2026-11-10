@@ -97,6 +97,7 @@ RowSurface {
             spacing: 0
 
             PlasmaComponents3.Label {
+                textFormat: Text.PlainText
                 text: surface.row ? surface.row.label : ""
                 font.bold: surface.row ? surface.row.bold : false
                 elide: Text.ElideRight
@@ -105,6 +106,7 @@ RowSurface {
 
             PlasmaComponents3.Label {
                 visible: text !== ""
+                textFormat: Text.PlainText
                 text: surface.row ? surface.row.sublabel : ""
                 color: surface.dimColor
                 font: Kirigami.Theme.smallFont
