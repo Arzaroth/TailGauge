@@ -1,0 +1,134 @@
+[
+ {
+  "address": "62f865ae71",
+  "isBonded": false,
+  "latency": -1,
+  "paths": [],
+  "role": "LEAF",
+  "tunneled": false,
+  "version": "-1.-1.-1",
+  "versionMajor": -1,
+  "versionMinor": -1,
+  "versionRev": -1
+ },
+ {
+  "address": "778cde7190",
+  "isBonded": false,
+  "latency": 121,
+  "paths": [
+   {
+    "active": true,
+    "address": "103.195.103.66/9993",
+    "expired": false,
+    "lastReceive": 1794296539574,
+    "lastSend": 1794296549453,
+    "localPort": 0,
+    "localSocket": 94345195887376,
+    "preferred": true,
+    "trustedPathId": 0
+   }
+  ],
+  "role": "PLANET",
+  "tunneled": false,
+  "version": "-1.-1.-1",
+  "versionMajor": -1,
+  "versionMinor": -1,
+  "versionRev": -1
+ },
+ {
+  "address": "cafe04eba9",
+  "isBonded": false,
+  "latency": 17,
+  "paths": [
+   {
+    "active": true,
+    "address": "84.17.53.155/9993",
+    "expired": false,
+    "lastReceive": 1794296549519,
+    "lastSend": 1794296549470,
+    "localPort": 0,
+    "localSocket": 94345195894528,
+    "preferred": true,
+    "trustedPathId": 0
+   }
+  ],
+  "role": "PLANET",
+  "tunneled": false,
+  "version": "-1.-1.-1",
+  "versionMajor": -1,
+  "versionMinor": -1,
+  "versionRev": -1
+ },
+ {
+  "address": "cafe80ed74",
+  "isBonded": false,
+  "latency": 159,
+  "paths": [
+   {
+    "active": true,
+    "address": "185.152.67.145/9993",
+    "expired": false,
+    "lastReceive": 1794296544612,
+    "lastSend": 1794296549453,
+    "localPort": 0,
+    "localSocket": 94345195887376,
+    "preferred": true,
+    "trustedPathId": 0
+   }
+  ],
+  "role": "PLANET",
+  "tunneled": false,
+  "version": "-1.-1.-1",
+  "versionMajor": -1,
+  "versionMinor": -1,
+  "versionRev": -1
+ },
+ {
+  "address": "cafe9efeb9",
+  "isBonded": false,
+  "latency": -1,
+  "paths": [],
+  "role": "LEAF",
+  "tunneled": false,
+  "version": "-1.-1.-1",
+  "versionMajor": -1,
+  "versionMinor": -1,
+  "versionRev": -1
+ },
+ {
+  "address": "cafefd6717",
+  "isBonded": false,
+  "latency": 226,
+  "paths": [
+   {
+    "active": true,
+    "address": "79.127.159.187/9993",
+    "expired": false,
+    "lastReceive": 1794296544679,
+    "lastSend": 1794296549453,
+    "localPort": 0,
+    "localSocket": 94345195889216,
+    "preferred": true,
+    "trustedPathId": 0
+   }
+  ],
+  "role": "PLANET",
+  "tunneled": false,
+  "version": "-1.-1.-1",
+  "versionMajor": -1,
+  "versionMinor": -1,
+  "versionRev": -1
+ },
+ {
+  "address": "e0edd2bebd",
+  "isBonded": false,
+  "latency": -1,
+  "paths": [],
+  "role": "LEAF",
+  "tunneled": false,
+  "version": "-1.-1.-1",
+  "versionMajor": -1,
+  "versionMinor": -1,
+  "versionRev": -1
+ }
+]

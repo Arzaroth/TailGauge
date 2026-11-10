@@ -1,0 +1,41 @@
+[
+ {
+  "allowDNS": false,
+  "allowDefault": false,
+  "allowGlobal": false,
+  "allowManaged": true,
+  "assignedAddresses": [],
+  "bridge": false,
+  "broadcastEnabled": false,
+  "dhcp": false,
+  "dns": {
+   "domain": "",
+   "servers": []
+  },
+  "id": "e0edd2bebde885d3",
+  "mac": "d2:91:64:85:d4:d7",
+  "mtu": 2800,
+  "multicastSubscriptions": [
+   {
+    "adi": 0,
+    "mac": "01:00:5e:00:00:01"
+   },
+   {
+    "adi": 0,
+    "mac": "33:33:00:00:00:01"
+   },
+   {
+    "adi": 0,
+    "mac": "33:33:ff:85:d4:d7"
+   }
+  ],
+  "name": "",
+  "netconfRevision": 0,
+  "nwid": "e0edd2bebde885d3",
+  "portDeviceName": "ztlziduo3o",
+  "portError": 0,
+  "routes": [],
+  "status": "ACCESS_DENIED",
+  "type": "PRIVATE"
+ }
+]

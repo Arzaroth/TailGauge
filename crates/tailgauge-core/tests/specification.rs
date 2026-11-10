@@ -2879,3 +2879,138 @@ fn a_tailnet_with_taildrop_switched_off_offers_no_send() {
         assert!(row.actions.iter().all(|a| a.id != "send"), "{}", row.label);
     }
 }
+
+/// A ZeroTier node as `gather` reads it: the three answers as one status, and
+/// the networks it has joined.
+fn zerotier_state(listnetworks: &str, peers: &str) -> PanelState {
+    let networks = fixture(listnetworks);
+    let core::StatusResult::Ok(status) = core::zerotier::parse_zerotier_status(
+        &core::zerotier::envelope(&fixture("zerotier-info.json"), &networks, &fixture(peers)),
+    ) else {
+        panic!("the ZeroTier capture should parse");
+    };
+    PanelState {
+        providers: Some(detected(&["zerotier"])),
+        active_provider_id: "zerotier".into(),
+        installed: true,
+        running: status.running,
+        active: status.running,
+        needs_login: status.needs_login,
+        helpers: true,
+        self_name: status.self_name.clone(),
+        self_ip: status.self_ip.clone(),
+        self_peer: Some(status.self_peer.clone()),
+        peers: status.peers.clone(),
+        networks: core::zerotier::parse_zerotier_networks(&networks),
+        ..PanelState::default()
+    }
+}
+
+#[test]
+fn a_zerotier_node_shows_its_named_networks_and_the_machines_it_reaches() {
+    let state = zerotier_state("zerotier-listnetworks.json", "zerotier-peers.json");
+    let panel = resolve(&state);
+
+    assert_eq!(panel.header.provider_id, "zerotier");
+    assert_eq!(panel.header.title, "148c386a05", "a node is its address");
+    assert!(panel.header.toggle_checked);
+    assert_eq!(state.self_ip, "10.147.20.54");
+
+    let networks = section(&panel, "networks");
+    assert!(networks.visible);
+    assert_eq!(
+        networks
+            .rows
+            .iter()
+            .map(|r| (r.label.as_str(), r.sublabel.as_str(), r.hint.as_str()))
+            .collect::<Vec<_>>(),
+        [
+            ("homelab", "10.147.20.54/24", "Leave"),
+            (
+                "office",
+                "fde0:edd2:bebd:fce2:2e99:9314:8c38:6a05/88, 10.244.0.54/16",
+                "Leave"
+            ),
+        ]
+    );
+
+    let machines = peer_rows(&panel);
+    assert_eq!(
+        machines
+            .iter()
+            .map(|r| r.label.as_str())
+            .collect::<Vec<_>>(),
+        ["e0edd2bebd"],
+        "the controller, and none of the infrastructure ZeroTier has only heard of"
+    );
+    assert!(machines[0].actions.iter().all(|a| a.id != "send"));
+    assert!(
+        machines[0]
+            .children
+            .iter()
+            .any(|d| d.sublabel.starts_with("Direct peer-to-peer")),
+        "the preferred path is direct"
+    );
+
+    for absent in ["exitNodes", "connections"] {
+        assert!(!section(&panel, absent).visible, "{absent}");
+    }
+}
+
+#[test]
+fn a_zerotier_network_waiting_for_its_controller_says_so() {
+    let state = zerotier_state(
+        "zerotier-listnetworks-denied.json",
+        "zerotier-peers-denied.json",
+    );
+    let panel = resolve(&state);
+
+    assert!(
+        panel.header.toggle_checked,
+        "joined is on, even before the controller lets it in"
+    );
+    let rows = rows_of(&panel, "networks");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(
+        rows[0].label, "e0edd2bebde885d3",
+        "a network with no name yet is its id"
+    );
+    assert_eq!(rows[0].sublabel, "Waiting for authorization");
+    assert!(peer_rows(&panel).is_empty());
+}
+
+#[test]
+fn a_zerotier_network_left_stays_on_the_panel_to_be_joined_again() {
+    let mut state = zerotier_state("zerotier-listnetworks.json", "zerotier-peers.json");
+    let joined = state.networks.clone();
+    state.networks = core::zerotier::with_left_networks(&joined[..1], &joined);
+    let rows = rows_of(&resolve(&state), "networks").to_vec();
+    assert_eq!(
+        rows.iter()
+            .map(|r| (r.label.as_str(), r.sublabel.as_str(), r.hint.as_str()))
+            .collect::<Vec<_>>(),
+        [
+            ("homelab", "10.147.20.54/24", "Leave"),
+            ("office", "Not joined", "Join"),
+        ]
+    );
+}
+
+#[test]
+fn a_zerotier_that_refuses_this_user_offers_to_copy_its_token() {
+    let state = PanelState {
+        providers: Some(detected(&["zerotier"])),
+        active_provider_id: "zerotier".into(),
+        installed: true,
+        access_denied: matches!(
+            core::zerotier::parse_zerotier_status(core::zerotier::ACCESS_DENIED),
+            core::StatusResult::Unavailable(ref u) if u.access_denied
+        ),
+        ..PanelState::default()
+    };
+    let panel = resolve(&state);
+    let rows = rows_of(&panel, "connections");
+    assert!(section(&panel, "connections").visible);
+    assert_eq!(rows[0].label, "Allow access to ZeroTier");
+    assert_eq!(rows[0].action, "authorize");
+}

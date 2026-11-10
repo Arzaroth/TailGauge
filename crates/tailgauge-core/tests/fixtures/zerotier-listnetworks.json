@@ -1,0 +1,99 @@
+[
+ {
+  "allowDNS": false,
+  "allowDefault": false,
+  "allowGlobal": false,
+  "allowManaged": true,
+  "assignedAddresses": [
+   "10.147.20.54/24"
+  ],
+  "bridge": false,
+  "broadcastEnabled": true,
+  "dhcp": false,
+  "dns": {
+   "domain": "",
+   "servers": []
+  },
+  "id": "e0edd2bebde885d3",
+  "mac": "d2:91:64:85:d4:d7",
+  "mtu": 2800,
+  "multicastSubscriptions": [
+   {
+    "adi": 0,
+    "mac": "01:00:5e:00:00:01"
+   },
+   {
+    "adi": 0,
+    "mac": "33:33:00:00:00:01"
+   },
+   {
+    "adi": 0,
+    "mac": "33:33:ff:85:d4:d7"
+   }
+  ],
+  "name": "homelab",
+  "netconfRevision": 1,
+  "nwid": "e0edd2bebde885d3",
+  "portDeviceName": "ztlziduo3o",
+  "portError": 0,
+  "routes": [
+   {
+    "flags": 0,
+    "metric": 0,
+    "target": "10.147.20.0/24",
+    "via": null
+   }
+  ],
+  "status": "OK",
+  "type": "PRIVATE"
+ },
+ {
+  "allowDNS": false,
+  "allowDefault": false,
+  "allowGlobal": false,
+  "allowManaged": true,
+  "assignedAddresses": [
+   "fde0:edd2:bebd:fce2:2e99:9314:8c38:6a05/88",
+   "10.244.0.54/16"
+  ],
+  "bridge": false,
+  "broadcastEnabled": true,
+  "dhcp": false,
+  "dns": {
+   "domain": "",
+   "servers": []
+  },
+  "id": "e0edd2bebdfce22e",
+  "mac": "2e:f6:70:85:d4:d7",
+  "mtu": 2800,
+  "multicastSubscriptions": [
+   {
+    "adi": 0,
+    "mac": "01:00:5e:00:00:01"
+   },
+   {
+    "adi": 0,
+    "mac": "33:33:00:00:00:01"
+   },
+   {
+    "adi": 0,
+    "mac": "33:33:ff:85:d4:d7"
+   }
+  ],
+  "name": "office",
+  "netconfRevision": 1,
+  "nwid": "e0edd2bebdfce22e",
+  "portDeviceName": "ztlzic4xet",
+  "portError": 0,
+  "routes": [
+   {
+    "flags": 0,
+    "metric": 0,
+    "target": "10.244.0.0/16",
+    "via": null
+   }
+  ],
+  "status": "OK",
+  "type": "PRIVATE"
+ }
+]
