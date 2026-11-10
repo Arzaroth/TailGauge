@@ -1614,17 +1614,16 @@ fn every_provider_the_registry_calls_drivable_has_what_driving_needs() {
             "{} has no status command",
             provider.id
         );
-        match (provider.backend.up(), provider.backend.down()) {
-            (Some(up), Some(down)) => {
+        match provider.backend.switch() {
+            core::providers::Switch::Connection { up, down } => {
                 assert_eq!(up[0], provider.cli, "{}", provider.id);
                 assert_eq!(down[0], provider.cli, "{}", provider.id);
             }
-            (None, None) => assert!(
+            core::providers::Switch::Networks => assert!(
                 provider.capabilities.networks,
                 "{} has no switch and no networks to switch it by",
                 provider.id
             ),
-            _ => panic!("{} can turn only one way", provider.id),
         }
         assert_eq!(
             provider.backend.status()[0],

@@ -1,4 +1,4 @@
-use super::{Authorization, Backend, argv};
+use super::{Authorization, Backend, Switch, argv};
 use crate::netbird::Network;
 use crate::status::StatusResult;
 use crate::zerotier::{self as zt, ACCESS_DENIED};
@@ -34,12 +34,8 @@ impl Backend for ZeroTier {
         zt::parse_zerotier_status(raw)
     }
 
-    fn up(&self) -> Option<Vec<String>> {
-        None
-    }
-
-    fn down(&self) -> Option<Vec<String>> {
-        None
+    fn switch(&self) -> Switch {
+        Switch::Networks
     }
 
     fn networks(&self) -> Option<Vec<String>> {

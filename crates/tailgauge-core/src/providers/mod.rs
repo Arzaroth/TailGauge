@@ -88,17 +88,14 @@ pub trait Backend: Sync + std::fmt::Debug {
     /// What `status()` printed, through the parser for this provider's shape.
     fn parse_status(&self, raw: &str) -> StatusResult;
 
-    /// `None` for a provider with no connection of its own to bring up,
-    /// whose switch joins and leaves its networks instead.
-    fn up(&self) -> Option<Vec<String>>;
+    /// What the panel's on/off switch drives.
+    fn switch(&self) -> Switch;
 
     /// What `up` is run with when TailGauge opens the login page itself, so
     /// the CLI does not open it too.
     fn unattended_up_env(&self) -> &'static [(&'static str, &'static str)] {
         &[]
     }
-
-    fn down(&self) -> Option<Vec<String>>;
 
     fn exit_node_list(&self) -> Option<Vec<String>> {
         None
@@ -145,6 +142,22 @@ pub trait Backend: Sync + std::fmt::Debug {
     /// one.
     fn authorization(&self) -> Option<Authorization> {
         None
+    }
+}
+
+/// What turning a provider on and off means.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Switch {
+    /// A connection of its own, brought up and down by these commands.
+    Connection { up: Vec<String>, down: Vec<String> },
+    /// No connection of its own (ZeroTier): off leaves every joined network
+    /// and on joins back the ones it took, which the binary remembers.
+    Networks,
+}
+
+impl Switch {
+    pub fn by_networks(&self) -> bool {
+        matches!(self, Switch::Networks)
     }
 }
 
@@ -657,7 +670,13 @@ mod tests {
     #[test]
     fn only_tailgauge_opens_the_login_page() {
         let netbird = provider_by_id("netbird").unwrap();
-        assert_eq!(netbird.backend.up().unwrap(), ["netbird", "up"]);
+        assert_eq!(
+            netbird.backend.switch(),
+            Switch::Connection {
+                up: argv(&["netbird", "up"]),
+                down: argv(&["netbird", "down"]),
+            }
+        );
         assert_eq!(
             netbird.backend.unattended_up_env(),
             [("NB_NO_BROWSER", "true")]

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use super::{Backend, argv};
+use super::{Backend, Switch, argv};
 use crate::status::StatusResult;
 
 #[derive(Debug)]
@@ -27,18 +27,17 @@ impl Backend for NetBird {
         crate::netbird::parse_netbird_status(raw)
     }
 
-    fn up(&self) -> Option<Vec<String>> {
-        Some(argv(&["netbird", "up"]))
+    fn switch(&self) -> Switch {
+        Switch::Connection {
+            up: argv(&["netbird", "up"]),
+            down: argv(&["netbird", "down"]),
+        }
     }
 
     /// An environment variable rather than a flag: a NetBird older than
     /// `--no-browser` ignores it instead of failing.
     fn unattended_up_env(&self) -> &'static [(&'static str, &'static str)] {
         &[("NB_NO_BROWSER", "true")]
-    }
-
-    fn down(&self) -> Option<Vec<String>> {
-        Some(argv(&["netbird", "down"]))
     }
 
     fn networks(&self) -> Option<Vec<String>> {

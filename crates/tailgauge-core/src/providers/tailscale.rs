@@ -1,4 +1,4 @@
-use super::{Authorization, Backend, argv};
+use super::{Authorization, Backend, Switch, argv};
 use crate::status::StatusResult;
 
 #[derive(Debug)]
@@ -13,12 +13,11 @@ impl Backend for Tailscale {
         crate::status::parse_status(raw)
     }
 
-    fn up(&self) -> Option<Vec<String>> {
-        Some(argv(&["tailscale", "up"]))
-    }
-
-    fn down(&self) -> Option<Vec<String>> {
-        Some(argv(&["tailscale", "down"]))
+    fn switch(&self) -> Switch {
+        Switch::Connection {
+            up: argv(&["tailscale", "up"]),
+            down: argv(&["tailscale", "down"]),
+        }
     }
 
     fn exit_node_list(&self) -> Option<Vec<String>> {

@@ -298,7 +298,7 @@ pub fn panel_state(ui: &Ui) -> PanelState {
         state.selected_account_id = extras.accounts.selected_account_id.clone();
         state.accounts = extras.accounts.accounts;
         state.accounts_access_denied = extras.accounts_access_denied;
-        state.networks = if active.backend.up().is_none() {
+        state.networks = if active.backend.switch().by_networks() {
             let remembered: Vec<_> = crate::networks::remember(active, &extras.networks)
                 .iter()
                 .map(crate::networks::Known::network)

@@ -10,7 +10,7 @@ use std::sync::mpsc;
 use std::thread;
 
 use tailgauge_core as core;
-use tailgauge_core::providers::{Capability, ProviderDescriptor};
+use tailgauge_core::providers::{Capability, ProviderDescriptor, Switch};
 
 use crate::notify::{self, Notification};
 use crate::tailscale;
@@ -110,7 +110,7 @@ fn connected_line(self_name: &str, self_ip: &str) -> String {
 }
 
 pub fn up(provider: &ProviderDescriptor) -> Outcome {
-    let Some(argv) = provider.backend.up() else {
+    let Switch::Connection { up: argv, .. } = provider.backend.switch() else {
         return rejoin(provider);
     };
     if attended() {
@@ -199,7 +199,7 @@ fn login_url(line: &str) -> Option<String> {
 }
 
 pub fn down(provider: &ProviderDescriptor) -> Outcome {
-    let Some(argv) = provider.backend.down() else {
+    let Switch::Connection { down: argv, .. } = provider.backend.switch() else {
         return leave_all(provider);
     };
     if proc::run_quiet(&argv[0], &argv[1..]) {
@@ -361,7 +361,7 @@ pub fn select_network(provider: &ProviderDescriptor, network_id: &str, join: boo
     if proc::run_quiet(&argv[0], &argv[1..]) {
         // What the user joins or leaves by hand is what the switch brings
         // back, or leaves alone, the next time it comes on.
-        if provider.backend.up().is_none() {
+        if provider.backend.switch().by_networks() {
             if join {
                 crate::networks::remember(
                     provider,
