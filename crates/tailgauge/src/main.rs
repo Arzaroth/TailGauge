@@ -9,6 +9,7 @@ mod copy;
 mod ctl;
 mod file_select;
 mod gather;
+mod networks;
 mod notify;
 mod project;
 mod receive;
@@ -222,7 +223,7 @@ enum CtlAction {
     },
     /// List the exit nodes this tailnet offers.
     ExitNodes,
-    /// Let this user operate the daemon's profile.
+    /// Let this user drive a provider that refuses them (Tailscale operator, ZeroTier token).
     Authorize,
     /// Print the version of the binary, not of the widgets.
     Version,

@@ -8,6 +8,7 @@ PlasmaComponents3.Label {
     Layout.rightMargin: Kirigami.Units.smallSpacing * 2
     Layout.topMargin: Kirigami.Units.smallSpacing
 
+    textFormat: Text.PlainText
     color: Qt.darker(Kirigami.Theme.textColor, 1.4)
     font.family: Kirigami.Theme.smallFont.family
     font.pointSize: Kirigami.Theme.smallFont.pointSize

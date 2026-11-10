@@ -98,7 +98,7 @@ const PROGRESS_STRINGS: &[&str] = &[
     "TailGauge",
     "Checking…",
     "Turning it on…",
-    "Authorizing the operator…",
+    "Authorizing…",
     "Updating TailGauge…",
     "The command failed",
     "The update failed",
@@ -481,7 +481,8 @@ fn no_click_on_the_bar_icon_toggles_a_connection() {
 
 /// The bar icon is drawn as the provider the core names, with the count it
 /// hands over. A desktop that kept its one Tailscale mark would show a NetBird
-/// connection under Tailscale's face.
+/// connection under Tailscale's face, and one that learned NetBird's alone
+/// would show ZeroTier's the same way.
 #[test]
 fn every_desktop_draws_the_bar_as_the_provider_the_core_names() {
     let desktops = [
@@ -491,7 +492,7 @@ fn every_desktop_draws_the_bar_as_the_provider_the_core_names() {
             "barState.providerId",
             "barState.badge",
             repo_file("plasma/org.tailgauge.plasmoid/contents/ui/TailGaugeIcon.qml"),
-            "\"netbird\"",
+            '"',
         ),
         (
             "gnome",
@@ -499,7 +500,7 @@ fn every_desktop_draws_the_bar_as_the_provider_the_core_names() {
             "bar.providerId",
             "bar.badge",
             repo_file("gnome/tailgauge@arzaroth.github.io/extension.ts"),
-            "'netbird'",
+            '\'',
         ),
         (
             "omarchy",
@@ -507,10 +508,10 @@ fn every_desktop_draws_the_bar_as_the_provider_the_core_names() {
             "bar.providerId",
             "bar.badge",
             repo_file("omarchy/arzaroth.tailgauge/TailGaugeIcon.qml"),
-            "\"netbird\"",
+            '"',
         ),
     ];
-    for (name, source, provider, badge, icon, netbird) in &desktops {
+    for (name, source, provider, badge, icon, quote) in &desktops {
         assert!(
             source.contains(provider),
             "{name}: the bar icon ignores which provider it is"
@@ -519,7 +520,18 @@ fn every_desktop_draws_the_bar_as_the_provider_the_core_names() {
             source.contains(badge),
             "{name}: the bar icon does not count the connections"
         );
-        assert!(icon.contains(netbird), "{name}: no NetBird mark to draw");
+        // Tailscale's dots are what a provider without a mark of its own
+        // falls back to, so every other provider is named.
+        for p in tailgauge_core::providers::PROVIDERS
+            .iter()
+            .filter(|p| p.id != "tailscale")
+        {
+            assert!(
+                icon.contains(&format!("{quote}{}{quote}", p.id)),
+                "{name}: no {} mark to draw",
+                p.label
+            );
+        }
     }
 }
 
@@ -557,6 +569,123 @@ fn the_gnome_switch_mirrors_the_daemon_without_toggling_it() {
             unblock_at + ".unblock".len(),
             next,
             "the 'toggled' handler stays blocked after setToggleState"
+        );
+    }
+}
+
+/// QML with every comment and string literal blanked to spaces, the same
+/// length, so a brace inside one cannot end a block early.
+fn code_only(source: &str) -> String {
+    let mut out = String::with_capacity(source.len());
+    let mut chars = source.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '/' if chars.peek() == Some(&'/') => {
+                out.push(' ');
+                for c in chars.by_ref() {
+                    if c == '\n' {
+                        out.push('\n');
+                        break;
+                    }
+                    out.push(' ');
+                }
+            }
+            '/' if chars.peek() == Some(&'*') => {
+                out.push(' ');
+                let mut last = ' ';
+                for c in chars.by_ref() {
+                    out.push(if c == '\n' { '\n' } else { ' ' });
+                    if last == '*' && c == '/' {
+                        break;
+                    }
+                    last = c;
+                }
+            }
+            '"' | '\'' => {
+                out.push(c);
+                let mut escaped = false;
+                for inner in chars.by_ref() {
+                    if !escaped && inner == c {
+                        out.push(c);
+                        break;
+                    }
+                    escaped = !escaped && inner == '\\';
+                    out.push(if inner == '\n' { '\n' } else { ' ' });
+                }
+            }
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+#[test]
+fn a_brace_in_a_comment_or_string_does_not_end_a_qml_block() {
+    let source = "Label {\n    // a } here\n    tip: \"}\"\n    text: x\n}";
+    let code = code_only(source);
+    assert_eq!(code.len(), source.len());
+    assert_eq!(code.matches('}').count(), 1, "{code}");
+    assert!(code.contains("text: x"));
+}
+
+/// Plasma's `Label` and `Heading` render rich text by default, and a row's
+/// label can be whatever a network's owner named it: a ZeroTier controller can
+/// put an `<img>` in a name, and Plasma fetched it. Omarchy's labels and
+/// GNOME's `St.Label` are plain already.
+#[test]
+fn every_plasma_label_draws_panel_text_as_plain_text() {
+    let mut files = PLASMA.to_vec();
+    files.push("plasma/org.tailgauge.plasmoid/contents/ui/SectionHeader.qml");
+    for file in files {
+        let source = code_only(&repo_file(file));
+        for (at, _) in source
+            .match_indices("Label {")
+            .chain(source.match_indices("Heading {"))
+        {
+            let body = &source[at..];
+            let mut depth = 0usize;
+            let end = body
+                .char_indices()
+                .find(|&(_, c)| {
+                    match c {
+                        '{' => depth += 1,
+                        '}' => depth -= 1,
+                        _ => {}
+                    }
+                    c == '}' && depth == 0
+                })
+                .map(|(i, _)| i)
+                .unwrap_or(body.len());
+            let block = &body[..end];
+            if block.contains("text:") {
+                assert!(
+                    block.contains("textFormat: Text.PlainText"),
+                    "{file}: a label draws text as rich text:\n{block}"
+                );
+            }
+        }
+    }
+}
+
+/// GNOME rebuilds its menu only when the set of row ids changes, and joining
+/// or leaving a network keeps its id. A click bound to the row the item was
+/// built from left a network it had already left, instead of joining it back.
+#[test]
+fn a_gnome_click_acts_on_the_row_as_it_is_now() {
+    let source = repo_file("gnome/tailgauge@arzaroth.github.io/extension.ts");
+    let apply = between(&source, "_applyRow(item: RowItem", "\n    }\n");
+    assert!(
+        apply.contains("item._row = row;"),
+        "a redraw leaves the item holding the row it was built from"
+    );
+    for stale in [
+        "() => this._dispatch(row)",
+        "this._copyOption(row, option.kind)",
+        "() => this._sendFile(row)",
+    ] {
+        assert!(
+            !source.contains(stale),
+            "a click acts on the row the item was built from: {stale}"
         );
     }
 }

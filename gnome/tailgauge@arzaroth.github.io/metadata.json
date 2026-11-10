@@ -3,7 +3,7 @@
   "version": 23,
   "name": "TailGauge",
   "version-name": "0.10.0",
-  "description": "Tailscale and NetBird in the GNOME panel: connection state, on/off, account switching, exit nodes including Mullvad regions, networks, machine browsing with copy actions, and Taildrop file sending. Drives each provider's CLI directly.",
+  "description": "Tailscale, NetBird and ZeroTier in the GNOME panel: connection state, on/off, account switching, exit nodes including Mullvad regions, networks, machine browsing with copy actions, and Taildrop file sending. Drives each provider's CLI directly.",
   "shell-version": [
     "45",
     "46",

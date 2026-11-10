@@ -64,7 +64,7 @@ has no `FileSend` capability.
 
 ## Sources
 
-- `crates/tailgauge-core/src/panel.rs` (`can_send_files`, `is_taildrop_target`), `crates/tailgauge-core/src/status.rs` (`has_file_sharing`, `FILE_SHARING_CAP`), `crates/tailgauge-core/src/providers.rs` (`Capability::FileSend`)
+- `crates/tailgauge-core/src/panel.rs` (`can_send_files`, `is_taildrop_target`), `crates/tailgauge-core/src/status.rs` (`has_file_sharing`, `FILE_SHARING_CAP`), `crates/tailgauge-core/src/providers/mod.rs` (`Capability::FileSend`)
 - `crates/tailgauge/src/send.rs` (`run`, `taildrop_args`, `why_failed`), `crates/tailgauge/src/file_select.rs` (`order`, `kdialog_args`, `zenity_args`, `picked`)
 - `crates/tailgauge/src/receive.rs` (`STAGING`, `claim_path`, `split_name`, `default_dir`), `crates/tailgauge/src/notify.rs` (`spawn_actionable`, `await_action`)
 - `crates/tailgauge/src/main.rs` (`Command::Send`, `Command::Receive`, `Command::FileSelect`, `EXIT_NO_CHOOSER`), `systemd/tailgauge-receive.service`, `scripts/install.sh`

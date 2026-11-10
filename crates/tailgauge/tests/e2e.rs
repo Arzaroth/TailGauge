@@ -2,8 +2,9 @@
 //!
 //! Everything else in this repository tests a function. This runs the shipped
 //! executable the way a panel runs it - probe PATH, poll whatever answered,
-//! parse it, resolve the panel, print JSON - against fake `tailscale` and
-//! `netbird` commands that print captures of what the real ones said.
+//! parse it, resolve the panel, print JSON - against fake `tailscale`,
+//! `netbird` and `zerotier-cli` commands that print captures of what the real
+//! ones said.
 //!
 //! It is the only test that covers the gather, which is the one part of the
 //! port with no counterpart to be held against: the TypeScript model never
@@ -103,12 +104,47 @@ impl Machine {
                      *) exit 1 ;;\nesac\n",
                     f = fixtures().display()
                 ),
+                // Joined to every network in the capture. `join` and `leave`
+                // move a marker per network, and `listnetworks` prints the
+                // captured entry of each one marked joined.
+                "zerotier" => {
+                    let listed: Vec<Value> = serde_json::from_str(
+                        &std::fs::read_to_string(fixtures().join("zerotier-listnetworks.json"))
+                            .expect("the capture"),
+                    )
+                    .expect("a list");
+                    for network in &listed {
+                        let id = network["nwid"].as_str().expect("an id");
+                        std::fs::write(home.join(format!("zt-net-{id}.json")), network.to_string())
+                            .expect("the entry");
+                        std::fs::write(home.join(format!("zt-joined-{id}")), "").expect("joined");
+                    }
+                    format!(
+                        "#!/bin/sh\n[ \"$1\" = -j ] && shift\ncase \"$1\" in\n\
+                         info) /bin/cat '{f}/zerotier-info.json' ;;\n\
+                         peers) /bin/cat '{f}/zerotier-peers.json' ;;\n\
+                         listnetworks) sep=''; printf '['\n\
+                             for n in \"$HOME\"/zt-net-*.json; do id=${{n##*/zt-net-}}; id=${{id%.json}}\n\
+                             [ -e \"$HOME/zt-joined-$id\" ] || continue\n\
+                             printf '%s' \"$sep\"; /bin/cat \"$n\"; sep=','; done; printf ']'; : > \"$HOME/read\" ;;\n\
+                         join) : > \"$HOME/zt-joined-$2\"; echo '200 join OK' ;;\n\
+                         leave) /bin/rm -f \"$HOME/zt-joined-$2\"; echo '200 leave OK' ;;\n\
+                         *) exit 1 ;;\nesac\n",
+                        f = fixtures().display()
+                    )
+                }
+                // The service token is root's, as it is until a user copies it.
+                "zerotier-denied" => "#!/bin/sh\n\
+                     echo 'zerotier-cli: authtoken.secret not found or readable in /var/lib/zerotier-one (try again as root)' >&2\n\
+                     exit 2\n"
+                    .to_string(),
                 "xdg-open" => "#!/bin/sh\necho \"$1\" >> \"$HOME/opened\"\n".to_string(),
                 other => panic!("no fake {other}"),
             };
             let name = match *cli {
                 "tailscale-down" | "tailscale-login" | "tailscale-switching" => "tailscale",
                 "netbird-switching" | "netbird-login" => "netbird",
+                "zerotier" | "zerotier-denied" => "zerotier-cli",
                 other => other,
             };
             let path = home.join("bin").join(name);
@@ -151,6 +187,7 @@ impl Machine {
             .env("XDG_CACHE_HOME", self.home.join("cache"))
             .env("XDG_DATA_HOME", self.home.join("data"))
             .env("XDG_CONFIG_HOME", self.home.join("config"))
+            .env("XDG_STATE_HOME", self.home.join("state"))
             .env(
                 "NB_DAEMON_ADDR",
                 format!("unix://{}", self.home.join("netbird.sock").display()),
@@ -196,7 +233,7 @@ fn a_machine_with_no_vpn_cli_is_told_what_would_work() {
 
     assert_eq!(
         panel["status"]["text"],
-        "No supported VPN CLI on PATH. Looked for Tailscale, NetBird."
+        "No supported VPN CLI on PATH. Looked for Tailscale, NetBird, ZeroTier."
     );
     assert_eq!(panel["header"]["title"], "TailGauge");
     assert_eq!(panel["header"]["toggleVisible"], false);
@@ -725,4 +762,238 @@ fn plain_tailgauge_names_the_other_provider_and_a_daemon_that_is_down() {
     let (code, stdout, _) = none.run(&[]);
     assert_eq!(code, 0);
     assert!(stdout.starts_with("no VPN client found"), "{stdout}");
+}
+
+fn rows<'a>(panel: &'a Value, id: &str) -> Vec<(&'a str, &'a str)> {
+    section(panel, id)["rows"]
+        .as_array()
+        .expect("rows")
+        .iter()
+        .map(|r| {
+            (
+                r["label"].as_str().unwrap_or(""),
+                r["hint"].as_str().unwrap_or(""),
+            )
+        })
+        .collect()
+}
+
+const ZEROTIER: &str = r#"{"activeProviderId":"zerotier"}"#;
+
+#[test]
+fn a_zerotier_panel_lists_its_networks_by_name_and_the_machines_it_reaches() {
+    let machine = Machine::with(&["zerotier"]);
+    let panel = machine.panel(ZEROTIER);
+
+    assert_eq!(panel["header"]["providerId"], "zerotier");
+    assert_eq!(panel["header"]["toggleChecked"], true);
+    assert_eq!(
+        rows(&panel, "networks"),
+        [("homelab", "Leave"), ("office", "Leave")]
+    );
+    assert!(labels(section(&panel, "machines")).contains(&"e0edd2bebd".to_string()));
+
+    let (code, stdout, _) = machine.run(&["ctl", "--provider", "zerotier", "status"]);
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "Connected as 148c386a05 (10.147.20.54)");
+}
+
+#[test]
+fn the_zerotier_switch_leaves_every_network_and_joins_them_again() {
+    let machine = Machine::with(&["zerotier"]);
+
+    let (code, _, stderr) = machine.run(&["ctl", "--provider", "zerotier", "down"]);
+    assert_eq!(code, 0, "{stderr}");
+    let (code, stdout, _) = machine.run(&["ctl", "--provider", "zerotier", "status"]);
+    assert_eq!(code, 3, "nothing joined is off");
+    assert_eq!(stdout.trim(), "Stopped");
+    assert_eq!(machine.panel(ZEROTIER)["header"]["toggleChecked"], false);
+
+    let (code, _, stderr) = machine.run(&["ctl", "--provider", "zerotier", "up"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(
+        rows(&machine.panel(ZEROTIER), "networks"),
+        [("homelab", "Leave"), ("office", "Leave")]
+    );
+}
+
+#[test]
+fn a_zerotier_network_left_by_hand_stays_listed_and_out_of_the_switch() {
+    let machine = Machine::with(&["zerotier"]);
+    machine.panel(ZEROTIER);
+
+    let office = "e0edd2bebdfce22e";
+    let (code, _, stderr) = machine.run(&[
+        "ctl",
+        "--provider",
+        "zerotier",
+        "select-network",
+        office,
+        "--leave",
+    ]);
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(
+        rows(&machine.panel(ZEROTIER), "networks"),
+        [("homelab", "Leave"), ("office", "Join")]
+    );
+
+    for _ in 0..2 {
+        let (code, _, stderr) = machine.run(&["ctl", "--provider", "zerotier", "toggle"]);
+        assert_eq!(code, 0, "{stderr}");
+    }
+    assert_eq!(
+        rows(&machine.panel(ZEROTIER), "networks"),
+        [("homelab", "Leave"), ("office", "Join")],
+        "the switch brings back what it took, not what was left by hand"
+    );
+}
+
+#[test]
+fn a_zerotier_that_refuses_this_user_offers_to_let_them_in() {
+    let machine = Machine::with(&["zerotier-denied"]);
+    let panel = machine.panel(ZEROTIER);
+    let connections = section(&panel, "connections");
+    assert_eq!(connections["visible"], true);
+    assert_eq!(connections["rows"][0]["action"], "authorize");
+    assert_eq!(connections["rows"][0]["label"], "Allow access to ZeroTier");
+}
+
+#[test]
+fn a_zerotier_network_left_by_id_before_any_panel_is_still_remembered() {
+    let machine = Machine::with(&["zerotier"]);
+    let (code, _, stderr) = machine.run(&[
+        "ctl",
+        "--provider",
+        "zerotier",
+        "select-network",
+        "E0EDD2BEBDFCE22E",
+        "--leave",
+    ]);
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(
+        rows(&machine.panel(ZEROTIER), "networks"),
+        [("homelab", "Leave"), ("e0edd2bebdfce22e", "Join")],
+        "one row, under the id as ZeroTier lists it, whatever case was typed"
+    );
+
+    let state = machine.home.join("state/tailgauge/networks-zerotier.json");
+    use std::os::unix::fs::PermissionsExt;
+    let mode = |p: &Path| std::fs::metadata(p).expect("exists").permissions().mode() & 0o777;
+    assert_eq!(mode(&state), 0o600, "it names every network joined");
+    assert_eq!(mode(state.parent().expect("a dir")), 0o700);
+}
+
+#[test]
+fn the_zerotier_switch_says_why_it_has_nothing_to_join() {
+    let machine = Machine::with(&["zerotier"]);
+    for id in ["e0edd2bebde885d3", "e0edd2bebdfce22e"] {
+        let (code, _, stderr) = machine.run(&[
+            "ctl",
+            "--provider",
+            "zerotier",
+            "select-network",
+            id,
+            "--leave",
+        ]);
+        assert_eq!(code, 0, "{stderr}");
+    }
+    let (code, _, stderr) = machine.run(&["ctl", "--provider", "zerotier", "up"]);
+    assert_eq!(code, 1);
+    assert!(
+        stderr.contains("every network was left by hand"),
+        "{stderr}"
+    );
+
+    let fresh = Machine::with(&["zerotier"]);
+    for id in ["e0edd2bebde885d3", "e0edd2bebdfce22e"] {
+        std::fs::remove_file(fresh.home.join(format!("zt-joined-{id}"))).expect("left");
+    }
+    let (code, _, stderr) = fresh.run(&["ctl", "--provider", "zerotier", "up"]);
+    assert_eq!(code, 1);
+    assert!(
+        stderr.contains("there is no network to join yet"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn watch_wakes_when_a_zerotier_network_is_left_while_another_stays_up() {
+    let machine = Machine::with(&["zerotier"]);
+    let mut watch = machine
+        .command(&["watch", "20"])
+        .spawn()
+        .expect("the watcher runs");
+    let started = std::time::Instant::now();
+    while !machine.home.join("read").exists() {
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(10),
+            "the watcher never read ZeroTier's networks"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    std::fs::remove_file(machine.home.join("zt-joined-e0edd2bebdfce22e")).expect("office is left");
+
+    let started = std::time::Instant::now();
+    let code = loop {
+        if let Some(status) = watch.try_wait().expect("the watcher is waited on") {
+            break status.code();
+        }
+        if started.elapsed() > std::time::Duration::from_secs(10) {
+            let _ = watch.kill();
+            panic!("leaving one network while homelab stayed up did not wake the watcher");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    };
+    assert_eq!(code, Some(0));
+}
+
+#[test]
+fn the_last_zerotier_network_left_by_hand_keeps_its_row_to_join_it_back() {
+    let machine = Machine::with(&["zerotier"]);
+    machine.panel(ZEROTIER);
+    for id in ["e0edd2bebde885d3", "e0edd2bebdfce22e"] {
+        let (code, _, stderr) = machine.run(&[
+            "ctl",
+            "--provider",
+            "zerotier",
+            "select-network",
+            id,
+            "--leave",
+        ]);
+        assert_eq!(code, 0, "{stderr}");
+    }
+    let panel = machine.panel(ZEROTIER);
+    assert_eq!(panel["header"]["toggleChecked"], false);
+    assert_eq!(section(&panel, "networks")["visible"], true);
+    assert_eq!(
+        rows(&panel, "networks"),
+        [("homelab", "Join"), ("office", "Join")]
+    );
+}
+
+#[test]
+fn a_zerotier_that_refuses_this_user_says_so_rather_than_reading_as_off() {
+    let machine = Machine::with(&["zerotier-denied"]);
+    let panel = machine.panel(ZEROTIER);
+    assert_eq!(panel["header"]["toggleVisible"], false, "nothing to switch");
+    assert_eq!(panel["header"]["meta"], "ZeroTier needs your permission");
+    assert_eq!(panel["header"]["crossed"], false);
+    assert_eq!(panel["bar"]["warning"], true);
+    assert!(
+        panel["bar"]["tooltip"][0]
+            .as_str()
+            .is_some_and(|line| line.ends_with("needs access")),
+        "{}",
+        panel["bar"]["tooltip"]
+    );
+
+    let (code, stdout, _) = machine.run(&["ctl", "--provider", "zerotier", "status"]);
+    assert_eq!(code, 3);
+    assert_eq!(
+        stdout.trim(),
+        "ZeroTier refuses this user: run tailgauge ctl --provider zerotier authorize"
+    );
+    let (code, _, stderr) = machine.run(&["ctl", "--provider", "zerotier", "toggle"]);
+    assert_eq!(code, 1);
+    assert!(stderr.contains("refuses this user"), "{stderr}");
 }

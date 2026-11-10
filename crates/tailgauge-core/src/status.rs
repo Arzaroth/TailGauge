@@ -42,6 +42,14 @@ pub struct StatusOk {
     pub peers: Vec<Peer>,
     #[serde(rename = "exitNodes")]
     pub exit_nodes: Vec<Peer>,
+    /// The exit node routing this machine, Mullvad's included, which are not
+    /// in `peers`. Empty without one.
+    #[serde(rename = "exitNodeId", skip_serializing_if = "String::is_empty")]
+    pub exit_node_id: String,
+    /// The networks joined, for a provider whose status names them
+    /// (ZeroTier). Empty for the rest, which list theirs on their own.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub networks: Vec<crate::network::Network>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -49,6 +57,9 @@ pub struct StatusUnavailable {
     pub ok: bool,
     pub unavailable: bool,
     pub message: String,
+    /// The daemon is up and refuses this user, rather than not answering.
+    #[serde(rename = "accessDenied", skip_serializing_if = "std::ops::Not::not")]
+    pub access_denied: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -68,6 +79,7 @@ pub fn parse_status(raw: &str) -> StatusResult {
             ok: true,
             unavailable: true,
             message: "Disconnected".into(),
+            access_denied: false,
         });
     }
 
@@ -135,6 +147,12 @@ pub fn parse_status(raw: &str) -> StatusResult {
         self_peer,
         peers,
         exit_nodes,
+        exit_node_id: data
+            .pointer("/ExitNodeStatus/ID")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string(),
+        networks: Vec::new(),
     }))
 }
 
@@ -222,6 +240,7 @@ mod tests {
                 ok: true,
                 unavailable: true,
                 message: "Disconnected".into(),
+                access_denied: false,
             })
         );
     }

@@ -203,7 +203,7 @@ Item {
             service.toggleTailscale()
             break
         case "authorize":
-            service.authorizeTailscaleOperator()
+            service.authorizeOperator()
             break
         case "switchAccount":
             service.switchAccount(row.payload.id)
@@ -444,12 +444,14 @@ Item {
 
                         PlasmaExtras.Heading {
                             level: 4
+                            textFormat: Text.PlainText
                             text: full.panel.header.title
                             elide: Text.ElideRight
                             Layout.fillWidth: true
                         }
 
                         PlasmaComponents3.Label {
+                            textFormat: Text.PlainText
                             text: full.panel.header.meta
                             color: full.dimColor
                             font: Kirigami.Theme.smallFont
@@ -509,6 +511,7 @@ Item {
                 Layout.fillWidth: true
                 Layout.leftMargin: Kirigami.Units.smallSpacing * 2
                 Layout.rightMargin: Kirigami.Units.smallSpacing * 2
+                textFormat: Text.PlainText
                 text: full.panel.status.text
                 color: full.panel.status.tone === "error" ? Kirigami.Theme.negativeTextColor : full.dimColor
                 font: Kirigami.Theme.smallFont
@@ -549,6 +552,7 @@ Item {
                         visible: sectionView.modelData.rows.length === 0 && sectionView.modelData.empty !== ""
                         Layout.fillWidth: true
                         horizontalAlignment: Text.AlignHCenter
+                        textFormat: Text.PlainText
                         text: sectionView.modelData.empty
                         color: full.dimColor
                     }
@@ -578,6 +582,7 @@ Item {
                                 visible: rowGroup.isEmpty
                                 Layout.fillWidth: true
                                 horizontalAlignment: Text.AlignHCenter
+                                textFormat: Text.PlainText
                                 text: rowGroup.modelData ? rowGroup.modelData.label : ""
                                 color: full.dimColor
                                 font: Kirigami.Theme.smallFont
@@ -677,6 +682,7 @@ Item {
                 Layout.rightMargin: Kirigami.Units.smallSpacing * 2
                 Layout.topMargin: Kirigami.Units.smallSpacing
                 horizontalAlignment: Text.AlignRight
+                textFormat: Text.PlainText
                 text: full.panel.footer
                 color: full.dimColor
                 font: Kirigami.Theme.smallFont

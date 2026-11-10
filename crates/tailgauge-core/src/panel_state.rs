@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::accounts::Account;
-use crate::netbird::Network;
+use crate::network::Network;
 use crate::peer::Peer;
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -33,6 +33,9 @@ pub struct ProviderSummary {
     pub self_ip: String,
     #[serde(default)]
     pub state: String,
+    /// Its CLI refuses this user, so nothing else here is known.
+    #[serde(default, rename = "accessDenied")]
+    pub access_denied: bool,
 }
 
 /// What `tailgauge --check-update` last reported, as the panel reads it.
@@ -95,6 +98,10 @@ pub struct PanelState {
     pub setting_exit_node_id: String,
     #[serde(rename = "accountsAccessDenied")]
     pub accounts_access_denied: bool,
+    /// The provider's CLI refuses this user outright, so nothing it knows can
+    /// be read until the user is let in.
+    #[serde(rename = "accessDenied")]
+    pub access_denied: bool,
     #[serde(rename = "actionStatus")]
     pub action_status: String,
     #[serde(rename = "lastError")]

@@ -10,7 +10,7 @@ use std::sync::mpsc;
 use std::thread;
 
 use tailgauge_core as core;
-use tailgauge_core::providers::{Capability, ProviderDescriptor};
+use tailgauge_core::providers::{Capability, ProviderDescriptor, Switch};
 
 use crate::notify::{self, Notification};
 use crate::tailscale;
@@ -62,12 +62,24 @@ fn announce(urgency: &str, summary: &str, body: &str) {
 /// The provider's own status, through whichever parser it needs.
 fn read(provider: &ProviderDescriptor) -> core::StatusResult {
     let raw = crate::gather::status_output(provider).unwrap_or_default();
-    provider.parse_status(&raw)
+    provider.backend.parse_status(&raw)
+}
+
+/// Why a provider gave no answer, in words a person can act on: a CLI that
+/// refuses this user is not the same as one that is down.
+fn unanswered(provider: &ProviderDescriptor) -> String {
+    match read(provider) {
+        core::StatusResult::Unavailable(u) if u.access_denied => format!(
+            "{} refuses this user: run tailgauge ctl --provider {} authorize",
+            provider.label, provider.id
+        ),
+        _ => format!("{} is not answering", provider.label),
+    }
 }
 
 pub fn status(provider: &ProviderDescriptor) -> Outcome {
     let core::StatusResult::Ok(status) = read(provider) else {
-        println!("{} is not answering", provider.label);
+        println!("{}", unanswered(provider));
         return Outcome::Disconnected;
     };
 
@@ -110,7 +122,9 @@ fn connected_line(self_name: &str, self_ip: &str) -> String {
 }
 
 pub fn up(provider: &ProviderDescriptor) -> Outcome {
-    let argv = provider.up();
+    let Switch::Connection { up: argv, .. } = provider.backend.switch() else {
+        return rejoin(provider);
+    };
     if attended() {
         return match Command::new(&argv[0]).args(&argv[1..]).status() {
             Ok(s) if s.success() => Outcome::Ok,
@@ -121,7 +135,7 @@ pub fn up(provider: &ProviderDescriptor) -> Outcome {
     // Bound to a key there is no terminal for `tailscale up` to print its
     // login URL on, so it is scraped out of the stream the way the panels do.
     // `up` waits for the login to finish, so the page opens while it waits.
-    run_opening_login(&argv, provider.unattended_up_env(), |url| {
+    run_opening_login(&argv, provider.backend.unattended_up_env(), |url| {
         announce(
             "normal",
             "Authorize this device",
@@ -197,7 +211,9 @@ fn login_url(line: &str) -> Option<String> {
 }
 
 pub fn down(provider: &ProviderDescriptor) -> Outcome {
-    let argv = provider.down();
+    let Switch::Connection { down: argv, .. } = provider.backend.switch() else {
+        return leave_all(provider);
+    };
     if proc::run_quiet(&argv[0], &argv[1..]) {
         return Outcome::Ok;
     }
@@ -209,9 +225,90 @@ pub fn down(provider: &ProviderDescriptor) -> Outcome {
     Outcome::Failed(format!("could not turn {} off", provider.label))
 }
 
+/// A provider with no connection of its own comes up by joining again every
+/// network it was taken off, and every one it has joined is remembered first.
+fn rejoin(provider: &ProviderDescriptor) -> Outcome {
+    let Some(joined) = crate::networks::joined(provider) else {
+        return Outcome::Failed(unanswered(provider));
+    };
+    let known = crate::networks::observe(provider, &joined);
+    let missing = crate::networks::to_rejoin(&known, &joined);
+    if missing.is_empty() && joined.is_empty() {
+        let why = if known.is_empty() {
+            "There is no network to join yet"
+        } else {
+            "Every network was left by hand"
+        };
+        announce(
+            "critical",
+            &format!("Could not turn {} on", provider.label),
+            why,
+        );
+        return Outcome::Failed(format!(
+            "{}: join one from its row or with tailgauge ctl --provider {} select-network ID",
+            why.to_lowercase(),
+            provider.id
+        ));
+    }
+    let failed: Vec<&str> = missing
+        .into_iter()
+        .filter(|n| !switch_network(provider, &n.id, true))
+        .map(|n| n.id.as_str())
+        .collect();
+    if failed.is_empty() {
+        return Outcome::Ok;
+    }
+    announce(
+        "critical",
+        &format!("Could not turn {} on", provider.label),
+        &format!("Could not join {}", failed.join(", ")),
+    );
+    Outcome::Failed(format!("could not join {}", failed.join(", ")))
+}
+
+/// Leave every network joined, remembering each so `rejoin` can bring it
+/// back.
+fn leave_all(provider: &ProviderDescriptor) -> Outcome {
+    let Some(joined) = crate::networks::joined(provider) else {
+        return Outcome::Failed(unanswered(provider));
+    };
+    if let Err(e) = crate::networks::take(provider, &joined) {
+        announce(
+            "critical",
+            &format!("Could not turn {} off", provider.label),
+            "Could not remember its networks, so none was left",
+        );
+        return Outcome::Failed(format!(
+            "could not remember the {} networks to join back ({e}), so none was left",
+            provider.label
+        ));
+    }
+    let failed: Vec<&str> = joined
+        .iter()
+        .filter(|n| !switch_network(provider, &n.id, false))
+        .map(|n| n.id.as_str())
+        .collect();
+    if failed.is_empty() {
+        return Outcome::Ok;
+    }
+    announce(
+        "critical",
+        &format!("Could not turn {} off", provider.label),
+        &format!("Could not leave {}", failed.join(", ")),
+    );
+    Outcome::Failed(format!("could not leave {}", failed.join(", ")))
+}
+
+fn switch_network(provider: &ProviderDescriptor, network_id: &str, join: bool) -> bool {
+    provider
+        .backend
+        .select_network(network_id, join)
+        .is_some_and(|argv| proc::run_quiet(&argv[0], &argv[1..]))
+}
+
 pub fn toggle(provider: &ProviderDescriptor) -> Outcome {
     let core::StatusResult::Ok(status) = read(provider) else {
-        return Outcome::Failed(format!("{} is not answering", provider.label));
+        return Outcome::Failed(unanswered(provider));
     };
     // Not `on && down || up`: a failed `down` would fall through and turn it
     // back on again.
@@ -256,7 +353,7 @@ pub fn exit_node(provider: &ProviderDescriptor, target: Option<&str>) -> Outcome
         return Outcome::Ok;
     };
 
-    let Some(argv) = provider.set_exit_node(requested_node(target)) else {
+    let Some(argv) = provider.backend.set_exit_node(requested_node(target)) else {
         return Outcome::Failed(format!("{} cannot set an exit node", provider.label));
     };
     if proc::run_quiet(&argv[0], &argv[1..]) {
@@ -276,7 +373,7 @@ fn requested_node(target: &str) -> &str {
 }
 
 pub fn switch_account(provider: &ProviderDescriptor, account_id: &str) -> Outcome {
-    let Some(argv) = provider.switch_account(account_id) else {
+    let Some(argv) = provider.backend.switch_account(account_id) else {
         return Outcome::Failed(format!("{} has no profiles to switch", provider.label));
     };
     if proc::run_quiet(&argv[0], &argv[1..]) {
@@ -287,10 +384,27 @@ pub fn switch_account(provider: &ProviderDescriptor, account_id: &str) -> Outcom
 }
 
 pub fn select_network(provider: &ProviderDescriptor, network_id: &str, join: bool) -> Outcome {
-    let Some(argv) = provider.select_network(network_id, join) else {
+    let network_id = &provider.backend.network_id(network_id);
+    let Some(argv) = provider.backend.select_network(network_id, join) else {
         return Outcome::Failed(format!("{} has no networks", provider.label));
     };
     if proc::run_quiet(&argv[0], &argv[1..]) {
+        // What the user joins or leaves by hand is what the switch brings
+        // back, or leaves alone, the next time it comes on.
+        if provider.backend.switch().by_networks()
+            && let Err(e) = crate::networks::want(provider, network_id, join)
+        {
+            let done = if join { "Joined" } else { "Left" };
+            announce(
+                "critical",
+                &format!("{done} {network_id}, but could not remember it"),
+                "The switch may not bring it back as you left it",
+            );
+            return Outcome::Failed(format!(
+                "{} {network_id}, but could not remember it ({e})",
+                done.to_lowercase()
+            ));
+        }
         return Outcome::Ok;
     }
     let what = if join { "join" } else { "leave" };
@@ -298,17 +412,18 @@ pub fn select_network(provider: &ProviderDescriptor, network_id: &str, join: boo
     Outcome::Failed(format!("could not {what} {network_id}"))
 }
 
-/// Let this user operate the daemon's profile.
+/// Let this user drive a provider whose CLI refuses them: Tailscale's
+/// operator, ZeroTier's service token.
 ///
 /// `pkexec` because it needs root, and the user name is resolved by the shell
 /// that runs it rather than read here: a widget started without one in its
 /// environment would otherwise authorize nobody.
 pub fn authorize(provider: &ProviderDescriptor) -> Outcome {
-    if !provider.capabilities.has(Capability::Accounts) {
-        return Outcome::Failed(format!("{} has no profiles to operate", provider.label));
-    }
+    let Some(authorization) = provider.backend.authorization() else {
+        return Outcome::Failed(format!("{} has no user to authorize", provider.label));
+    };
     let mut command = Command::new("sh");
-    command.arg("-c").arg(authorize_command(provider.cli));
+    command.arg("-c").arg(authorization.command);
     if !attended() {
         // pkexec would otherwise draw its own prompt over whatever is on
         // screen, and there is no way to type into it from here.
@@ -322,20 +437,16 @@ pub fn authorize(provider: &ProviderDescriptor) -> Outcome {
         _ => {
             announce(
                 "critical",
-                &format!("Could not authorize the {} operator", provider.label),
+                &format!("Could not authorize {}", provider.label),
                 "Run tailgauge ctl authorize for the reason",
             );
-            Outcome::Failed("could not authorize the operator".into())
+            Outcome::Failed(format!("could not authorize {}", provider.label))
         }
     }
 }
 
-fn authorize_command(cli: &str) -> String {
-    format!(r#"pkexec {cli} set --operator="$(id -un)""#)
-}
-
 pub fn exit_nodes(provider: &ProviderDescriptor) -> Outcome {
-    let Some(argv) = provider.exit_node_list() else {
+    let Some(argv) = provider.backend.exit_node_list() else {
         return Outcome::Failed(format!("{} has no exit nodes", provider.label));
     };
     match proc::run(&argv[0], &argv[1..]) {
@@ -450,7 +561,11 @@ mod tests {
     fn the_operator_is_the_user_running_the_command_rather_than_the_one_here() {
         // Resolved by the shell that runs it: a widget started without a user
         // in its environment would otherwise authorize nobody.
-        let command = authorize_command("tailscale");
+        let command = tailscale()
+            .backend
+            .authorization()
+            .expect("tailscale")
+            .command;
         assert!(command.starts_with("pkexec tailscale set --operator="));
         assert!(command.contains("$(id -un)"));
     }
@@ -508,7 +623,7 @@ mod tests {
         );
         assert_eq!(
             why(authorize(netbird())),
-            "NetBird has no profiles to operate"
+            "NetBird has no user to authorize"
         );
         assert_eq!(
             why(select_network(tailscale(), "net-1", true)),

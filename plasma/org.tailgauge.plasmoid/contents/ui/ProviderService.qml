@@ -79,7 +79,7 @@ Item {
         // The session PATH often lacks the directory the installer drops the
         // binary into.
         return "sh -c " + _quote(
-            'export PATH="$HOME/.local/bin:$HOME/bin:/usr/local/bin:$PATH"; ' + parts.join(" "))
+            'export PATH="$HOME/.local/bin:$HOME/bin:/usr/local/bin:$PATH:/usr/sbin:/sbin"; ' + parts.join(" "))
     }
 
     property var _kinds: ({})
@@ -327,9 +327,9 @@ Item {
         if (_ctl("network", "select-network", argv)) selectingNetworkId = id
     }
 
-    function authorizeTailscaleOperator() {
+    function authorizeOperator() {
         if (!installed) return
-        if (_ctl("operator", "authorize")) actionStatus = "Authorizing the operator…"
+        if (_ctl("operator", "authorize")) actionStatus = "Authorizing…"
     }
 
     function switchProvider(provider) {

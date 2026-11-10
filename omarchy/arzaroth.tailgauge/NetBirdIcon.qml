@@ -66,7 +66,9 @@ Item {
     property color brandColor: "#f68330"
 
     fillColor: root.monochrome ? root.color : brandColor
-    strokeWidth: 0
+    // -1, not 0: Qt 6.6's software renderer strokes a zero width
+    // in white, which fills the mark's cut-outs.
+    strokeWidth: -1
     // SVG fills nonzero by default; Shape defaults to odd-even, which would
     // punch holes through the overlapping parts of the mark.
     fillRule: ShapePath.WindingFill

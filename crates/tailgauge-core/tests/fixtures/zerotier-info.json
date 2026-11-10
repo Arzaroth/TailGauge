@@ -1,0 +1,41 @@
+{
+ "address": "148c386a05",
+ "clock": 1794296559321,
+ "config": {
+  "settings": {
+   "allowTcpFallbackRelay": true,
+   "forceTcpRelay": false,
+   "homeDir": "/var/lib/zerotier-one",
+   "listeningOn": [
+    "172.24.0.3/9993",
+    "172.24.0.3/57970",
+    "172.24.0.3/34200"
+   ],
+   "portMappingEnabled": true,
+   "primaryPort": 9993,
+   "secondaryPort": 57970,
+   "softwareUpdate": "disable",
+   "softwareUpdateChannel": "release",
+   "surfaceAddresses": [
+    "203.0.113.10/57742",
+    "203.0.113.10/47454",
+    "203.0.113.10/54809",
+    "203.0.113.10/57970",
+    "203.0.113.10/9993",
+    "203.0.113.10/34200",
+    "203.0.113.10/44253"
+   ],
+   "tertiaryPort": 34200
+  }
+ },
+ "online": true,
+ "planetWorldId": 149604618,
+ "planetWorldTimestamp": 1738848951118,
+ "publicIdentity": "148c386a05:0:fa1cc6bb38f2d0bd33eeb88189c19017a235400c54918e84e6d88d3995d07166295d1ac745a53aabe51f52db1acdb6ffaa1ad3aaea2f5078795dc7d30f45575a",
+ "tcpFallbackActive": false,
+ "version": "1.14.2",
+ "versionBuild": 0,
+ "versionMajor": 1,
+ "versionMinor": 14,
+ "versionRev": 2
+}

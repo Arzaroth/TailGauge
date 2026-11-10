@@ -1,14 +1,21 @@
 //! Every provider TailGauge knows how to drive, in one table.
 //!
-//! Adding a provider is a row here: the binary to probe for, what it can do,
-//! and the argv for each thing the panel asks of it. Nothing else in the crate
-//! names a provider, and no frontend does at all.
+//! Adding a provider is a row here, the binary to probe for and what it can
+//! do, and a [`Backend`] beside it: the argv for each thing the panel asks of
+//! it and the parser for what it answers. Nothing else in the crate names a
+//! provider, and no frontend does at all.
 
 use std::path::PathBuf;
+use std::process::Output;
 
 use serde::Serialize;
 
 use crate::panel_state::PanelState;
+use crate::status::StatusResult;
+
+mod netbird;
+mod tailscale;
+mod zerotier;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,6 +26,9 @@ pub struct Capabilities {
     pub accounts: bool,
     pub networks: bool,
     pub connection_quality: bool,
+    /// The daemon pushes its changes, so `watch` waits on its event stream
+    /// rather than polling it.
+    pub live_watch: bool,
 }
 
 /// One capability, named rather than indexed, so a typo is a build error the
@@ -31,6 +41,7 @@ pub enum Capability {
     Accounts,
     Networks,
     ConnectionQuality,
+    LiveWatch,
 }
 
 impl Capabilities {
@@ -42,14 +53,135 @@ impl Capabilities {
             Capability::Accounts => self.accounts,
             Capability::Networks => self.networks,
             Capability::ConnectionQuality => self.connection_quality,
+            Capability::LiveWatch => self.live_watch,
         }
     }
 }
 
+/// What a provider does, one implementation per provider. Each optional
+/// command is `None` on a provider without it, never an argv aimed at another
+/// provider's binary.
+pub trait Backend: Sync + std::fmt::Debug {
+    fn status(&self) -> Vec<String>;
+
+    /// What `parse_status` reads, gathered through `run`, which runs an argv
+    /// and hands back what it printed. `None` is a daemon that did not answer.
+    /// One call to `status()` unless the provider needs several.
+    fn read_status(&self, run: &dyn Fn(&[String]) -> Option<Output>) -> Option<String> {
+        let out = run(&self.status())?;
+        out.status
+            .success()
+            .then(|| String::from_utf8_lossy(&out.stdout).trim_end().to_string())
+    }
+
+    /// The unix socket the CLI reaches its daemon on, when the binary should
+    /// probe it before asking the CLI.
+    fn daemon_socket(&self, _env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
+        None
+    }
+
+    /// Where the CLI looks when the configured socket is missing.
+    fn instance_socket_dir(&self) -> Option<&'static str> {
+        None
+    }
+
+    /// What `status()` printed, through the parser for this provider's shape.
+    fn parse_status(&self, raw: &str) -> StatusResult;
+
+    /// What the panel's on/off switch drives.
+    fn switch(&self) -> Switch;
+
+    /// What `up` is run with when TailGauge opens the login page itself, so
+    /// the CLI does not open it too.
+    fn unattended_up_env(&self) -> &'static [(&'static str, &'static str)] {
+        &[]
+    }
+
+    fn exit_node_list(&self) -> Option<Vec<String>> {
+        None
+    }
+
+    fn accounts(&self) -> Option<Vec<String>> {
+        None
+    }
+
+    fn networks(&self) -> Option<Vec<String>> {
+        None
+    }
+
+    /// What `networks()` printed.
+    fn parse_networks(&self, _raw: &str) -> Vec<crate::network::Network> {
+        Vec::new()
+    }
+
+    /// A stream that prints a line per daemon notification, for a provider
+    /// with `live_watch`. A provider without one is polled.
+    fn events(&self) -> Option<Vec<String>> {
+        None
+    }
+
+    /// Which notification lines are a change the panel draws. Everything else
+    /// on the stream is churn, which would turn a refresh into a busy loop.
+    fn event_markers(&self) -> &'static [&'static str] {
+        &[]
+    }
+
+    fn switch_account(&self, _account_id: &str) -> Option<Vec<String>> {
+        None
+    }
+
+    fn set_exit_node(&self, _target: &str) -> Option<Vec<String>> {
+        None
+    }
+
+    fn select_network(&self, _network_id: &str, _selected: bool) -> Option<Vec<String>> {
+        None
+    }
+
+    /// A network id as the provider lists it, so one typed differently is
+    /// not remembered twice.
+    fn network_id(&self, id: &str) -> String {
+        id.to_string()
+    }
+
+    /// How a user the CLI refuses is let in, for a provider that can refuse
+    /// one.
+    fn authorization(&self) -> Option<Authorization> {
+        None
+    }
+}
+
+/// What turning a provider on and off means.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Switch {
+    /// A connection of its own, brought up and down by these commands.
+    Connection { up: Vec<String>, down: Vec<String> },
+    /// No connection of its own (ZeroTier): off leaves every joined network
+    /// and on joins back the ones it took, which the binary remembers.
+    Networks,
+}
+
+impl Switch {
+    pub fn by_networks(&self) -> bool {
+        matches!(self, Switch::Networks)
+    }
+}
+
+/// Letting this user drive a provider that refuses them: a shell line run as
+/// the user, which elevates itself, and the row that offers it. The user is
+/// resolved by that shell rather than here: a widget started without one in
+/// its environment would otherwise authorize nobody.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Authorization {
+    pub command: &'static str,
+    pub label: &'static str,
+    pub sublabel: &'static str,
+}
+
 /// Serialized as a row payload, so a frontend can read the id off the row it
-/// was handed. The commands are methods rather than data: an argv the panel
-/// never reads has no business crossing to it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+/// was handed. The commands live on the backend rather than in data: an argv
+/// the panel never reads has no business crossing to it.
+#[derive(Debug, Clone, Copy, Serialize)]
 pub struct ProviderDescriptor {
     pub id: &'static str,
     pub label: &'static str,
@@ -63,7 +195,18 @@ pub struct ProviderDescriptor {
     pub icon: &'static str,
     pub glyph: &'static str,
     pub capabilities: Capabilities,
+    #[serde(skip)]
+    pub backend: &'static dyn Backend,
 }
+
+/// One row per id, so the id is the identity.
+impl PartialEq for ProviderDescriptor {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl Eq for ProviderDescriptor {}
 
 /// Order is the preference order: with several installed and no explicit
 /// choice, the first drivable one wins.
@@ -84,7 +227,9 @@ pub const PROVIDERS: &[ProviderDescriptor] = &[
             // Empty CurAddr with a relay region is a relayed peer, so the
             // direct or relayed reading is there for the asking.
             connection_quality: true,
+            live_watch: true,
         },
+        backend: &tailscale::Tailscale,
     },
     ProviderDescriptor {
         id: "netbird",
@@ -100,7 +245,29 @@ pub const PROVIDERS: &[ProviderDescriptor] = &[
             accounts: false,
             networks: true,
             connection_quality: true,
+            live_watch: false,
         },
+        backend: &netbird::NetBird,
+    },
+    ProviderDescriptor {
+        id: "zerotier",
+        label: "ZeroTier",
+        cli: "zerotier-cli",
+        supported: true,
+        icon: "network-wired-symbolic",
+        glyph: "\u{f0c26}",
+        capabilities: Capabilities {
+            exit_nodes: false,
+            mullvad: false,
+            file_send: false,
+            accounts: false,
+            networks: true,
+            // A preferred path is direct; without one the peer is reached
+            // through a root.
+            connection_quality: true,
+            live_watch: false,
+        },
+        backend: &zerotier::ZeroTier,
     },
 ];
 
@@ -118,114 +285,8 @@ pub fn instance_socket(entries: &[PathBuf]) -> Option<PathBuf> {
     }
 }
 
-fn argv(parts: &[&str]) -> Vec<String> {
+pub(crate) fn argv(parts: &[&str]) -> Vec<String> {
     parts.iter().map(|p| p.to_string()).collect()
-}
-
-impl ProviderDescriptor {
-    pub fn status(&self) -> Vec<String> {
-        argv(&[self.cli, "status", "--json"])
-    }
-
-    /// The unix socket the CLI is configured to reach its daemon on, read the
-    /// way NetBird's CLI reads `--daemon-addr`: `NB_DAEMON_ADDR`, then the
-    /// legacy `WT_DAEMON_ADDR`, then the default. NetBird's CLI redials a
-    /// socket nothing listens on for ten seconds before failing, and every
-    /// panel polls it, so the binary probes the socket first. An address that
-    /// is not a unix socket cannot be probed that way.
-    pub fn daemon_socket(&self, env: impl Fn(&str) -> Option<String>) -> Option<PathBuf> {
-        if self.id != "netbird" {
-            return None;
-        }
-        let addr = ["NB_DAEMON_ADDR", "WT_DAEMON_ADDR"]
-            .into_iter()
-            .find_map(|key| env(key).filter(|a| !a.is_empty()))
-            .unwrap_or_else(|| "unix:///var/run/netbird.sock".to_string());
-        addr.strip_prefix("unix://").map(PathBuf::from)
-    }
-
-    /// Where the CLI looks when the configured socket is missing: a
-    /// `netbird@<instance>` service puts its socket there instead.
-    pub fn instance_socket_dir(&self) -> Option<&'static str> {
-        (self.id == "netbird").then_some("/var/run/netbird")
-    }
-
-    /// What `status()` printed, through the parser for this provider's shape.
-    pub fn parse_status(&self, raw: &str) -> crate::status::StatusResult {
-        if self.id == "netbird" {
-            crate::netbird::parse_netbird_status(raw)
-        } else {
-            crate::status::parse_status(raw)
-        }
-    }
-
-    pub fn up(&self) -> Vec<String> {
-        argv(&[self.cli, "up"])
-    }
-
-    /// What `up` is run with when TailGauge opens the login page itself, so
-    /// the CLI does not open it too. An environment variable rather than a
-    /// flag: a NetBird older than `--no-browser` ignores it instead of failing.
-    pub fn unattended_up_env(&self) -> &'static [(&'static str, &'static str)] {
-        if self.id == "netbird" {
-            &[("NB_NO_BROWSER", "true")]
-        } else {
-            &[]
-        }
-    }
-
-    pub fn down(&self) -> Vec<String> {
-        argv(&[self.cli, "down"])
-    }
-
-    pub fn exit_node_list(&self) -> Option<Vec<String>> {
-        (self.id == "tailscale").then(|| argv(&["tailscale", "exit-node", "list"]))
-    }
-
-    pub fn accounts(&self) -> Option<Vec<String>> {
-        (self.id == "tailscale").then(|| argv(&["tailscale", "switch", "--list", "--json"]))
-    }
-
-    pub fn networks(&self) -> Option<Vec<String>> {
-        (self.id == "netbird").then(|| argv(&["netbird", "networks", "list"]))
-    }
-
-    /// Blocks until the daemon reports a change, so the panel can ride events
-    /// instead of the clock. A provider without one falls back to the timer.
-    pub fn watch(&self, timeout_seconds: u64) -> Option<Vec<String>> {
-        (self.id == "tailscale").then(|| {
-            vec![
-                "tailgauge".into(),
-                "watch".into(),
-                timeout_seconds.to_string(),
-            ]
-        })
-    }
-
-    pub fn switch_account(&self, account_id: &str) -> Option<Vec<String>> {
-        (self.id == "tailscale").then(|| argv(&["tailscale", "switch", account_id]))
-    }
-
-    pub fn set_exit_node(&self, target: &str) -> Option<Vec<String>> {
-        (self.id == "tailscale").then(|| {
-            vec![
-                "tailscale".into(),
-                "set".into(),
-                format!("--exit-node={target}"),
-            ]
-        })
-    }
-
-    pub fn select_network(&self, network_id: &str, selected: bool) -> Option<Vec<String>> {
-        (self.id == "netbird").then(|| {
-            argv(&[
-                "netbird",
-                "networks",
-                if selected { "select" } else { "deselect" },
-                network_id,
-            ])
-        })
-    }
 }
 
 pub fn provider_by_id(id: &str) -> Option<&'static ProviderDescriptor> {
@@ -329,8 +390,21 @@ pub fn provider_ready(state: &PanelState) -> bool {
     active_provider(state).is_some_and(|p| p.supported)
 }
 
+/// What the provider can do at all, narrowed by what its daemon reports this
+/// connection allows. A self-hosted control server (Headscale) runs the same
+/// CLI with no Mullvad behind it, and an admin can switch Taildrop off: both
+/// reach the panel here, the same way a provider without the feature does.
 pub fn provider_supports(state: &PanelState, capability: Capability) -> bool {
-    active_provider(state).is_some_and(|p| p.capabilities.has(capability))
+    active_provider(state)
+        .is_some_and(|p| p.capabilities.has(capability) && reported(state, capability))
+}
+
+fn reported(state: &PanelState, capability: Capability) -> bool {
+    match capability {
+        Capability::FileSend => state.file_sharing,
+        Capability::Mullvad => !state.mullvad_regions.is_empty(),
+        _ => true,
+    }
 }
 
 /// The name the panel calls the thing it is driving. Falls back to the product
@@ -358,19 +432,23 @@ mod tests {
         let netbird = provider_by_id("netbird").expect("netbird");
         let tailscale = provider_by_id("tailscale").expect("tailscale");
         assert_eq!(
-            netbird.daemon_socket(|_| None),
+            netbird.backend.daemon_socket(&|_| None),
             Some(PathBuf::from("/var/run/netbird.sock"))
         );
         assert_eq!(
-            netbird.daemon_socket(|_| Some("unix:///tmp/nb.sock".into())),
+            netbird
+                .backend
+                .daemon_socket(&|_| Some("unix:///tmp/nb.sock".into())),
             Some(PathBuf::from("/tmp/nb.sock"))
         );
         assert_eq!(
-            netbird.daemon_socket(|_| Some("tcp://127.0.0.1:41731".into())),
+            netbird
+                .backend
+                .daemon_socket(&|_| Some("tcp://127.0.0.1:41731".into())),
             None,
             "a TCP daemon cannot be checked by a file"
         );
-        assert_eq!(tailscale.daemon_socket(|_| None), None);
+        assert_eq!(tailscale.backend.daemon_socket(&|_| None), None);
     }
 
     #[test]
@@ -378,7 +456,7 @@ mod tests {
         let netbird = provider_by_id("netbird").expect("netbird");
         let legacy = |key: &str| (key == "WT_DAEMON_ADDR").then(|| "unix:///old.sock".to_string());
         assert_eq!(
-            netbird.daemon_socket(legacy),
+            netbird.backend.daemon_socket(&legacy),
             Some(PathBuf::from("/old.sock"))
         );
         let both = |key: &str| {
@@ -392,7 +470,7 @@ mod tests {
             )
         };
         assert_eq!(
-            netbird.daemon_socket(both),
+            netbird.backend.daemon_socket(&both),
             Some(PathBuf::from("/new.sock"))
         );
     }
@@ -441,7 +519,7 @@ mod tests {
         // `which` reports misses on stderr, and a shell that prints its own
         // diagnostic on stdout must not read as a provider.
         let probe = parse_provider_probe(
-            "/usr/bin/tailscale\nwhich: no netbird in (/usr/bin)\n  /opt/bin/netbird  \n",
+            "/usr/bin/tailscale\nwhich: no netbird in (/usr/bin)\n  /opt/bin/netbird  \n/usr/sbin/zerotier-cli\n",
         );
         assert_eq!(probe.len(), PROVIDERS.len());
         assert!(probe.iter().all(|p| p.installed));
@@ -510,7 +588,10 @@ mod tests {
 
     #[test]
     fn capabilities_follow_the_provider_being_driven() {
-        let tailscale = detected(&["tailscale"]);
+        let tailscale = PanelState {
+            mullvad_regions: vec![crate::peer::Peer::default()],
+            ..detected(&["tailscale"])
+        };
         assert!(provider_supports(&tailscale, Capability::Mullvad));
         assert!(!provider_supports(&tailscale, Capability::Networks));
 
@@ -527,10 +608,34 @@ mod tests {
     }
 
     #[test]
+    fn what_the_daemon_reports_narrows_what_the_provider_can_do() {
+        let tailscale = detected(&["tailscale"]);
+        assert!(!provider_supports(&tailscale, Capability::Mullvad));
+        assert!(!provider_supports(&tailscale, Capability::FileSend));
+        assert!(provider_supports(&tailscale, Capability::ExitNodes));
+
+        let granted = PanelState {
+            file_sharing: true,
+            ..detected(&["tailscale"])
+        };
+        assert!(provider_supports(&granted, Capability::FileSend));
+
+        let netbird = PanelState {
+            active_provider_id: "netbird".into(),
+            file_sharing: true,
+            ..detected(&["netbird"])
+        };
+        assert!(
+            !provider_supports(&netbird, Capability::FileSend),
+            "a report never grants what the provider cannot do"
+        );
+    }
+
+    #[test]
     fn an_empty_panel_still_says_what_it_is() {
         assert_eq!(provider_label(&PanelState::default()), "TailGauge");
         assert_eq!(provider_label(&detected(&["netbird"])), "NetBird");
-        assert_eq!(provider_label_list(), "Tailscale, NetBird");
+        assert_eq!(provider_label_list(), "Tailscale, NetBird, ZeroTier");
     }
 
     #[test]
@@ -538,38 +643,54 @@ mod tests {
         let tailscale = provider_by_id("tailscale").unwrap();
         let netbird = provider_by_id("netbird").unwrap();
 
-        assert_eq!(tailscale.status(), ["tailscale", "status", "--json"]);
-        assert_eq!(netbird.status(), ["netbird", "status", "--json"]);
         assert_eq!(
-            tailscale.set_exit_node("de-ber.mullvad.ts.net").unwrap(),
+            tailscale.backend.status(),
+            ["tailscale", "status", "--json"]
+        );
+        assert_eq!(netbird.backend.status(), ["netbird", "status", "--json"]);
+        assert_eq!(
+            tailscale
+                .backend
+                .set_exit_node("de-ber.mullvad.ts.net")
+                .unwrap(),
             ["tailscale", "set", "--exit-node=de-ber.mullvad.ts.net"]
         );
         assert_eq!(
-            tailscale.set_exit_node("").unwrap(),
+            tailscale.backend.set_exit_node("").unwrap(),
             ["tailscale", "set", "--exit-node="]
         );
         assert_eq!(
-            netbird.select_network("office", false).unwrap(),
+            netbird.backend.select_network("office", false).unwrap(),
             ["netbird", "networks", "deselect", "office"]
         );
 
         // A provider that cannot do a thing has no argv for it, rather than an
         // argv aimed at the other provider's binary.
-        assert!(netbird.exit_node_list().is_none());
-        assert!(netbird.accounts().is_none());
-        assert!(netbird.watch(300).is_none());
-        assert!(tailscale.networks().is_none());
-        assert!(tailscale.select_network("x", true).is_none());
+        assert!(netbird.backend.exit_node_list().is_none());
+        assert!(netbird.backend.accounts().is_none());
+        assert!(netbird.backend.events().is_none());
+        assert!(tailscale.backend.networks().is_none());
+        assert!(tailscale.backend.select_network("x", true).is_none());
     }
 
     #[test]
     fn only_tailgauge_opens_the_login_page() {
         let netbird = provider_by_id("netbird").unwrap();
-        assert_eq!(netbird.up(), ["netbird", "up"]);
-        assert_eq!(netbird.unattended_up_env(), [("NB_NO_BROWSER", "true")]);
+        assert_eq!(
+            netbird.backend.switch(),
+            Switch::Connection {
+                up: argv(&["netbird", "up"]),
+                down: argv(&["netbird", "down"]),
+            }
+        );
+        assert_eq!(
+            netbird.backend.unattended_up_env(),
+            [("NB_NO_BROWSER", "true")]
+        );
         assert!(
             provider_by_id("tailscale")
                 .unwrap()
+                .backend
                 .unattended_up_env()
                 .is_empty()
         );

@@ -41,16 +41,19 @@ named exactly as the JSON names it: there is nothing to generate it from.
   ([decision 0008](../decisions.md#0008-the-bar-icon-wears-the-mark-of-the-provider-that-connected-first)).
 - **`header`** (`panel_header`): `title` is the machine name when the provider
   is drivable and reported one, else the provider label. `meta` is
-  `ACTIVE_PHRASES[phraseIndex rem 10]` while active, else `<Label> is
-  disconnected`. `toggleVisible` and `toggleEnabled` are both
-  `provider_ready`, **never gated on `busy`**; `toggleChecked` is `active`;
-  `crossed` = off and not needing login, `warning` = needs login, `dimmed` = off.
+  `ACTIVE_PHRASES[phraseIndex rem 10]` while active, `<Label> needs your
+  permission` while its CLI refuses this user (`accessDenied`), else `<Label>
+  is disconnected`. `toggleVisible` and `toggleEnabled` are both
+  `provider_ready` and not `accessDenied` (a refused CLI cannot be switched),
+  **never gated on `busy`**; `toggleChecked` is `active`; `crossed` = off and
+  neither needing login nor refused, `warning` = needs login or refused,
+  `dimmed` = off.
   `toggleHint` (`toggle_hint`) is `Turn <Label> off|on` or `Authorize this
   device`, shared with Plasma's context menu. `actions` holds the `refresh`
   action when a provider is ready. `providerId`, `icon`, `glyph` come from the
   registry.
 - **`status`** (`panel_status`), precedence in one place: no CLI on PATH
-  (`No supported VPN CLI on PATH. Looked for Tailscale, NetBird.`, tone `dim`),
+  (`No supported VPN CLI on PATH. Looked for Tailscale, NetBird, ZeroTier.`, tone `dim`),
   installed but unsupported (`dim`), the frontend's `actionStatus` (`dim`), its
   `lastError` (`error`), else empty.
 - **`footer`** (`panel_footer`): `TailGauge v<widget version>`, plus
@@ -72,12 +75,12 @@ draw one. `panel.ts` `SECTION_IDS` must match the list exactly.
 | `update` | (none) | `update.available` | one `update` row, action `update`, `busy` = `updating` |
 | `providers` | VPN | more than one drivable provider | `provider:<id>`, action `switchProvider` |
 | `self` | This device | provider ready, active, and the self peer has copy options | `self`, action `copy` |
-| `connections` | Connections | accounts capability and (more than one account, or `accountsAccessDenied`) | `auth` (action `authorize`) first when access is denied, then `account:<id>` (action `switchAccount`) |
+| `connections` | Connections | `accessDenied` with a backend `authorization()`, or the accounts capability and (more than one account, or `accountsAccessDenied`) | `auth` (action `authorize`, words from the backend) first when access is denied, then `account:<id>` (action `switchAccount`) |
 | `exitNodes` | Exit nodes | exit-node capability, active, rows not empty | the tailnet's own `exit:<id>` nodes, up to 5 recent or active Mullvad nodes (`recent_mullvad_nodes`), then the `mullvad:add` picker |
-| `networks` | Networks | networks capability (NetBird), active, rows not empty | `network:<id>`, action `selectNetwork`, hint `Join` / `Leave` |
+| `networks` | Networks | networks capability (NetBird, ZeroTier), rows not empty, and active or switched by its networks (ZeroTier keeps its rows while off) | `network:<id>`, labelled by name (else id), action `selectNetwork` with hint `Join` / `Leave`, or `openUrl` with hint `Log in` and `payload.url` for a network waiting on its SSO login |
 | `machines` | Machines | provider ready and active | `machines:search` above 8 peers (`MACHINE_SEARCH_MIN`), `machines:empty`, then `peer:<id>` |
 
-The machines section's `empty` is `No machines found on this tailnet.`; the
+The machines section's `empty` is `No other machines found.`; the
 others are empty strings. Capabilities come from the active provider's
 registry entry, not its name ([providers.md](providers.md)).
 
@@ -180,17 +183,17 @@ when a decision leaks into a desktop:
 | `the_gnome_switch_mirrors_the_daemon_without_toggling_it` | a GNOME `setToggleState` call not wrapped in `block_signal_handler` / `unblock_signal_handler` of the header's `'toggled'` handler |
 
 `crates/tailgauge-core/tests/specification.rs` says what the panel should do,
-case by case (111 tests, ported from the former `model.test.ts` and kept in its
+case by case (125 tests, ported from the former `model.test.ts` and kept in its
 order). It resolves panels from captures of real daemon output in
 `crates/tailgauge-core/tests/fixtures/` (`status.json`, `accounts.json`,
 `exit-nodes.txt`, `netbird-status.json`, `netbird-status-idle.json`,
-`netbird-networks.txt`) at a fixed `NOW` of 2026-09-14T06:00:00Z, grouped as:
+`netbird-networks.txt`, the Headscale and ZeroTier captures) at a fixed `NOW` of 2026-09-14T06:00:00Z, grouped as:
 the parsers; the sections (fixed order, visibility, exit-node ordering, picker);
 the machines section and search (case-insensitive keys, empty-result rows,
 search threshold); header, status and traversal (`navigation_visits_the_header_then_every_visible_row_in_draw_order`,
 `every_cursor_stop_resolves_back_to_its_row`); banner, footer and busy rows
 (`the_switch_stays_enabled_while_a_background_poll_runs`); the provider
-registry; NetBird; the bar; and the expanded detail rows.
+registry; NetBird; the bar; the expanded detail rows; Headscale; and ZeroTier.
 
 ## Sources
 

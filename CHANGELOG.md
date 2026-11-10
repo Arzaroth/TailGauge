@@ -4,6 +4,40 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **ZeroTier.** TailGauge drives `zerotier-cli` on every desktop and in the
+  TUI, with ZeroTier's own mark. ZeroTier has no connection to turn on or off,
+  so the switch leaves every network you have joined and joins them back;
+  TailGauge remembers them, since ZeroTier forgets a network once it is left.
+  The panel lists your networks by name with their addresses (or what they
+  are waiting for, such as the controller's authorization), lets you join or
+  leave each one, and shows the machines this node reaches by their ZeroTier
+  address. A network you leave from its row stays listed, switch on or off,
+  and stays left when the switch comes back on. A network behind SSO is the
+  row that opens its login page. `tailgauge ctl --provider zerotier
+  select-network <id>` joins a new one.
+- **Letting your user read ZeroTier.** `zerotier-cli` needs the service's token,
+  which only root can read. Until you have it, the panel says ZeroTier needs
+  your permission and offers "Allow access to ZeroTier", which copies the
+  token to `~/.zeroTierOneAuthToken` after a password prompt.
+
+### Fixed
+
+- **One stuck VPN no longer freezes the panel.** Every refresh waited on every
+  installed VPN, so a daemon that hung held the whole panel until its CLI gave
+  up, a minute for ZeroTier. A status read now gives up after five seconds.
+- **On GNOME, a network row acts on what it shows.** After joining or leaving
+  a network, clicking its row could repeat the last action instead of the one
+  its hint offered, until the menu was rebuilt.
+- **Plasma shows names as text.** A machine or network name holding markup was
+  drawn as rich text, which could load an image from the network every time
+  the panel was drawn.
+- **The NetBird mark draws cleanly on Plasma 6.0 and 6.1** with software
+  rendering, where a hairline outline filled in its gaps.
+- **Plasma and GNOME find VPN CLIs in `/usr/sbin`,** where ZeroTier's
+  packages install theirs and a Debian user session does not look.
+
 ## [0.10.0]
 
 ### Added

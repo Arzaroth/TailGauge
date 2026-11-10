@@ -40,7 +40,7 @@ Item {
 
         Item {
             anchors.fill: parent
-            visible: root.providerId !== "netbird"
+            visible: root.providerId !== "netbird" && root.providerId !== "zerotier"
 
             Dot { x: 0;          y: 0;          opacity: 0.24 }
             Dot { x: mark.mid;   y: 0;          opacity: 0.24 }
@@ -62,6 +62,29 @@ Item {
                     color: root.color
                 }
             }
+        }
+
+        Loader {
+            anchors.fill: parent
+            active: root.providerId === "zerotier"
+            sourceComponent: Component {
+                ZeroTierIcon {
+                    iconSize: root.iconSize
+                    color: root.color
+                }
+            }
+        }
+
+        // ZeroTier's mark is a filled square that would swallow a slash in
+        // its own colour, so the slash sits in a band of the background.
+        Rectangle {
+            visible: root.crossed && root.providerId === "zerotier"
+            anchors.centerIn: parent
+            width: parent.width * 1.22
+            height: Math.max(2, parent.height * 0.14) * 2.4
+            radius: height / 2
+            color: Kirigami.Theme.backgroundColor
+            rotation: -45
         }
 
         Rectangle {

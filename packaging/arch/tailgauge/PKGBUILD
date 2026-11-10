@@ -8,7 +8,7 @@
 pkgname=tailgauge
 pkgver=0.10.0
 pkgrel=1
-pkgdesc="Tailscale and NetBird in the KDE Plasma, GNOME Shell and Omarchy panel"
+pkgdesc="Tailscale, NetBird and ZeroTier in the KDE Plasma, GNOME Shell and Omarchy panel"
 arch=('x86_64' 'aarch64')
 url="https://github.com/Arzaroth/TailGauge"
 license=('MIT OR WTFPL')
@@ -16,6 +16,7 @@ depends=('gcc-libs' 'glibc')
 makedepends=('cargo' 'nodejs' 'pnpm' 'glib2')
 optdepends=('tailscale: a VPN for it to drive'
   'netbird: a VPN for it to drive'
+  'zerotier-one: a VPN for it to drive'
   'zenity: the Taildrop file chooser'
   'kdialog: the Taildrop file chooser on Plasma'
   'wl-clipboard: the copy actions on Wayland')

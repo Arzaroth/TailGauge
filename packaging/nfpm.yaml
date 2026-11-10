@@ -12,7 +12,7 @@ maintainer: Marc-Etienne Barrut <lekva+github@arzaroth.com>
 homepage: https://github.com/Arzaroth/TailGauge
 license: MIT OR WTFPL
 description: |
-  Tailscale and NetBird in the KDE Plasma, GNOME Shell and Omarchy panel.
+  Tailscale, NetBird and ZeroTier in the KDE Plasma, GNOME Shell and Omarchy panel.
   Connection state, on/off, account switching, exit nodes including Mullvad
   regions, machine browsing with copy actions, and Taildrop file sending,
   drawn by a Plasma widget and a GNOME Shell extension from one binary.
@@ -21,6 +21,7 @@ recommends:
 suggests:
   - tailscale
   - netbird
+  - zerotier-one
   - zenity
   - wl-clipboard
 

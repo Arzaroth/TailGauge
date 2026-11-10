@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::network::Network;
 use crate::peer::{self, Peer};
 use crate::status::{StatusError, StatusOk, StatusResult, StatusUnavailable};
 
@@ -85,6 +86,7 @@ pub fn parse_netbird_status(raw: &str) -> StatusResult {
             ok: true,
             unavailable: true,
             message: "Disconnected".into(),
+            access_denied: false,
         });
     }
 
@@ -168,22 +170,14 @@ pub fn parse_netbird_status(raw: &str) -> StatusResult {
         file_sharing: false,
         peers,
         exit_nodes: Vec::new(),
+        exit_node_id: String::new(),
+        networks: Vec::new(),
     }))
 }
 
 // ---------------------------------------------------------------------------
 // networks
 // ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct Network {
-    pub id: String,
-    pub range: String,
-    pub domains: Vec<String>,
-    pub selected: bool,
-    pub status: String,
-}
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -292,18 +286,10 @@ pub fn parse_netbird_networks(raw: &str) -> NetworksResult {
     }
 }
 
-/// What a network row shows under its name: the range if it routes one, the
-/// domains if it resolves them instead.
-pub fn network_subtitle(network: &Network) -> String {
-    if !network.range.is_empty() {
-        return network.range.clone();
-    }
-    network.domains.join(", ")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::network::network_subtitle;
 
     fn ok(raw: &str) -> StatusOk {
         match parse_netbird_status(raw) {

@@ -2175,6 +2175,7 @@ dependencies = [
  "anyhow",
  "clap",
  "crossterm",
+ "libc",
  "ratatui",
  "selvedge",
  "serde",

@@ -34,9 +34,10 @@ the frontend sources and fails on each way one has drifted before. The rules
 below are the ones with an incident behind them.
 
 - **A frontend never names a provider CLI in an argv.** It runs `tailgauge ctl
-  --provider ID ...`; the argv lives on the provider's `ProviderDescriptor`, and
-  which provider has which command is decided in `providers.rs` (by id today),
-  while capabilities decide which sections exist. Each service once spelled
+  --provider ID ...`; the argv lives on the provider's backend
+  (`providers/<id>.rs`, a `Backend` whose optional commands are `None` unless
+  that provider has them), while capabilities, narrowed by what the daemon
+  reports (`provider_supports`), decide which sections exist. Each service once spelled
   `tailscale` into its commands, which is how a panel could show one provider
   and drive another (0.4.0).
   `no_frontend_names_a_provider_binary_in_an_argv`; a missing capability is a
@@ -82,6 +83,15 @@ below are the ones with an incident behind them.
   on/off loop on Fedora bad enough that a user disabled the extension (every
   release through 0.8.0). The extension blocks the handler around the call.
   `the_gnome_switch_mirrors_the_daemon_without_toggling_it`.
+- **A GNOME click acts on the row as it is now.** The menu rebuilds only when
+  the set of row ids changes, and a click bound to the row its item was built
+  from left a ZeroTier network the user had already left, instead of joining
+  it back: joining or leaving keeps the id. `_applyRow` refreshes `item._row`
+  and every handler reads it. `a_gnome_click_acts_on_the_row_as_it_is_now`.
+- **Plasma draws panel text as plain text.** `Label` and `Heading` render
+  rich text by default, a network's name is whatever its owner chose, and a
+  ZeroTier controller's `<img>` in one was fetched on every redraw (found in
+  review). `every_plasma_label_draws_panel_text_as_plain_text`.
 - **Every subcommand a frontend spells exists.**
   `every_command_the_frontends_invoke_exists` (e2e).
 
@@ -95,6 +105,12 @@ click kept calling `toggleTailscale` until a test looked at the click side.
 `the_bar_icon_describes_the_machine_not_the_panel_view` covers the icon,
 `no_click_on_the_bar_icon_toggles_a_connection` (`parity.rs`) the click
 handlers on all three desktops.
+
+**Every provider has its mark on every desktop.** A provider a desktop has no
+mark for falls back to Tailscale's dots, and the parity check named NetBird
+alone, so ZeroTier's first commits would have passed it drawn as Tailscale.
+`every_desktop_draws_the_bar_as_the_provider_the_core_names` walks
+`PROVIDERS`.
 
 ### The GNOME extension is compiled
 
@@ -145,6 +161,44 @@ backlog. The
 e2e machines listen on a real socket;
 `a_netbird_without_its_daemon_is_not_asked`,
 `a_netbird_that_died_without_removing_its_socket_is_not_asked`.
+
+**A status read is cut off after five seconds.** Every panel call waits on
+every installed provider, and a frozen `zerotier-one` makes `zerotier-cli`
+wait 60 s, so one hung daemon held Tailscale's panel, a provider switch and
+`watch` for a minute (found in review). `gather::run_bounded` kills a read
+still running at `READ_LIMIT` and reads it as failed, draining both pipes so a
+large answer cannot stall it. `a_read_that_hangs_is_cut_off_and_reads_as_failed`.
+
+## ZeroTier is switched by its networks
+
+ZeroTier has no `up` / `down`: on is joined to any network, and the switch
+leaves them all and joins back what it took, from the networks remembered in
+`$XDG_STATE_HOME/tailgauge/networks-zerotier.json`. See
+`brain/features/zerotier.md`.
+
+- **A network left from its row is not `wanted`, and only the user and the
+  switch set `wanted`, under a lock.** Without the flag, turning the switch
+  off and on rejoined a network the user had just left by hand (found driving
+  a real node); with it, a panel poll whose snapshot predated the leave
+  wanted it again (found in review). A poll only adds networks it has not
+  seen. `a_zerotier_network_left_by_hand_stays_listed_and_out_of_the_switch`,
+  `the_switch_brings_back_what_it_took_and_not_what_was_left_by_hand`,
+  `a_poll_adds_what_it_sees_and_never_wants_what_was_left`.
+- **A peer with no live path and no measured latency is not a machine.**
+  `zerotier-cli peers` also lists infrastructure the node has only heard of as
+  `LEAF`s; the second recording put two of them in the machines list.
+  `only_reachable_leaves_are_machines_and_a_preferred_path_is_direct`.
+- **A CLI that refuses the user is access denied, not a stopped service.**
+  The service token is root's; `is_access_denied` tells the refusal apart from
+  "connection failed", so the panel offers to copy the token instead of
+  reading as off. `a_zerotier_that_refuses_this_user_offers_to_let_them_in`.
+- **Root only reads the token; the user writes it.** `ctl authorize` first
+  ran `pkexec install` onto `~/.zeroTierOneAuthToken`, and root's `install`
+  follows a symlink planted there into any directory, `/etc/cron.hourly`
+  included (found in review). `only_the_read_of_the_token_runs_as_root`.
+- **Its captures come from `tests/zerotier/record.sh`**, two real nodes in
+  containers with no account; re-record rather than hand-edit them, and keep
+  the public-address scrub.
 
 ## One binary, many names
 
@@ -232,8 +286,8 @@ not a patch in this tree. To work on both, copy `.cargo/config.toml.example` to
 ## Tests
 
 - **e2e fakes run on an isolated `PATH`.** `crates/tailgauge/tests/e2e.rs`
-  runs the real binary with `PATH` set to the fake `tailscale` / `netbird`
-  scripts and nothing else, so a real CLI on the machine can never answer
+  runs the real binary with `PATH` set to the fake `tailscale` / `netbird` /
+  `zerotier-cli` scripts and nothing else, so a real CLI on the machine can never answer
   instead of the fixture. Keep it that way.
 - `specification.rs` resolves whole panels from recorded daemon output with a
   fixed `now`; a new behaviour gets a case there against a fixture, not a

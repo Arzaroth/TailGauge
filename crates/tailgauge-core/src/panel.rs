@@ -194,7 +194,7 @@ pub fn can_send_files(state: &PanelState, peer: &Peer) -> bool {
     if !providers::provider_supports(state, Capability::FileSend) {
         return false;
     }
-    if !state.file_sharing || !state.running || !peer.online {
+    if !state.running || !peer.online {
         return false;
     }
     // The KDE Store ships a kpackage and EGO ships an extension zip; neither
@@ -410,7 +410,12 @@ pub fn panel_header(state: &PanelState, phrase_index: i64) -> PanelHeader {
     // A provider we cannot drive yet is named, but its switch would do nothing.
     let present = providers::provider_ready(state);
     let phrases = ACTIVE_PHRASES.len() as i64;
-    let meta = if state.active {
+    // A CLI that refuses this user cannot be switched either; the panel
+    // offers the authorization instead.
+    let present = present && !state.access_denied;
+    let meta = if state.access_denied {
+        format!("{label} needs your permission")
+    } else if state.active {
         ACTIVE_PHRASES[(phrase_index.rem_euclid(phrases)) as usize].to_string()
     } else {
         format!("{label} is disconnected")
@@ -440,8 +445,8 @@ pub fn panel_header(state: &PanelState, phrase_index: i64) -> PanelHeader {
         toggle_checked: state.active,
         busy: state.busy,
         toggle_hint: toggle_hint(state),
-        crossed: !state.active && !state.needs_login,
-        warning: state.needs_login,
+        crossed: !state.active && !state.needs_login && !state.access_denied,
+        warning: state.needs_login || state.access_denied,
         dimmed: !state.active,
         actions: if present {
             vec![RowAction::new(
@@ -693,12 +698,15 @@ fn row_label(peer: &Peer) -> String {
 
 fn connections_section(state: &PanelState) -> PanelSection {
     let mut rows = Vec::new();
-    if state.accounts_access_denied {
+    let authorization = providers::active_provider(state)
+        .and_then(|p| p.backend.authorization())
+        .filter(|_| state.accounts_access_denied || state.access_denied);
+    if let Some(authorization) = authorization {
         rows.push(PanelRow {
             id: "auth".into(),
             kind: "auth".into(),
-            label: "Authorize Tailscale operator".into(),
-            sublabel: "Allow this user to operate this Tailscale profile".into(),
+            label: authorization.label.into(),
+            sublabel: authorization.sublabel.into(),
             icon: "security-medium-symbolic".into(),
             glyph: "\u{f0483}".into(),
             action: "authorize".into(),
@@ -734,8 +742,9 @@ fn connections_section(state: &PanelState) -> PanelSection {
     PanelSection {
         id: "connections".into(),
         title: "Connections".into(),
-        visible: providers::provider_supports(state, Capability::Accounts)
-            && (state.accounts.len() > 1 || state.accounts_access_denied),
+        visible: (authorization.is_some() && state.access_denied)
+            || (providers::provider_supports(state, Capability::Accounts)
+                && (state.accounts.len() > 1 || state.accounts_access_denied)),
         empty: String::new(),
         rows,
     }
@@ -855,16 +864,28 @@ fn exit_nodes_section(
     }
 }
 
+/// The network as the row's payload, with its login under `url`, where every
+/// frontend's `openUrl` reads it.
+fn network_payload(network: &crate::network::Network) -> Value {
+    let mut value = payload(network);
+    if !network.auth_url.is_empty()
+        && let Some(object) = value.as_object_mut()
+    {
+        object.insert("url".into(), Value::String(network.auth_url.clone()));
+    }
+    value
+}
+
 fn networks_section(state: &PanelState) -> PanelSection {
     let supported = providers::provider_supports(state, Capability::Networks);
-    let networks: &[crate::netbird::Network] = if supported { &state.networks } else { &[] };
+    let networks: &[crate::network::Network] = if supported { &state.networks } else { &[] };
     let rows: Vec<PanelRow> = networks
         .iter()
         .map(|network| PanelRow {
             id: format!("network:{}", network.id),
             kind: "network".into(),
-            label: network.id.clone(),
-            sublabel: crate::netbird::network_subtitle(network),
+            label: crate::network::network_label(network),
+            sublabel: crate::network::network_subtitle(network),
             icon: if network.selected {
                 "checkmark-symbolic"
             } else {
@@ -877,19 +898,37 @@ fn networks_section(state: &PanelState) -> PanelSection {
                 "\u{f06db}"
             }
             .into(),
-            action: "selectNetwork".into(),
+            // A network waiting on a login is the row that opens it: nothing
+            // else in the panel can, and leaving is the switch's job.
+            action: if network.auth_url.is_empty() {
+                "selectNetwork"
+            } else {
+                "openUrl"
+            }
+            .into(),
             current: network.selected,
             bold: network.selected,
             busy: state.selecting_network_id == network.id,
-            hint: if network.selected { "Leave" } else { "Join" }.into(),
-            payload: payload(network),
+            hint: if !network.auth_url.is_empty() {
+                "Log in"
+            } else if network.selected {
+                "Leave"
+            } else {
+                "Join"
+            }
+            .into(),
+            payload: network_payload(network),
             ..PanelRow::default()
         })
         .collect();
+    // A provider switched by its networks keeps its rows while off: the one
+    // left by hand is the row that joins it back.
+    let by_networks =
+        providers::active_provider(state).is_some_and(|p| p.backend.switch().by_networks());
     PanelSection {
         id: "networks".into(),
         title: "Networks".into(),
-        visible: supported && state.active && !rows.is_empty(),
+        visible: supported && (state.active || by_networks) && !rows.is_empty(),
         empty: String::new(),
         rows,
     }
@@ -980,7 +1019,7 @@ fn machines_section(state: &PanelState, expanded_peer_id: &str, now_ms: i64) -> 
         id: "machines".into(),
         title: "Machines".into(),
         visible: providers::provider_ready(state) && state.active,
-        empty: "No machines found on this tailnet.".into(),
+        empty: "No other machines found.".into(),
         rows,
     }
 }

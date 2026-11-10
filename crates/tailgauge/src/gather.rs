@@ -6,8 +6,13 @@
 //! is resolved once rather than three times.
 
 use std::fs;
+use std::io::Read;
+use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
+use std::process::{Child, Command, Output, Stdio};
+use std::sync::mpsc;
 use std::thread;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use socket2::{Domain, SockAddr, Socket, Type};
@@ -68,13 +73,100 @@ fn probe() -> Vec<ProviderState> {
         .collect()
 }
 
+/// How long one status read may take, all its calls together. Every panel call waits on every
+/// installed provider, so a daemon that hangs would hold Tailscale's panel as
+/// long as its CLI waits (a frozen zerotier-one: 60 s).
+pub const READ_LIMIT: Duration = Duration::from_secs(5);
+
 /// What the provider's `status` printed, or `None` as for a failed call.
 pub fn status_output(provider: &ProviderDescriptor) -> Option<String> {
     if daemon_is_down(provider) {
         return None;
     }
-    let argv = provider.status();
-    proc::output(&argv[0], &argv[1..])
+    // One budget for the whole read: a backend that makes several calls
+    // (ZeroTier, three) shares it rather than getting a limit per call.
+    let deadline = Instant::now() + READ_LIMIT;
+    provider
+        .backend
+        .read_status(&|argv| run_bounded(argv, deadline.saturating_duration_since(Instant::now())))
+}
+
+/// Run `argv` to completion, or kill it at `limit` and answer `None`, as for
+/// a call that failed. Both streams are drained while it runs, so a large
+/// answer cannot fill a pipe and stall it. The command runs in a process group
+/// of its own and the whole group is killed at the limit: a descendant that
+/// outlives it while holding a pipe open would otherwise hold the read too.
+pub fn run_bounded(argv: &[String], limit: Duration) -> Option<Output> {
+    if limit.is_zero() {
+        return None;
+    }
+    let (program, args) = argv.split_first()?;
+    let mut child = Command::new(program)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .process_group(0)
+        .spawn()
+        .ok()?;
+    let group = child.id() as libc::pid_t;
+    let deadline = Instant::now() + limit;
+    let cut = |child: &mut Child| {
+        // SAFETY: a plain signal to the group this function created.
+        unsafe { libc::kill(-group, libc::SIGKILL) };
+        let _ = child.kill();
+        let _ = child.wait();
+    };
+
+    let (tx, rx) = mpsc::channel();
+    let pipes: [Option<Box<dyn Read + Send>>; 2] = [
+        child
+            .stdout
+            .take()
+            .map(|p| Box::new(p) as Box<dyn Read + Send>),
+        child
+            .stderr
+            .take()
+            .map(|p| Box::new(p) as Box<dyn Read + Send>),
+    ];
+    for (which, pipe) in pipes.into_iter().enumerate() {
+        let tx = tx.clone();
+        thread::spawn(move || {
+            let mut bytes = Vec::new();
+            if let Some(mut pipe) = pipe {
+                let _ = pipe.read_to_end(&mut bytes);
+            }
+            let _ = tx.send((which, bytes));
+        });
+    }
+    drop(tx);
+
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(10)),
+            _ => {
+                cut(&mut child);
+                return None;
+            }
+        }
+    };
+    let mut streams = [Vec::new(), Vec::new()];
+    for _ in 0..2 {
+        match rx.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+            Ok((which, bytes)) => streams[which] = bytes,
+            Err(_) => {
+                cut(&mut child);
+                return None;
+            }
+        }
+    }
+    let [stdout, stderr] = streams;
+    Some(Output {
+        status,
+        stdout,
+        stderr,
+    })
 }
 
 /// A socket that is missing, or that refuses the connection, has no daemon
@@ -85,7 +177,7 @@ fn daemon_is_down(provider: &ProviderDescriptor) -> bool {
 }
 
 fn daemon_is_down_in(provider: &ProviderDescriptor, env: impl Fn(&str) -> Option<String>) -> bool {
-    let Some(configured) = provider.daemon_socket(env) else {
+    let Some(configured) = provider.backend.daemon_socket(&env) else {
         return false;
     };
     // The CLI reads the address as a URL; one with escapes is the CLI's to
@@ -97,6 +189,7 @@ fn daemon_is_down_in(provider: &ProviderDescriptor, env: impl Fn(&str) -> Option
         configured
     } else {
         provider
+            .backend
             .instance_socket_dir()
             .and_then(|dir| fs::read_dir(dir).ok())
             .map(|entries| {
@@ -143,7 +236,7 @@ fn statuses(installed: &[&'static ProviderDescriptor]) -> Vec<(&'static str, cor
         .map(|&provider| {
             thread::spawn(move || {
                 let raw = status_output(provider).unwrap_or_default();
-                (provider.id, provider.parse_status(&raw))
+                (provider.id, provider.backend.parse_status(&raw))
             })
         })
         .collect();
@@ -165,18 +258,18 @@ fn extras(provider: &'static ProviderDescriptor) -> Extras {
     let exit_nodes = provider
         .capabilities
         .exit_nodes
-        .then(|| provider.exit_node_list())
+        .then(|| provider.backend.exit_node_list())
         .flatten();
     let accounts_argv = provider
         .capabilities
         .accounts
-        .then(|| provider.accounts())
+        .then(|| provider.backend.accounts())
         .flatten();
-    let networks_argv = provider
-        .capabilities
-        .networks
-        .then(|| provider.networks())
-        .flatten();
+    // A provider switched by its networks already named them in its status.
+    let networks_argv = (provider.capabilities.networks
+        && !provider.backend.switch().by_networks())
+    .then(|| provider.backend.networks())
+    .flatten();
 
     let mullvad = thread::spawn(move || {
         exit_nodes.map(|argv| {
@@ -203,8 +296,11 @@ fn extras(provider: &'static ProviderDescriptor) -> Extras {
     });
     let networks = thread::spawn(move || {
         networks_argv.map(|argv| {
-            let raw = proc::output(&argv[0], &argv[1..]).unwrap_or_default();
-            core::parse_netbird_networks(&raw).networks
+            let raw = run_bounded(&argv, READ_LIMIT)
+                .filter(|out| out.status.success())
+                .map(|out| String::from_utf8_lossy(&out.stdout).into_owned())
+                .unwrap_or_default();
+            provider.backend.parse_networks(&raw)
         })
     });
 
@@ -296,7 +392,24 @@ pub fn panel_state(ui: &Ui) -> PanelState {
         state.selected_account_id = extras.accounts.selected_account_id.clone();
         state.accounts = extras.accounts.accounts;
         state.accounts_access_denied = extras.accounts_access_denied;
-        state.networks = extras.networks;
+        if !active.backend.switch().by_networks() {
+            state.networks = extras.networks;
+        }
+    }
+
+    // A provider switched by its networks names them in its status, and its
+    // rows include the ones left, on or off: a network left by hand is the
+    // row that joins it back. Only from an answer: a provider that did not
+    // answer has no networks to set the remembered ones against.
+    let answered = gathered
+        .iter()
+        .any(|(id, status)| *id == active.id && matches!(status, core::StatusResult::Ok(_)));
+    if active.backend.switch().by_networks() && answered {
+        let remembered: Vec<_> = crate::networks::observe(active, &state.networks)
+            .iter()
+            .map(crate::networks::Known::network)
+            .collect();
+        state.networks = core::network::with_left_networks(&state.networks, &remembered);
     }
 
     state
@@ -397,9 +510,14 @@ fn connect(
 ) -> Option<&'static ProviderDescriptor> {
     let active = providers::active_provider(state)?;
     state.installed = true;
-    if let Some((_, core::StatusResult::Ok(status))) =
-        gathered.iter().find(|(id, _)| *id == active.id)
-    {
+    let answer = gathered
+        .iter()
+        .find(|(id, _)| *id == active.id)
+        .map(|(_, status)| status);
+    if let Some(core::StatusResult::Unavailable(unavailable)) = answer {
+        state.access_denied = unavailable.access_denied;
+    }
+    if let Some(core::StatusResult::Ok(status)) = answer {
         state.running = status.running;
         state.needs_login = status.needs_login;
         state.self_name = status.self_name.clone();
@@ -409,6 +527,7 @@ fn connect(
         state.file_sharing = status.file_sharing;
         state.peers = status.peers.clone();
         state.own_exit_nodes = status.exit_nodes.clone();
+        state.networks = status.networks.clone();
     }
     Some(active)
 }
@@ -445,6 +564,63 @@ pub fn resolve_options(ui: &Ui) -> core::panel::ResolveOptions {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_read_that_hangs_is_cut_off_and_reads_as_failed() {
+        let argv = |parts: &[&str]| parts.iter().map(|p| p.to_string()).collect::<Vec<_>>();
+        let started = Instant::now();
+        assert!(run_bounded(&argv(&["sleep", "5"]), Duration::from_millis(200)).is_none());
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "killed at the limit"
+        );
+
+        let big = run_bounded(
+            &argv(&["sh", "-c", "head -c 300000 /dev/zero; echo done >&2"]),
+            Duration::from_secs(5),
+        )
+        .expect("a read that finishes");
+        assert!(big.status.success());
+        assert_eq!(big.stdout.len(), 300_000, "a full pipe does not stall it");
+        assert_eq!(big.stderr, b"done\n");
+        assert!(run_bounded(&[], Duration::from_secs(1)).is_none());
+        assert!(
+            run_bounded(&argv(&["true"]), Duration::ZERO).is_none(),
+            "a spent budget starts nothing"
+        );
+
+        let pid_file = std::env::temp_dir().join(format!("tg-bounded-{}", std::process::id()));
+        let started = Instant::now();
+        assert!(
+            run_bounded(
+                &argv(&[
+                    "sh",
+                    "-c",
+                    &format!("sleep 30 & echo $! > '{}'; echo early", pid_file.display()),
+                ]),
+                Duration::from_millis(300)
+            )
+            .is_none(),
+            "a descendant holding the pipe does not hold the read"
+        );
+        assert!(started.elapsed() < Duration::from_secs(2));
+        let descendant: libc::pid_t = std::fs::read_to_string(&pid_file)
+            .expect("the descendant's pid")
+            .trim()
+            .parse()
+            .expect("a pid");
+        let _ = std::fs::remove_file(&pid_file);
+        // Gone once init has reaped it: kill(pid, 0) then fails with ESRCH.
+        let gone = (0..100).any(|_| {
+            // SAFETY: signal 0 only asks whether the process exists.
+            let alive = unsafe { libc::kill(descendant, 0) } == 0;
+            if alive {
+                thread::sleep(Duration::from_millis(20));
+            }
+            !alive
+        });
+        assert!(gone, "the descendant outlived the read it held");
+    }
 
     fn up(ids: &[&str]) -> Vec<core::panel_state::ProviderSummary> {
         ["tailscale", "netbird"]

@@ -292,7 +292,7 @@ brain).
 
 ## Sources
 
-- Code: `crates/tailgauge-core/src/providers.rs` (`ProviderDescriptor`,
+- Code: `crates/tailgauge-core/src/providers/mod.rs` (`ProviderDescriptor`,
   `PROVIDERS`), `crates/tailgauge/src/gather.rs`, `watch.rs`, `ctl.rs`;
   `brain/architecture/providers.md`, `brain/architecture/overview.md`.
 - Local CLIs: `tailscale` 1.104.2 (`--socket`, `up --shields-up`,

@@ -451,6 +451,32 @@ fn the_operator_prompt_leads_the_connections_section() {
 }
 
 #[test]
+fn a_cli_that_refuses_this_user_asks_for_it_whether_or_not_there_are_accounts() {
+    let refused = PanelState {
+        running: false,
+        active: false,
+        accounts: Vec::new(),
+        access_denied: true,
+        ..state()
+    };
+    let panel = resolve(&refused);
+    assert!(section(&panel, "connections").visible);
+    let rows = rows_of(&panel, "connections");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].action, "authorize");
+    assert_eq!(rows[0].label, "Authorize Tailscale operator");
+
+    let netbird = PanelState {
+        access_denied: true,
+        ..netbird_state()
+    };
+    assert!(
+        !section(&resolve(&netbird), "connections").visible,
+        "a provider with no way to let the user in offers none"
+    );
+}
+
+#[test]
 fn the_selected_account_is_the_current_row() {
     let panel = resolve(&state());
     let selected: Vec<&PanelRow> = rows_of(&panel, "connections")
@@ -633,7 +659,7 @@ fn the_machines_section_states_its_own_empty_case() {
     let machines = section(&panel, "machines");
     assert!(machines.visible);
     assert!(machines.rows.is_empty());
-    assert_eq!(machines.empty, "No machines found on this tailnet.");
+    assert_eq!(machines.empty, "No other machines found.");
 }
 
 #[test]
@@ -1164,7 +1190,7 @@ fn every_user_visible_string_arrives_finished() {
     let panel = resolve(&bare);
     assert_eq!(
         panel.status.text,
-        "No supported VPN CLI on PATH. Looked for Tailscale, NetBird."
+        "No supported VPN CLI on PATH. Looked for Tailscale, NetBird, ZeroTier."
     );
     assert!(
         !panel.header.toggle_hint.is_empty(),
@@ -1184,7 +1210,7 @@ fn every_user_visible_string_arrives_finished() {
     };
     assert_eq!(
         section(&resolve(&none), "machines").empty,
-        "No machines found on this tailnet."
+        "No other machines found."
     );
 }
 
@@ -1424,10 +1450,10 @@ fn the_switch_is_disabled_only_when_there_is_no_cli_to_drive() {
 #[test]
 fn the_registry_names_every_provider_and_the_cli_that_proves_it() {
     let ids: Vec<&str> = PROVIDERS.iter().map(|p| p.id).collect();
-    assert_eq!(ids, ["tailscale", "netbird"]);
+    assert_eq!(ids, ["tailscale", "netbird", "zerotier"]);
     assert_eq!(
         core::providers::provider_cli_names(),
-        ["tailscale", "netbird"]
+        ["tailscale", "netbird", "zerotier-cli"]
     );
     assert_eq!(
         core::providers::provider_by_id("netbird")
@@ -1530,10 +1556,12 @@ fn capabilities_are_read_from_the_active_provider_not_its_name() {
     use core::providers::Capability;
     let ts = PanelState {
         providers: Some(detected(&["tailscale"])),
+        mullvad_regions: MULLVAD_REGIONS.clone(),
         ..PanelState::default()
     };
     let nb = PanelState {
         providers: Some(detected(&["netbird"])),
+        mullvad_regions: MULLVAD_REGIONS.clone(),
         ..PanelState::default()
     };
     assert!(core::providers::provider_supports(&ts, Capability::Mullvad));
@@ -1582,36 +1610,41 @@ fn a_provider_without_a_feature_never_shows_the_section_that_needs_it() {
 fn every_provider_the_registry_calls_drivable_has_what_driving_needs() {
     for provider in PROVIDERS.iter().filter(|p| p.supported) {
         assert!(
-            !provider.status().is_empty(),
+            !provider.backend.status().is_empty(),
             "{} has no status command",
             provider.id
         );
-        assert!(
-            !provider.up().is_empty(),
-            "{} has no up command",
-            provider.id
-        );
-        assert!(
-            !provider.down().is_empty(),
-            "{} has no down command",
-            provider.id
-        );
+        match provider.backend.switch() {
+            core::providers::Switch::Connection { up, down } => {
+                assert_eq!(up[0], provider.cli, "{}", provider.id);
+                assert_eq!(down[0], provider.cli, "{}", provider.id);
+            }
+            core::providers::Switch::Networks => assert!(
+                provider.capabilities.networks,
+                "{} has no switch and no networks to switch it by",
+                provider.id
+            ),
+        }
         assert_eq!(
-            provider.status()[0],
+            provider.backend.status()[0],
             provider.cli,
             "{} polls a binary other than the one detection probes",
             provider.id
         );
         if provider.capabilities.exit_nodes {
-            assert!(provider.exit_node_list().is_some(), "{}", provider.id);
+            assert!(
+                provider.backend.exit_node_list().is_some(),
+                "{}",
+                provider.id
+            );
         }
         if provider.capabilities.accounts {
-            assert!(provider.accounts().is_some(), "{}", provider.id);
+            assert!(provider.backend.accounts().is_some(), "{}", provider.id);
         }
         if provider.capabilities.networks {
-            assert!(provider.networks().is_some(), "{}", provider.id);
+            assert!(provider.backend.networks().is_some(), "{}", provider.id);
             assert!(
-                provider.select_network("x", true).is_some(),
+                provider.backend.select_network("x", true).is_some(),
                 "{}",
                 provider.id
             );
@@ -1666,8 +1699,13 @@ fn the_probe_reads_which_stdout_not_its_exit_code() {
             .map(|p| (p.id, p.installed))
             .collect()
     };
-    let named =
-        |ts: bool, nb: bool| vec![("tailscale".to_string(), ts), ("netbird".to_string(), nb)];
+    let named = |ts: bool, nb: bool| {
+        vec![
+            ("tailscale".to_string(), ts),
+            ("netbird".to_string(), nb),
+            ("zerotier".to_string(), false),
+        ]
+    };
 
     assert_eq!(
         probe("/usr/bin/tailscale\n/usr/bin/netbird\n"),
@@ -1719,17 +1757,23 @@ fn the_panel_names_the_provider_it_is_driving() {
 fn the_argv_comes_from_the_registry_not_the_caller() {
     let tailscale = core::providers::provider_by_id("tailscale").expect("tailscale");
     let netbird = core::providers::provider_by_id("netbird").expect("netbird");
-    assert_eq!(tailscale.status(), ["tailscale", "status", "--json"]);
-    assert_eq!(netbird.status(), ["netbird", "status", "--json"]);
     assert_eq!(
-        tailscale.switch_account("abc").expect("switch"),
+        tailscale.backend.status(),
+        ["tailscale", "status", "--json"]
+    );
+    assert_eq!(netbird.backend.status(), ["netbird", "status", "--json"]);
+    assert_eq!(
+        tailscale.backend.switch_account("abc").expect("switch"),
         ["tailscale", "switch", "abc"]
     );
     assert_eq!(
-        netbird.select_network("office", true).expect("select"),
+        netbird
+            .backend
+            .select_network("office", true)
+            .expect("select"),
         ["netbird", "networks", "select", "office"]
     );
-    assert!(netbird.switch_account("abc").is_none());
+    assert!(netbird.backend.switch_account("abc").is_none());
 }
 
 #[test]
@@ -2197,6 +2241,7 @@ fn the_tooltip_says_what_each_installed_provider_is_doing_active_first() {
                 self_ip: "100.64.0.1".into(),
                 state: "Running".into(),
                 needs_login: false,
+                access_denied: false,
             },
             core::panel_state::ProviderSummary {
                 id: "netbird".into(),
@@ -2227,7 +2272,7 @@ fn the_tooltip_falls_back_rather_than_lying_about_what_it_knows() {
     let nothing = core::bar::bar_tooltip(&PanelState::default());
     assert_eq!(
         nothing,
-        ["No supported VPN CLI on PATH. Looked for Tailscale, NetBird."]
+        ["No supported VPN CLI on PATH. Looked for Tailscale, NetBird, ZeroTier."]
     );
 
     let unreported = PanelState {
@@ -2709,7 +2754,7 @@ fn login_plan_turns_on_whatever_provider_it_was_handed() {
 #[test]
 fn the_switcher_never_offers_a_provider_it_cannot_drive() {
     let both = PanelState {
-        providers: Some(detected(&["tailscale", "netbird"])),
+        providers: Some(detected(&["tailscale", "netbird", "zerotier"])),
         ..PanelState::default()
     };
     assert_eq!(
@@ -2760,4 +2805,235 @@ fn the_version_substitutes_into_its_template() {
             format!("TailGauge {version} is available")
         );
     }
+}
+
+/// A Tailscale client on a self-hosted Headscale server: the same CLI, with
+/// tailnet exit nodes and Taildrop but no Mullvad behind it.
+fn headscale_state() -> PanelState {
+    let core::StatusResult::Ok(status) = core::parse_status(&fixture("headscale-status.json"))
+    else {
+        panic!("the Headscale capture should parse as a running tailnet");
+    };
+    PanelState {
+        providers: Some(detected(&["tailscale"])),
+        installed: true,
+        running: status.running,
+        active: status.running,
+        helpers: true,
+        self_name: status.self_name.clone(),
+        self_ip: status.self_ip.clone(),
+        self_user_id: status.self_user_id.clone(),
+        self_peer: Some(status.self_peer.clone()),
+        file_sharing: status.file_sharing,
+        peers: status.peers.clone(),
+        own_exit_nodes: status.exit_nodes.clone(),
+        mullvad_regions: core::mullvad_region_options(&core::parse_exit_node_list(&fixture(
+            "headscale-exit-nodes.txt",
+        ))),
+        ..PanelState::default()
+    }
+}
+
+#[test]
+fn a_headscale_tailnet_offers_its_exit_nodes_and_taildrop_but_no_mullvad() {
+    let state = headscale_state();
+    assert!(
+        state.mullvad_regions.is_empty(),
+        "Headscale lists its own exit nodes and no Mullvad region"
+    );
+    assert!(!core::providers::provider_supports(
+        &state,
+        core::providers::Capability::Mullvad
+    ));
+
+    let panel = resolve(&state);
+    let exits = rows_of(&panel, "exitNodes");
+    assert!(section(&panel, "exitNodes").visible);
+    assert_eq!(
+        exits.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(),
+        ["hsa"]
+    );
+    assert!(exits.iter().all(|r| r.kind != "mullvadPicker"));
+
+    let hsa = peer_rows(&panel)
+        .into_iter()
+        .find(|r| r.label == "hsa")
+        .expect("the exit node is a machine too");
+    assert!(
+        hsa.actions.iter().any(|a| a.id == "send"),
+        "Headscale grants the file-sharing capability"
+    );
+}
+
+#[test]
+fn a_tailnet_with_taildrop_switched_off_offers_no_send() {
+    let state = PanelState {
+        file_sharing: false,
+        ..headscale_state()
+    };
+    assert!(!core::providers::provider_supports(
+        &state,
+        core::providers::Capability::FileSend
+    ));
+    for row in peer_rows(&resolve(&state)) {
+        assert!(row.actions.iter().all(|a| a.id != "send"), "{}", row.label);
+    }
+}
+
+/// A ZeroTier node as `gather` reads it: the three answers as one status, and
+/// the networks it has joined.
+fn zerotier_state(listnetworks: &str, peers: &str) -> PanelState {
+    let networks = fixture(listnetworks);
+    let core::StatusResult::Ok(status) = core::zerotier::parse_zerotier_status(
+        &core::zerotier::envelope(&fixture("zerotier-info.json"), &networks, &fixture(peers)),
+    ) else {
+        panic!("the ZeroTier capture should parse");
+    };
+    PanelState {
+        providers: Some(detected(&["zerotier"])),
+        active_provider_id: "zerotier".into(),
+        installed: true,
+        running: status.running,
+        active: status.running,
+        needs_login: status.needs_login,
+        helpers: true,
+        self_name: status.self_name.clone(),
+        self_ip: status.self_ip.clone(),
+        self_peer: Some(status.self_peer.clone()),
+        peers: status.peers.clone(),
+        networks: core::zerotier::parse_zerotier_networks(&networks),
+        ..PanelState::default()
+    }
+}
+
+#[test]
+fn a_zerotier_node_shows_its_named_networks_and_the_machines_it_reaches() {
+    let state = zerotier_state("zerotier-listnetworks.json", "zerotier-peers.json");
+    let panel = resolve(&state);
+
+    assert_eq!(panel.header.provider_id, "zerotier");
+    assert_eq!(panel.header.title, "148c386a05", "a node is its address");
+    assert!(panel.header.toggle_checked);
+    assert_eq!(state.self_ip, "10.147.20.54");
+
+    let networks = section(&panel, "networks");
+    assert!(networks.visible);
+    assert_eq!(
+        networks
+            .rows
+            .iter()
+            .map(|r| (r.label.as_str(), r.sublabel.as_str(), r.hint.as_str()))
+            .collect::<Vec<_>>(),
+        [
+            ("homelab", "10.147.20.54/24", "Leave"),
+            (
+                "office",
+                "fde0:edd2:bebd:fce2:2e99:9314:8c38:6a05/88, 10.244.0.54/16",
+                "Leave"
+            ),
+        ]
+    );
+
+    let machines = peer_rows(&panel);
+    assert_eq!(
+        machines
+            .iter()
+            .map(|r| r.label.as_str())
+            .collect::<Vec<_>>(),
+        ["e0edd2bebd"],
+        "the controller, and none of the infrastructure ZeroTier has only heard of"
+    );
+    assert!(machines[0].actions.iter().all(|a| a.id != "send"));
+    assert!(
+        machines[0]
+            .children
+            .iter()
+            .any(|d| d.sublabel.starts_with("Direct peer-to-peer")),
+        "the preferred path is direct"
+    );
+
+    for absent in ["exitNodes", "connections"] {
+        assert!(!section(&panel, absent).visible, "{absent}");
+    }
+}
+
+#[test]
+fn a_zerotier_network_waiting_for_its_controller_says_so() {
+    let state = zerotier_state(
+        "zerotier-listnetworks-denied.json",
+        "zerotier-peers-denied.json",
+    );
+    let panel = resolve(&state);
+
+    assert!(
+        panel.header.toggle_checked,
+        "joined is on, even before the controller lets it in"
+    );
+    let rows = rows_of(&panel, "networks");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(
+        rows[0].label, "e0edd2bebde885d3",
+        "a network with no name yet is its id"
+    );
+    assert_eq!(rows[0].sublabel, "Waiting for authorization");
+    assert!(peer_rows(&panel).is_empty());
+}
+
+#[test]
+fn a_zerotier_network_left_stays_on_the_panel_to_be_joined_again() {
+    let mut state = zerotier_state("zerotier-listnetworks.json", "zerotier-peers.json");
+    let joined = state.networks.clone();
+    state.networks = core::network::with_left_networks(&joined[..1], &joined);
+    let rows = rows_of(&resolve(&state), "networks").to_vec();
+    assert_eq!(
+        rows.iter()
+            .map(|r| (r.label.as_str(), r.sublabel.as_str(), r.hint.as_str()))
+            .collect::<Vec<_>>(),
+        [
+            ("homelab", "10.147.20.54/24", "Leave"),
+            ("office", "Not joined", "Join"),
+        ]
+    );
+}
+
+#[test]
+fn a_zerotier_that_refuses_this_user_offers_to_copy_its_token() {
+    let state = PanelState {
+        providers: Some(detected(&["zerotier"])),
+        active_provider_id: "zerotier".into(),
+        installed: true,
+        access_denied: matches!(
+            core::zerotier::parse_zerotier_status(core::zerotier::ACCESS_DENIED),
+            core::StatusResult::Unavailable(ref u) if u.access_denied
+        ),
+        ..PanelState::default()
+    };
+    let panel = resolve(&state);
+    let rows = rows_of(&panel, "connections");
+    assert!(section(&panel, "connections").visible);
+    assert_eq!(rows[0].label, "Allow access to ZeroTier");
+    assert_eq!(rows[0].action, "authorize");
+}
+
+#[test]
+fn a_zerotier_network_behind_sso_is_the_row_that_opens_its_login() {
+    let listed = r#"[
+        {"nwid":"e0edd2bebde885d3","name":"homelab","status":"OK","assignedAddresses":["10.147.20.54/24"]},
+        {"nwid":"8056c2e21c000002","name":"corp","status":"AUTHENTICATION_REQUIRED",
+         "assignedAddresses":[],"authenticationURL":"https://sso.example/zt/login"}
+    ]"#;
+    let state = PanelState {
+        networks: core::zerotier::parse_zerotier_networks(listed),
+        ..zerotier_state("zerotier-listnetworks.json", "zerotier-peers.json")
+    };
+    let panel = resolve(&state);
+    let corp = labelled(rows_of(&panel, "networks"), "corp");
+    assert_eq!(corp.action, "openUrl");
+    assert_eq!(corp.hint, "Log in");
+    assert_eq!(corp.sublabel, "Needs login");
+    assert_eq!(corp.payload["url"], "https://sso.example/zt/login");
+
+    let homelab = labelled(rows_of(&panel, "networks"), "homelab");
+    assert_eq!(homelab.action, "selectNetwork");
+    assert!(homelab.payload.get("url").is_none());
 }

@@ -66,7 +66,7 @@ for, and the click still opens the file. Revisit only if a user asks.
   on 3,900 peers). Every TailGauge poll runs full `status --json` and
   `panel_spec` emits every machine row; `gather::Ui` carries no "panel open"
   flag. Not hit on a ~50-peer tailnet. A real backport is a `Ui` field, a
-  light-status path in `gather.rs` / `providers.rs`, and row virtualization on
+  light-status path in `gather.rs` / `providers/`, and row virtualization on
   all four surfaces.
 
 ### Verified, no action

@@ -1,23 +1,9 @@
 //! What the `tailscale` CLI is asked, in the one place that asks it.
 
-use serde_json::Value;
-
 use selvedge::proc;
 
 pub fn installed() -> bool {
     proc::has("tailscale")
-}
-
-pub fn status() -> Option<Value> {
-    let raw = proc::output("tailscale", ["status", "--json"])?;
-    serde_json::from_str(&raw).ok()
-}
-
-pub fn backend_state(status: &Value) -> &str {
-    status
-        .pointer("/BackendState")
-        .and_then(Value::as_str)
-        .unwrap_or("")
 }
 
 /// The exit node currently routing this machine, by hostname.

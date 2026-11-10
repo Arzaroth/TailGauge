@@ -62,7 +62,7 @@ pub fn render(state: &PanelState, now_ms: i64, ink: &Ink, out: &mut impl Write) 
     let Some(active) = providers::active_provider(state) else {
         return writeln!(
             out,
-            "no VPN client found: tailgauge drives tailscale and netbird"
+            "no VPN client found: tailgauge drives tailscale, netbird and zerotier"
         );
     };
     let summary = |id: &str| {

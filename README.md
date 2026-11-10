@@ -4,15 +4,17 @@ Tailscale in your **KDE Plasma 6**, **GNOME Shell** and **Omarchy** panel: conne
 
 It started as a port of the first-party `omarchy.tailscale` panel plugin that ships with [Omarchy 4 (Quattro)](https://github.com/basecamp/omarchy), moved off Hyprland/Quickshell onto the two big desktops. The Omarchy widget then came back: the same panel, rebuilt on this repository's shared model, for the shell it came from. The code has since been rewritten in Rust; [NOTICE](NOTICE) records the lineage.
 
-There is no daemon and no service to run. All three frontends ask one binary, `tailgauge`, which drives the VPN CLI (Tailscale, or NetBird) and decides the whole panel.
+There is no daemon and no service to run. All three frontends ask one binary, `tailgauge`, which drives the VPN CLI (Tailscale, NetBird or ZeroTier) and decides the whole panel.
 
 ## Features
 
-- **Panel indicator**: the mark of the VPN that is up, drawn natively (Tailscale's 3×3 dot grid or NetBird's bird), slashed when disconnected, badged when the device needs authorization. With both up it shows the one that connected first and a raised `2`. Optionally followed by the machine name.
+- **Panel indicator**: the mark of the VPN that is up, drawn natively (Tailscale's 3×3 dot grid, NetBird's bird or ZeroTier's ringed T), slashed when disconnected, badged when the device needs authorization. With several up it shows the one that connected first and a raised count. Optionally followed by the machine name.
 - **On/off**: a switch at the top of the panel. The UI flips optimistically the instant you click, then reconciles with the next `tailscale status`.
 - **Login**: when the device needs authorizing, the auth URL is scraped out of `tailscale up` as it prints and opened in your browser.
 - **This device**: your own machine at the top of the panel, with the same copy actions its peers get, because copying your own tailnet address is what you came for half the time.
 - **Connections**: switch between Tailscale profiles when more than one is signed in. Offers to `pkexec tailscale set --operator=$USER` when the daemon refuses profile access.
+- **Networks**: on NetBird and ZeroTier, join or leave each network from its row.
+- **ZeroTier**: the switch leaves every network you have joined and joins them back, since ZeroTier has no connection of its own to turn off. TailGauge remembers your networks in `$XDG_STATE_HOME/tailgauge/networks-zerotier.json` (`~/.local/state/tailgauge/networks-zerotier.json` when `XDG_STATE_HOME` is unset) (ZeroTier forgets one once it is left); one you leave from its row stays listed, switch on or off, and stays left when the switch comes back on. A network behind SSO is the row that opens its login page. Join a new one with `tailgauge ctl --provider zerotier select-network <network id>`. Machines are listed by ZeroTier address, as peer names live on the controller. `zerotier-cli` needs the service's token: until it has it, the panel says ZeroTier needs your permission and offers to copy the token to `~/.zeroTierOneAuthToken` with `pkexec`.
 - **Exit nodes**: every tailnet exit node, plus a shortlist of the Mullvad regions you actually use, plus a searchable picker for the full Mullvad fleet.
 - **Machines**: every peer with its IP and MagicDNS name, copy actions for name / DNS name / IPv4 / IPv6, and a Taildrop send button where the tailnet allows file sharing. Offline machines sort to the bottom and say so, because a sleeping laptop's address is exactly what you need to wake it. Past eight machines the section grows a search field, over the name, the addresses and the OS.
 - **Taildrop receive**: a systemd user service parks on `tailscale file get --wait`, delivers into `~/Downloads`, and announces each file with a notification you can click to open.
@@ -20,7 +22,7 @@ There is no daemon and no service to run. All three frontends ask one binary, `t
 
 ## Requirements
 
-- `tailscale` on `PATH`
+- `tailscale`, `netbird` or `zerotier-cli` on `PATH`
 - KDE Plasma 6.0+, GNOME Shell 45+, or Omarchy 4 (Quattro)
 - `zenity` or `kdialog` for the Taildrop file chooser
 - `wl-clipboard`, `xclip`, or `xsel` for the copy actions
