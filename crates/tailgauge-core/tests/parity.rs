@@ -572,3 +572,42 @@ fn the_gnome_switch_mirrors_the_daemon_without_toggling_it() {
         );
     }
 }
+
+/// Plasma's `Label` and `Heading` render rich text by default, and a row's
+/// label can be whatever a network's owner named it: a ZeroTier controller can
+/// put an `<img>` in a name, and Plasma fetched it. Omarchy's labels and
+/// GNOME's `St.Label` are plain already.
+#[test]
+fn every_plasma_label_draws_panel_text_as_plain_text() {
+    let mut files = PLASMA.to_vec();
+    files.push("plasma/org.tailgauge.plasmoid/contents/ui/SectionHeader.qml");
+    for file in files {
+        let source = repo_file(file);
+        for (at, _) in source
+            .match_indices("Label {")
+            .chain(source.match_indices("Heading {"))
+        {
+            let body = &source[at..];
+            let mut depth = 0usize;
+            let end = body
+                .char_indices()
+                .find(|&(_, c)| {
+                    match c {
+                        '{' => depth += 1,
+                        '}' => depth -= 1,
+                        _ => {}
+                    }
+                    c == '}' && depth == 0
+                })
+                .map(|(i, _)| i)
+                .unwrap_or(body.len());
+            let block = &body[..end];
+            if block.contains("text:") {
+                assert!(
+                    block.contains("textFormat: Text.PlainText"),
+                    "{file}: a label draws text as rich text:\n{block}"
+                );
+            }
+        }
+    }
+}
