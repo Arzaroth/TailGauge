@@ -71,7 +71,7 @@ fn probe() -> Vec<ProviderState> {
         .collect()
 }
 
-/// How long one status read may take. Every panel call waits on every
+/// How long one status read may take, all its calls together. Every panel call waits on every
 /// installed provider, so a daemon that hangs would hold Tailscale's panel as
 /// long as its CLI waits (a frozen zerotier-one: 60 s).
 pub const READ_LIMIT: Duration = Duration::from_secs(5);
@@ -81,9 +81,12 @@ pub fn status_output(provider: &ProviderDescriptor) -> Option<String> {
     if daemon_is_down(provider) {
         return None;
     }
+    // One budget for the whole read: a backend that makes several calls
+    // (ZeroTier, three) shares it rather than getting a limit per call.
+    let deadline = Instant::now() + READ_LIMIT;
     provider
         .backend
-        .read_status(&|argv| run_bounded(argv, READ_LIMIT))
+        .read_status(&|argv| run_bounded(argv, deadline.saturating_duration_since(Instant::now())))
 }
 
 /// Run `argv` to completion, or kill it at `limit` and answer `None`, as for
