@@ -7,7 +7,7 @@ import * as Panel from './panel.js';
 // gnome-shell inherits the session PATH, which often lacks the user bin dirs
 // the installer drops the binary into. `exec "$@"` keeps argv intact rather
 // than pushing it back through the shell's parser.
-const PATH_PREAMBLE = 'export PATH="$HOME/.local/bin:$HOME/bin:/usr/local/bin:$PATH"; ';
+const PATH_PREAMBLE = 'export PATH="$HOME/.local/bin:$HOME/bin:/usr/local/bin:$PATH:/usr/sbin:/sbin"; ';
 
 const ACTION_STATUS_MS = 2200;
 const DELAYED_REFRESH_MS = 600;
@@ -357,7 +357,7 @@ export const ProviderService = GObject.registerClass({
         if (!this.installed)
             return;
         if (this._ctl('operator', 'authorize'))
-            this.actionStatus = 'Authorizing the operator…';
+            this.actionStatus = 'Authorizing…';
     }
 
     switchProvider(provider: Panel.Payload | null): void {

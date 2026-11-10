@@ -98,7 +98,7 @@ const PROGRESS_STRINGS: &[&str] = &[
     "TailGauge",
     "Checking…",
     "Turning it on…",
-    "Authorizing the operator…",
+    "Authorizing…",
     "Updating TailGauge…",
     "The command failed",
     "The update failed",
