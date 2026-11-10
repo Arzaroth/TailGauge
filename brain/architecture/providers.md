@@ -236,9 +236,10 @@ slicer beside core's).
 ## Adding a provider
 
 1. Add a `PROVIDERS` row with its `cli`, `capabilities`, icon and glyph, and a
-   `Backend` in `providers/<id>.rs`: `status()`, `parse_status`, `up`/`down`
-   (or `None` to be switched by its networks), and each optional command the
-   provider has. The compiler asks for nothing else; what is left out is
+   `Backend` in `providers/<id>.rs`: `status()`, `parse_status`, `switch()`
+   (`Switch::Connection { up, down }`, or `Switch::Networks` to be switched by
+   its networks, which also needs `networks()`, `parse_networks` and
+   `select_network`), and each optional command the provider has. The compiler asks for nothing else; what is left out is
    `None`.
 2. Write the parser (a `StatusResult` producer) and capture real output into
    `tests/fixtures/`, scripted where the provider can run in a container
