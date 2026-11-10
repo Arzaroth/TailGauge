@@ -573,6 +573,61 @@ fn the_gnome_switch_mirrors_the_daemon_without_toggling_it() {
     }
 }
 
+/// QML with every comment and string literal blanked to spaces, the same
+/// length, so a brace inside one cannot end a block early.
+fn code_only(source: &str) -> String {
+    let mut out = String::with_capacity(source.len());
+    let mut chars = source.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '/' if chars.peek() == Some(&'/') => {
+                out.push(' ');
+                for c in chars.by_ref() {
+                    if c == '\n' {
+                        out.push('\n');
+                        break;
+                    }
+                    out.push(' ');
+                }
+            }
+            '/' if chars.peek() == Some(&'*') => {
+                out.push(' ');
+                let mut last = ' ';
+                for c in chars.by_ref() {
+                    out.push(if c == '\n' { '\n' } else { ' ' });
+                    if last == '*' && c == '/' {
+                        break;
+                    }
+                    last = c;
+                }
+            }
+            '"' | '\'' => {
+                out.push(c);
+                let mut escaped = false;
+                for inner in chars.by_ref() {
+                    if !escaped && inner == c {
+                        out.push(c);
+                        break;
+                    }
+                    escaped = !escaped && inner == '\\';
+                    out.push(if inner == '\n' { '\n' } else { ' ' });
+                }
+            }
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+#[test]
+fn a_brace_in_a_comment_or_string_does_not_end_a_qml_block() {
+    let source = "Label {\n    // a } here\n    tip: \"}\"\n    text: x\n}";
+    let code = code_only(source);
+    assert_eq!(code.len(), source.len());
+    assert_eq!(code.matches('}').count(), 1, "{code}");
+    assert!(code.contains("text: x"));
+}
+
 /// Plasma's `Label` and `Heading` render rich text by default, and a row's
 /// label can be whatever a network's owner named it: a ZeroTier controller can
 /// put an `<img>` in a name, and Plasma fetched it. Omarchy's labels and
@@ -582,7 +637,7 @@ fn every_plasma_label_draws_panel_text_as_plain_text() {
     let mut files = PLASMA.to_vec();
     files.push("plasma/org.tailgauge.plasmoid/contents/ui/SectionHeader.qml");
     for file in files {
-        let source = repo_file(file);
+        let source = code_only(&repo_file(file));
         for (at, _) in source
             .match_indices("Label {")
             .chain(source.match_indices("Heading {"))
