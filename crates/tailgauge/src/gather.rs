@@ -7,8 +7,10 @@
 
 use std::fs;
 use std::io::Read;
+use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
-use std::process::{Command, Output, Stdio};
+use std::process::{Child, Command, Output, Stdio};
+use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -91,53 +93,79 @@ pub fn status_output(provider: &ProviderDescriptor) -> Option<String> {
 
 /// Run `argv` to completion, or kill it at `limit` and answer `None`, as for
 /// a call that failed. Both streams are drained while it runs, so a large
-/// answer cannot fill a pipe and stall it.
+/// answer cannot fill a pipe and stall it. The command runs in a process group
+/// of its own and the whole group is killed at the limit: a descendant that
+/// outlives it while holding a pipe open would otherwise hold the read too.
 pub fn run_bounded(argv: &[String], limit: Duration) -> Option<Output> {
+    if limit.is_zero() {
+        return None;
+    }
     let (program, args) = argv.split_first()?;
     let mut child = Command::new(program)
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
+        .process_group(0)
         .spawn()
         .ok()?;
-    let drain = |pipe: Option<Box<dyn Read + Send>>| {
+    let group = child.id() as libc::pid_t;
+    let deadline = Instant::now() + limit;
+    let cut = |child: &mut Child| {
+        // SAFETY: a plain signal to the group this function created.
+        unsafe { libc::kill(-group, libc::SIGKILL) };
+        let _ = child.kill();
+        let _ = child.wait();
+    };
+
+    let (tx, rx) = mpsc::channel();
+    let pipes: [Option<Box<dyn Read + Send>>; 2] = [
+        child
+            .stdout
+            .take()
+            .map(|p| Box::new(p) as Box<dyn Read + Send>),
+        child
+            .stderr
+            .take()
+            .map(|p| Box::new(p) as Box<dyn Read + Send>),
+    ];
+    for (which, pipe) in pipes.into_iter().enumerate() {
+        let tx = tx.clone();
         thread::spawn(move || {
             let mut bytes = Vec::new();
             if let Some(mut pipe) = pipe {
                 let _ = pipe.read_to_end(&mut bytes);
             }
-            bytes
-        })
-    };
-    let stdout = drain(
-        child
-            .stdout
-            .take()
-            .map(|p| Box::new(p) as Box<dyn Read + Send>),
-    );
-    let stderr = drain(
-        child
-            .stderr
-            .take()
-            .map(|p| Box::new(p) as Box<dyn Read + Send>),
-    );
-    let deadline = Instant::now() + limit;
+            let _ = tx.send((which, bytes));
+        });
+    }
+    drop(tx);
+
     let status = loop {
         match child.try_wait() {
             Ok(Some(status)) => break status,
             Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(10)),
             _ => {
-                let _ = child.kill();
-                let _ = child.wait();
+                cut(&mut child);
                 return None;
             }
         }
     };
+    let mut streams = [Vec::new(), Vec::new()];
+    for _ in 0..2 {
+        match rx.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+            Ok((which, bytes)) => streams[which] = bytes,
+            Err(_) => {
+                cut(&mut child);
+                return None;
+            }
+        }
+    }
+    let [stdout, stderr] = streams;
     Some(Output {
         status,
-        stdout: stdout.join().unwrap_or_default(),
-        stderr: stderr.join().unwrap_or_default(),
+        stdout,
+        stderr,
     })
 }
 
@@ -556,6 +584,21 @@ mod tests {
         assert_eq!(big.stdout.len(), 300_000, "a full pipe does not stall it");
         assert_eq!(big.stderr, b"done\n");
         assert!(run_bounded(&[], Duration::from_secs(1)).is_none());
+        assert!(
+            run_bounded(&argv(&["true"]), Duration::ZERO).is_none(),
+            "a spent budget starts nothing"
+        );
+
+        let started = Instant::now();
+        assert!(
+            run_bounded(
+                &argv(&["sh", "-c", "sleep 30 & echo early"]),
+                Duration::from_millis(300)
+            )
+            .is_none(),
+            "a descendant holding the pipe does not hold the read"
+        );
+        assert!(started.elapsed() < Duration::from_secs(2));
     }
 
     fn up(ids: &[&str]) -> Vec<core::panel_state::ProviderSummary> {
