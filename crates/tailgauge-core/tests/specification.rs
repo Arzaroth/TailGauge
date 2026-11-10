@@ -3014,3 +3014,26 @@ fn a_zerotier_that_refuses_this_user_offers_to_copy_its_token() {
     assert_eq!(rows[0].label, "Allow access to ZeroTier");
     assert_eq!(rows[0].action, "authorize");
 }
+
+#[test]
+fn a_zerotier_network_behind_sso_is_the_row_that_opens_its_login() {
+    let listed = r#"[
+        {"nwid":"e0edd2bebde885d3","name":"homelab","status":"OK","assignedAddresses":["10.147.20.54/24"]},
+        {"nwid":"8056c2e21c000002","name":"corp","status":"AUTHENTICATION_REQUIRED",
+         "assignedAddresses":[],"authenticationURL":"https://sso.example/zt/login"}
+    ]"#;
+    let state = PanelState {
+        networks: core::zerotier::parse_zerotier_networks(listed),
+        ..zerotier_state("zerotier-listnetworks.json", "zerotier-peers.json")
+    };
+    let panel = resolve(&state);
+    let corp = labelled(rows_of(&panel, "networks"), "corp");
+    assert_eq!(corp.action, "openUrl");
+    assert_eq!(corp.hint, "Log in");
+    assert_eq!(corp.sublabel, "Needs login");
+    assert_eq!(corp.payload["url"], "https://sso.example/zt/login");
+
+    let homelab = labelled(rows_of(&panel, "networks"), "homelab");
+    assert_eq!(homelab.action, "selectNetwork");
+    assert!(homelab.payload.get("url").is_none());
+}
