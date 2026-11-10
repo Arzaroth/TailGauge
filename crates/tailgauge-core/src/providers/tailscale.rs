@@ -29,12 +29,17 @@ impl Backend for Tailscale {
         Some(argv(&["tailscale", "switch", "--list", "--json"]))
     }
 
-    fn watch(&self, timeout_seconds: u64) -> Option<Vec<String>> {
-        Some(vec![
-            "tailgauge".into(),
-            "watch".into(),
-            timeout_seconds.to_string(),
-        ])
+    fn events(&self) -> Option<Vec<String>> {
+        Some(argv(&["tailscale", "debug", "watch-ipn"]))
+    }
+
+    fn event_markers(&self) -> &'static [&'static str] {
+        &[
+            "\"State\"",
+            "\"Prefs\"",
+            "\"LoginFinished\"",
+            "\"BackendState\"",
+        ]
     }
 
     fn switch_account(&self, account_id: &str) -> Option<Vec<String>> {

@@ -42,6 +42,10 @@ pub struct StatusOk {
     pub peers: Vec<Peer>,
     #[serde(rename = "exitNodes")]
     pub exit_nodes: Vec<Peer>,
+    /// The exit node routing this machine, Mullvad's included, which are not
+    /// in `peers`. Empty without one.
+    #[serde(rename = "exitNodeId", skip_serializing_if = "String::is_empty")]
+    pub exit_node_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -135,6 +139,11 @@ pub fn parse_status(raw: &str) -> StatusResult {
         self_peer,
         peers,
         exit_nodes,
+        exit_node_id: data
+            .pointer("/ExitNodeStatus/ID")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string(),
     }))
 }
 

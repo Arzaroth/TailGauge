@@ -168,6 +168,7 @@ pub fn parse_netbird_status(raw: &str) -> StatusResult {
         file_sharing: false,
         peers,
         exit_nodes: Vec::new(),
+        exit_node_id: String::new(),
     }))
 }
 

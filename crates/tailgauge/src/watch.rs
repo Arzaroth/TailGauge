@@ -2,8 +2,9 @@
 //!
 //! The panels chain this ahead of a refresh, so a change made anywhere - tsui,
 //! the CLI, another desktop - shows up at once instead of waiting for the next
-//! poll. Tailscale pushes its changes on the IPN bus; every other installed
-//! provider, and a Tailscale without the bus, is polled.
+//! poll. A provider with `live_watch` pushes its changes on an event stream
+//! (Tailscale's IPN bus); every other installed provider, and one whose daemon
+//! is too old for the stream, is polled.
 
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
@@ -11,9 +12,8 @@ use std::sync::mpsc::{self, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::tailscale;
 use selvedge::proc;
-use tailgauge_core::providers::{PROVIDERS, ProviderDescriptor};
+use tailgauge_core::providers::{Capability, PROVIDERS, ProviderDescriptor};
 use tailgauge_core::status::StatusResult;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -36,17 +36,6 @@ impl Outcome {
     }
 }
 
-/// Notification fields worth waking a panel for. Everything else on the bus is
-/// netmap churn, which would turn a refresh into a busy loop.
-const INTERESTING: &[&str] = &[
-    "\"State\"",
-    "\"Prefs\"",
-    "\"LoginFinished\"",
-    "\"BackendState\"",
-];
-
-const TAILSCALE: &str = "tailscale";
-
 pub fn run(timeout: Duration) -> Outcome {
     let installed: Vec<&'static ProviderDescriptor> = PROVIDERS
         .iter()
@@ -63,12 +52,15 @@ pub fn run(timeout: Duration) -> Outcome {
     let (tx, rx) = mpsc::channel();
 
     let mut polled = installed.clone();
-    let mut bus = None;
-    if installed.iter().any(|p| p.id == TAILSCALE) && supports_watch_ipn() {
-        bus = watch_ipn(tx.clone());
-        if bus.is_some() {
-            polled.retain(|p| p.id != TAILSCALE);
-        }
+    let streamed = installed
+        .iter()
+        .copied()
+        .find(|p| p.capabilities.has(Capability::LiveWatch));
+    let mut bus = streamed
+        .filter(|p| has_events(p))
+        .and_then(|p| watch_events(p, tx.clone()));
+    if bus.is_some() {
+        polled.retain(|p| streamed.is_none_or(|s| s.id != p.id));
     }
     poll(polled, deadline, tx.clone());
 
@@ -80,8 +72,7 @@ pub fn run(timeout: Duration) -> Outcome {
                 if let Some(child) = bus.take() {
                     reap(child);
                 }
-                let tailscale = installed.iter().copied().filter(|p| p.id == TAILSCALE);
-                poll(tailscale.collect(), deadline, tx.clone());
+                poll(streamed.into_iter().collect(), deadline, tx.clone());
             }
             Ok(settled) => return settle(bus, settled),
             Err(_) => return settle(bus, Outcome::Expired),
@@ -102,22 +93,40 @@ fn remaining(deadline: Instant) -> Duration {
     deadline.saturating_duration_since(Instant::now())
 }
 
-fn supports_watch_ipn() -> bool {
-    if proc::run_quiet(TAILSCALE, ["debug", "watch-ipn", "--help"]) {
+/// Whether the daemon is new enough for its event stream: the stream's own
+/// `--help`, or failing that its parent command listing it.
+fn has_events(provider: &ProviderDescriptor) -> bool {
+    let Some(argv) = provider.backend.events() else {
+        return false;
+    };
+    if proc::run_quiet(
+        &argv[0],
+        argv[1..].iter().map(String::as_str).chain(["--help"]),
+    ) {
         return true;
     }
-    proc::run(TAILSCALE, ["debug", "--help"]).is_ok_and(|out| {
+    let Some((name, parent)) = argv.split_last() else {
+        return false;
+    };
+    proc::run(
+        &parent[0],
+        parent[1..].iter().map(String::as_str).chain(["--help"]),
+    )
+    .is_ok_and(|out| {
         let text = String::from_utf8_lossy(&out.stdout) + String::from_utf8_lossy(&out.stderr);
-        text.contains("watch-ipn")
+        text.contains(name.as_str())
     })
 }
 
-/// The IPN bus is the cheap path: tailscaled pushes a notification on every
-/// state and prefs change, so this sits idle until something happens. It sends
-/// `Changed` on one of those, `Unusable` when the stream ends without one.
-fn watch_ipn(tx: Sender<Outcome>) -> Option<Child> {
-    let mut child = Command::new(TAILSCALE)
-        .args(["debug", "watch-ipn"])
+/// The event stream is the cheap path: the daemon pushes a notification on
+/// every state and prefs change, so this sits idle until something happens.
+/// It sends `Changed` on one of those, `Unusable` when the stream ends without
+/// one.
+fn watch_events(provider: &ProviderDescriptor, tx: Sender<Outcome>) -> Option<Child> {
+    let argv = provider.backend.events()?;
+    let markers = provider.backend.event_markers();
+    let mut child = Command::new(&argv[0])
+        .args(&argv[1..])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -131,7 +140,7 @@ fn watch_ipn(tx: Sender<Outcome>) -> Option<Child> {
 
     thread::spawn(move || {
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-            if INTERESTING.iter().any(|key| line.contains(key)) {
+            if markers.iter().any(|key| line.contains(key)) {
                 let _ = tx.send(Outcome::Changed);
                 return;
             }
@@ -172,29 +181,18 @@ fn fingerprint(providers: &[&ProviderDescriptor]) -> Vec<Option<String>> {
     providers
         .iter()
         .map(|provider| {
-            if provider.id == TAILSCALE {
-                return tailscale::status().as_ref().map(fingerprint_of);
-            }
             let raw = crate::gather::status_output(provider)?;
             Some(fingerprint_of_status(&provider.backend.parse_status(&raw)))
         })
         .collect()
 }
 
-fn fingerprint_of(status: &serde_json::Value) -> String {
-    format!(
-        "{}|{}",
-        tailscale::backend_state(status),
-        status
-            .pointer("/ExitNodeStatus/ID")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("")
-    )
-}
-
 fn fingerprint_of_status(status: &StatusResult) -> String {
     match status {
-        StatusResult::Ok(ok) => format!("{}|{}|{}", ok.daemon_state, ok.running, ok.needs_login),
+        StatusResult::Ok(ok) => format!(
+            "{}|{}|{}|{}",
+            ok.daemon_state, ok.running, ok.needs_login, ok.exit_node_id
+        ),
         StatusResult::Unavailable(_) => "unavailable".into(),
         StatusResult::Error(_) => "error".into(),
     }
@@ -215,7 +213,9 @@ mod tests {
 
     #[test]
     fn only_the_fields_the_panel_renders_wake_it() {
-        let wakes = |line: &str| INTERESTING.iter().any(|key| line.contains(key));
+        let tailscale = tailgauge_core::providers::provider_by_id("tailscale").expect("tailscale");
+        let markers = tailscale.backend.event_markers();
+        let wakes = |line: &str| markers.iter().any(|key| line.contains(key));
         assert!(wakes(r#"{"State":6}"#));
         assert!(wakes(r#"{"Prefs":{"WantRunning":true}}"#));
         assert!(wakes(r#"{"LoginFinished":{}}"#));
@@ -224,7 +224,8 @@ mod tests {
 
     #[test]
     fn the_fingerprint_moves_with_the_connection_and_the_exit_node() {
-        let state = |json: &str| fingerprint_of(&serde_json::from_str(json).expect("json"));
+        let tailscale = tailgauge_core::providers::provider_by_id("tailscale").expect("tailscale");
+        let state = |json: &str| fingerprint_of_status(&tailscale.backend.parse_status(json));
 
         let running = state(r#"{"BackendState":"Running"}"#);
         assert_ne!(running, state(r#"{"BackendState":"Stopped"}"#));
@@ -272,9 +273,10 @@ mod tests {
         // fallback into a busy loop that refreshes the panel every two seconds.
         let with_peers = r#"{"BackendState":"Running","Peer":{"a":{"Online":true}}}"#;
         let without = r#"{"BackendState":"Running"}"#;
+        let tailscale = tailgauge_core::providers::provider_by_id("tailscale").expect("tailscale");
         assert_eq!(
-            fingerprint_of(&serde_json::from_str(with_peers).expect("json")),
-            fingerprint_of(&serde_json::from_str(without).expect("json"))
+            fingerprint_of_status(&tailscale.backend.parse_status(with_peers)),
+            fingerprint_of_status(&tailscale.backend.parse_status(without))
         );
     }
 }

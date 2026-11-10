@@ -24,6 +24,9 @@ pub struct Capabilities {
     pub accounts: bool,
     pub networks: bool,
     pub connection_quality: bool,
+    /// The daemon pushes its changes, so `watch` waits on its event stream
+    /// rather than polling it.
+    pub live_watch: bool,
 }
 
 /// One capability, named rather than indexed, so a typo is a build error the
@@ -36,6 +39,7 @@ pub enum Capability {
     Accounts,
     Networks,
     ConnectionQuality,
+    LiveWatch,
 }
 
 impl Capabilities {
@@ -47,6 +51,7 @@ impl Capabilities {
             Capability::Accounts => self.accounts,
             Capability::Networks => self.networks,
             Capability::ConnectionQuality => self.connection_quality,
+            Capability::LiveWatch => self.live_watch,
         }
     }
 }
@@ -93,10 +98,16 @@ pub trait Backend: Sync + std::fmt::Debug {
         None
     }
 
-    /// Blocks until the daemon reports a change, so the panel can ride events
-    /// instead of the clock. A provider without one falls back to the timer.
-    fn watch(&self, _timeout_seconds: u64) -> Option<Vec<String>> {
+    /// A stream that prints a line per daemon notification, for a provider
+    /// with `live_watch`. A provider without one is polled.
+    fn events(&self) -> Option<Vec<String>> {
         None
+    }
+
+    /// Which notification lines are a change the panel draws. Everything else
+    /// on the stream is churn, which would turn a refresh into a busy loop.
+    fn event_markers(&self) -> &'static [&'static str] {
+        &[]
     }
 
     fn switch_account(&self, _account_id: &str) -> Option<Vec<String>> {
@@ -161,6 +172,7 @@ pub const PROVIDERS: &[ProviderDescriptor] = &[
             // Empty CurAddr with a relay region is a relayed peer, so the
             // direct or relayed reading is there for the asking.
             connection_quality: true,
+            live_watch: true,
         },
         backend: &tailscale::Tailscale,
     },
@@ -178,6 +190,7 @@ pub const PROVIDERS: &[ProviderDescriptor] = &[
             accounts: false,
             networks: true,
             connection_quality: true,
+            live_watch: false,
         },
         backend: &netbird::NetBird,
     },
@@ -540,7 +553,7 @@ mod tests {
         // argv aimed at the other provider's binary.
         assert!(netbird.backend.exit_node_list().is_none());
         assert!(netbird.backend.accounts().is_none());
-        assert!(netbird.backend.watch(300).is_none());
+        assert!(netbird.backend.events().is_none());
         assert!(tailscale.backend.networks().is_none());
         assert!(tailscale.backend.select_network("x", true).is_none());
     }
