@@ -72,9 +72,9 @@ draw one. `panel.ts` `SECTION_IDS` must match the list exactly.
 | `update` | (none) | `update.available` | one `update` row, action `update`, `busy` = `updating` |
 | `providers` | VPN | more than one drivable provider | `provider:<id>`, action `switchProvider` |
 | `self` | This device | provider ready, active, and the self peer has copy options | `self`, action `copy` |
-| `connections` | Connections | accounts capability and (more than one account, or `accountsAccessDenied`) | `auth` (action `authorize`) first when access is denied, then `account:<id>` (action `switchAccount`) |
+| `connections` | Connections | `accessDenied` with a backend `authorization()`, or the accounts capability and (more than one account, or `accountsAccessDenied`) | `auth` (action `authorize`, words from the backend) first when access is denied, then `account:<id>` (action `switchAccount`) |
 | `exitNodes` | Exit nodes | exit-node capability, active, rows not empty | the tailnet's own `exit:<id>` nodes, up to 5 recent or active Mullvad nodes (`recent_mullvad_nodes`), then the `mullvad:add` picker |
-| `networks` | Networks | networks capability (NetBird), active, rows not empty | `network:<id>`, action `selectNetwork`, hint `Join` / `Leave` |
+| `networks` | Networks | networks capability (NetBird, ZeroTier), active, rows not empty | `network:<id>`, labelled by name (else id), action `selectNetwork`, hint `Join` / `Leave` |
 | `machines` | Machines | provider ready and active | `machines:search` above 8 peers (`MACHINE_SEARCH_MIN`), `machines:empty`, then `peer:<id>` |
 
 The machines section's `empty` is `No machines found on this tailnet.`; the
@@ -180,17 +180,17 @@ when a decision leaks into a desktop:
 | `the_gnome_switch_mirrors_the_daemon_without_toggling_it` | a GNOME `setToggleState` call not wrapped in `block_signal_handler` / `unblock_signal_handler` of the header's `'toggled'` handler |
 
 `crates/tailgauge-core/tests/specification.rs` says what the panel should do,
-case by case (111 tests, ported from the former `model.test.ts` and kept in its
+case by case (125 tests, ported from the former `model.test.ts` and kept in its
 order). It resolves panels from captures of real daemon output in
 `crates/tailgauge-core/tests/fixtures/` (`status.json`, `accounts.json`,
 `exit-nodes.txt`, `netbird-status.json`, `netbird-status-idle.json`,
-`netbird-networks.txt`) at a fixed `NOW` of 2026-09-14T06:00:00Z, grouped as:
+`netbird-networks.txt`, the Headscale and ZeroTier captures) at a fixed `NOW` of 2026-09-14T06:00:00Z, grouped as:
 the parsers; the sections (fixed order, visibility, exit-node ordering, picker);
 the machines section and search (case-insensitive keys, empty-result rows,
 search threshold); header, status and traversal (`navigation_visits_the_header_then_every_visible_row_in_draw_order`,
 `every_cursor_stop_resolves_back_to_its_row`); banner, footer and busy rows
 (`the_switch_stays_enabled_while_a_background_poll_runs`); the provider
-registry; NetBird; the bar; and the expanded detail rows.
+registry; NetBird; the bar; the expanded detail rows; Headscale; and ZeroTier.
 
 ## Sources
 

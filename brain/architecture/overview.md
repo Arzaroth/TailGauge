@@ -22,18 +22,19 @@ then jump to [panel-spec.md](panel-spec.md) for the JSON and
 | `scripts/check-package.sh` | What every package must hold, run on a clean distribution by the release |
 | `scripts/compat/tailgauge-update` | Bootstrap shipped in the `helpers` asset so a 0.4.0 install can update itself onto the binary |
 | `tests/qml`, `tests/gnome`, `tests/gnome/shell` | Frontend harnesses (QML runtime with stubbed imports, Node with GJS mocked, a real headless GNOME Shell) |
+| `tests/zerotier` | `record.sh`: records the ZeroTier captures from two nodes in containers, no account needed |
 | `.github/workflows/{ci,release}.yml` | The gate and the tag-driven release |
 
 Inside the core crate (`crates/tailgauge-core/src`):
 
-- `providers.rs` - `PROVIDERS` (Tailscale, then NetBird; order is preference),
-  `Capabilities`, and every argv a provider is driven with
-  (`ProviderDescriptor::status`, `up`, `down`, `set_exit_node`...). See
+- `providers/` - `PROVIDERS` (Tailscale, then NetBird, then ZeroTier; order is
+  preference), `Capabilities`, and a `Backend` per provider holding every argv
+  it is driven with (`status`, `up`, `down`, `set_exit_node`...). See
   [providers.md](providers.md).
-- `status.rs`, `netbird.rs`, `accounts.rs`, `exit_nodes.rs`, `peer.rs` - parse
+- `status.rs`, `netbird.rs`, `zerotier.rs`, `accounts.rs`, `exit_nodes.rs`, `peer.rs` - parse
   what `tailscale status --json`, `netbird status --json`,
-  `tailscale switch --list --json`, `tailscale exit-node list` and
-  `netbird networks list` printed into `StatusResult`, `Peer`, `Account`,
+  `tailscale switch --list --json`, `tailscale exit-node list`,
+  `netbird networks list` and `zerotier-cli -j info|listnetworks|peers` printed into `StatusResult`, `Peer`, `Account`,
   `Network`.
 - `panel_state.rs`, `panel.rs`, `bar.rs`, `fmt.rs` - the input state and the
   resolved panel ([panel-spec.md](panel-spec.md)).
@@ -82,14 +83,14 @@ and unrelated to drawing). Every frontend owns three clocks, the same on all
 three desktops:
 
 - **Watch.** `tailgauge watch 300` covers every installed supported provider,
-  all under one deadline for the whole call. Tailscale rides the IPN bus when
-  `tailscale debug watch-ipn` exists: it wakes on a line carrying `"State"`,
-  `"Prefs"`, `"LoginFinished"` or `"BackendState"` (`watch::INTERESTING`). Every
-  other installed provider, and Tailscale without the bus (or once the bus
-  hangs up), is polled every 2 s on a fingerprint: for Tailscale `fingerprint_of`
-  on the raw JSON (`BackendState` plus `ExitNodeStatus.ID`), for the rest
-  `fingerprint_of_status` on the parsed status (daemon state, running,
-  needs-login), so netmap churn never wakes it. It exits 0 on the first change,
+  all under one deadline for the whole call. A provider with `live_watch`
+  (Tailscale) rides its event stream when it exists (`tailscale debug
+  watch-ipn`): it wakes on a line carrying one of its backend's
+  `event_markers` (`"State"`, `"Prefs"`, `"LoginFinished"`, `"BackendState"`).
+  Every other installed provider, and Tailscale without the stream (or once it
+  hangs up), is polled every 2 s on `fingerprint_of_status` over the parsed
+  status (daemon state, running, needs-login, exit node id), so netmap churn
+  never wakes it. It exits 0 on the first change,
   2 when the deadline passes, and 1 only when no supported VPN CLI is installed.
   Frontends refresh on 0, re-arm after 250 ms on 0 or 2, and back off 30 s
   otherwise. This is why a change made by `tailgauge ctl`, a VPN CLI or another
@@ -105,11 +106,9 @@ The TUI has no watcher: it re-gathers every 3 s (`tui::TICK`) and 600 ms after a
 command (`tui::SETTLE`).
 
 All three frontends arm `tailgauge watch 300` whichever provider is shown. On a
-NetBird-only machine the watch polls NetBird and exits 0 on a change or 2 on
-expiry (e2e `watch_wakes_on_a_netbird_change`,
+NetBird- or ZeroTier-only machine the watch polls it and exits 0 on a change
+or 2 on expiry (e2e `watch_wakes_on_a_netbird_change`,
 `watch_on_a_quiet_netbird_expires_rather_than_giving_up`).
-`ProviderDescriptor::watch` still returns `tailgauge watch` for Tailscale and
-`None` for NetBird; nothing reads it but its own test.
 
 ## What lives where
 
@@ -155,10 +154,10 @@ expiry (e2e `watch_wakes_on_a_netbird_change`,
 ## Sources
 
 - `Cargo.toml` (workspace, version, MSRV 1.89), `crates/tailgauge-core/Cargo.toml`, `crates/tailgauge/Cargo.toml`
-- `crates/tailgauge-core/src/lib.rs`, `crates/tailgauge-core/src/providers.rs` (`PROVIDERS`, `ProviderDescriptor::watch`)
+- `crates/tailgauge-core/src/lib.rs`, `crates/tailgauge-core/src/providers/mod.rs` (`PROVIDERS`, `Backend::events`)
 - `crates/tailgauge/src/main.rs` (`Command::Panel`, `run_panel`, `splice_alias`)
 - `crates/tailgauge/src/gather.rs` (`Ui`, `probe`, `statuses`, `extras`, `update_info`, `panel_state`, `resolve_options`)
-- `crates/tailgauge/src/watch.rs` (`run`, `INTERESTING`, `watch_ipn`, `poll`, `fingerprint`, `fingerprint_of`, `fingerprint_of_status`)
+- `crates/tailgauge/src/watch.rs` (`run`, `has_events`, `watch_events`, `poll`, `fingerprint`, `fingerprint_of_status`)
 - `crates/tailgauge/src/tui.rs` (`TICK`, `SETTLE`), `crates/tailgauge/src/copy.rs`, `crates/tailgauge/src/project.rs`
 - `plasma/org.tailgauge.plasmoid/contents/ui/ProviderService.qml`, `gnome/tailgauge@arzaroth.github.io/provider.ts`, `omarchy/arzaroth.tailgauge/Service.qml` (the three clocks)
 - `crates/tailgauge-core/tests/parity.rs`, `crates/tailgauge/tests/e2e.rs` (`the_panel_never_waits_on_github`, `every_command_the_frontends_invoke_exists`, `watch_wakes_on_a_netbird_change`, `watch_on_a_quiet_netbird_expires_rather_than_giving_up`)

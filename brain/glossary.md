@@ -7,9 +7,13 @@ that blur it. Back to the root map: [BRAIN.md](BRAIN.md).
 ## Providers and the daemon
 
 - **Provider** - a VPN whose CLI TailGauge drives: one row of `PROVIDERS` in
-  `providers.rs` (Tailscale, then NetBird). See
+  `providers/mod.rs` (Tailscale, then NetBird, then ZeroTier). See
   [architecture/providers.md](architecture/providers.md).
-  Avoid: backend, VPN type, service.
+  Avoid: VPN type, service.
+- **Backend** - what a provider does: its `Backend` implementation in
+  `providers/<id>.rs`, holding the argv for each thing the panel asks and the
+  parser for the answer, `None` for what the provider lacks. The row says what
+  the provider is. Avoid: driver, adapter, plugin.
 - **Supported / drivable** - supported: TailGauge has a parser for it.
   Drivable: supported and installed on this machine (found on `PATH`).
   Avoid: available, enabled.
@@ -20,17 +24,29 @@ that blur it. Back to the root map: [BRAIN.md](BRAIN.md).
   (`bar.providerId`): the first one up by connection order, kept in
   `connected.json`. Avoid: main provider, primary VPN.
 - **Capability** - a per-provider flag (`Capability`: exit nodes, Mullvad, file
-  send, accounts, networks, connection quality) that decides which sections the
-  panel shows for the active provider. Which commands a provider has is decided
-  by the argv methods in `providers.rs` (by id today); `ctl` also checks the
-  exit-node and accounts capabilities before some actions. Avoid:
-  feature, permission, support level.
+  send, accounts, networks, connection quality, live watch) that decides which
+  sections the panel shows for the active provider, narrowed by what the
+  daemon reports (`provider_supports`: Taildrop needs the file-sharing cap,
+  Mullvad a region list). Which commands a provider has is decided by its
+  backend; `ctl` also checks the exit-node capability before some actions.
+  Avoid: feature, permission, support level.
+- **Access denied** - the provider's CLI refuses this user outright
+  (`accessDenied`, ZeroTier without its token), as opposed to a daemon that
+  is down. The panel offers the backend's **authorization**: the elevated
+  command that lets the user in, and the `auth` row that runs it. Avoid:
+  permission error, unauthorized.
+- **Switched by its networks** - a provider with no `up` / `down` of its own
+  (ZeroTier): on is joined to any network, the switch leaves them all and
+  joins back the ones it took. Its **remembered networks** are kept in
+  `$XDG_STATE_HOME/tailgauge/networks-<id>.json`, each `wanted` until left by
+  hand. See [features/zerotier.md](features/zerotier.md). Avoid: saved
+  networks, favourites.
 - **Daemon state** - the provider daemon's own state (`daemonState`, from
   Tailscale's `BackendState`): `Running`, `Stopped`, `NeedsLogin`... Avoid:
   backend state (the old field name), status.
 - **Watch** - `tailgauge watch`, which blocks until any installed supported
-  provider changes (Tailscale on `tailscale debug watch-ipn` when it has it,
-  the rest polled every 2 s) and exits 0 on a change, 2 on expiry, 1 when no
+  provider changes (a `live_watch` provider on its event stream, Tailscale's
+  `tailscale debug watch-ipn`, when it has it, the rest polled every 2 s) and exits 0 on a change, 2 on expiry, 1 when no
   supported VPN CLI is installed. See
   [architecture/providers.md](architecture/providers.md). Avoid: listener,
   subscription.
@@ -122,5 +138,5 @@ that blur it. Back to the root map: [BRAIN.md](BRAIN.md).
 
 ## Sources
 
-- `crates/tailgauge-core/src/providers.rs`, `panel.rs`, `panel_state.rs`, `status.rs`, `exit_nodes.rs`
+- `crates/tailgauge-core/src/providers/`, `panel.rs`, `panel_state.rs`, `status.rs`, `exit_nodes.rs`
 - `crates/tailgauge/src/gather.rs` (`Ui`), `main.rs` (`splice_alias`), `project.rs` (`ALIASES`), `ctl.rs`, `watch.rs`

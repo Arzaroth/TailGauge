@@ -64,9 +64,12 @@ Each has one service file that owns the subprocesses (`ProviderService.qml`,
 
 It draws `panel.bar` (connected, crossed, warning badge) and its tooltip is
 `bar.tooltip`, so it describes the machine, not the provider shown. The mark is
-`bar.providerId`'s: Tailscale's dot grid, or NetBird's (`NetBirdIcon.qml` on
-Plasma and Omarchy, `NETBIRD_PATHS` drawn with cairo on GNOME), and NetBird's
-disconnected slash runs the other way so the mark does not swallow it.
+`bar.providerId`'s: Tailscale's dot grid, NetBird's (`NetBirdIcon.qml` on
+Plasma and Omarchy, `NETBIRD_PATHS` drawn with cairo on GNOME) or ZeroTier's
+(`ZeroTierIcon.qml`, a `PathSvg` filled by winding; `drawZeroTier` from its
+shapes on GNOME), and NetBird's disconnected slash runs the other way so the
+mark does not swallow it. A provider with no mark of its own would fall back
+to the dots, so parity requires every provider's on every desktop.
 `bar.badge` is drawn raised to the right of the mark, never over it: inside
 `TailGaugeIcon.qml`'s width on Plasma and Omarchy (Omarchy keeps the mark
 centred in its slot and lets the count hang out), as the `tailgauge-panel-count`
@@ -209,4 +212,4 @@ a command. It has no watcher and no settings file. See
 - `scripts/build.sh`, `tsconfig.gnome.json`, `tests/qml/run.sh`, `tests/gnome/shell/run.sh`
 - `crates/tailgauge-core/tests/parity.rs` (`no_click_on_the_bar_icon_toggles_a_connection`), `tests/gnome/provider.test.js`, `crates/tailgauge/tests/e2e.rs` (`every_command_the_frontends_invoke_exists`)
 - `gnome/tailgauge@arzaroth.github.io/stylesheet.css` (`.tailgauge-icon`, `.tailgauge-panel-count`), `tests/gnome/shell/probe@tailgauge.test/extension.js`
-- `plasma/org.tailgauge.plasmoid/contents/ui/TailGaugeIcon.qml`, `NetBirdIcon.qml`; `omarchy/arzaroth.tailgauge/TailGaugeIcon.qml`, `NetBirdIcon.qml`
+- `plasma/org.tailgauge.plasmoid/contents/ui/TailGaugeIcon.qml`, `NetBirdIcon.qml`, `ZeroTierIcon.qml`; `omarchy/arzaroth.tailgauge/TailGaugeIcon.qml`, `NetBirdIcon.qml`, `ZeroTierIcon.qml`

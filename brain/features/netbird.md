@@ -18,16 +18,18 @@ The registry, detection and parsers are in
   wears the generic machine glyph.
 - **Details**: connection type, latency (nanoseconds shown as ms, `-1` when
   unmeasured), ICE endpoint, relay, bytes, last handshake, routes, public key.
-- **Networks**, a section only NetBird has (`networks` capability):
-  `netbird networks list` parsed by `parse_netbird_networks`, one
+- **Networks**, a section NetBird shares with ZeroTier (`networks` capability):
+  `netbird networks list` parsed by the backend's `parse_networks`
+  (`parse_netbird_networks`), one
   `network:<id>` row each, subtitle range or domains (`network_subtitle`),
   hint "Join" / "Leave", `busy` while `selectingNetworkId` matches. A click runs
   `tailgauge ctl --provider netbird select-network <id> [--leave]`.
 
 ## What it does not get
 
-No exit nodes, no Mullvad, no accounts or operator prompt, no Taildrop
-(`exit_nodes`, `mullvad`, `accounts`, `file_send` all false). The sections are
+No exit nodes, no Mullvad, no accounts, no authorization prompt (its backend
+has no `authorization()`), no Taildrop (`exit_nodes`, `mullvad`, `accounts`,
+`file_send` all false). The sections are
 absent rather than empty, and `ctl` refuses before spawning
 ("NetBird has no exit nodes"; `a_provider_is_never_asked_for_what_it_does_not_have`).
 `tailgauge watch 300` covers NetBird too: it polls `netbird status --json`
@@ -37,12 +39,11 @@ quiet one lets the wait expire (exit 2), on a NetBird-only machine as well
 (e2e `watch_wakes_on_a_netbird_change`,
 `watch_on_a_quiet_netbird_expires_rather_than_giving_up`). See
 [../architecture/overview.md](../architecture/overview.md).
-`ProviderDescriptor::watch` still returns `None` for NetBird, but nothing reads
-it outside its own test.
+NetBird has no `live_watch`, so it is always polled.
 
 A stopped NetBird is not asked at all. Its CLI redials a socket nothing listens
 on for ten seconds, so `gather::status_output` first resolves the socket as the
-CLI does: `ProviderDescriptor::daemon_socket` (`NB_DAEMON_ADDR`, then the legacy
+CLI does: its backend's `daemon_socket` (`NB_DAEMON_ADDR`, then the legacy
 `WT_DAEMON_ADDR`, then `/var/run/netbird.sock`), and when that is missing the
 only `.sock` in `instance_socket_dir` (`/var/run/netbird/`, where a
 `netbird@<instance>` service puts it; `providers::instance_socket`). It then
@@ -62,11 +63,12 @@ one too long to be a socket address reads as down. A TCP address is asked as bef
   the bar icon and its tooltip describe all of them, the active one first
   (`the_bar_icon_describes_the_machine_not_the_panel_view`). The rest of the
   panel is the active provider.
-- The bar icon wears the mark of the provider that is up; with both up, the
-  one that came up first, with a raised `2` beside it
+- The bar icon wears the mark of the provider that is up; with several up, the
+  one that came up first, with a raised count beside it
   (`two_connections_show_the_first_one_up_and_count_both`,
   `the_bar_icon_stays_the_provider_that_connected_first`).
-- With both installed and no choice, Tailscale wins (registry order). The
+- With several installed and no choice, Tailscale wins, then NetBird
+  (registry order). The
   **VPN** section (`providers`) lists the drivable providers with
   `action: switchProvider` and shows only when there are two or more
   (`the_provider_switcher_appears_only_when_there_is_a_choice`).
@@ -84,9 +86,9 @@ Omarchy refreshes.
 
 ## Sources
 
-- `crates/tailgauge-core/src/providers.rs` (`PROVIDERS`, `drivable_providers`, `next_provider`), `crates/tailgauge-core/src/netbird.rs` (`parse_netbird_status`, `parse_netbird_networks`, `network_subtitle`)
+- `crates/tailgauge-core/src/providers/mod.rs` (`PROVIDERS`, `drivable_providers`, `next_provider`), `providers/netbird.rs`, `crates/tailgauge-core/src/netbird.rs` (`parse_netbird_status`, `parse_netbird_networks`, `network_subtitle`)
 - `crates/tailgauge-core/src/panel.rs` (`providers_section`, `networks_section`), `crates/tailgauge-core/src/bar.rs` (`bar_tooltip`, `bar_state`)
 - `crates/tailgauge/src/gather.rs` (`statuses`), `crates/tailgauge/src/ctl.rs` (`select_network`), `crates/tailgauge/src/watch.rs` (`poll`, `fingerprint_of_status`), `crates/tailgauge/tests/e2e.rs` (`watch_wakes_on_a_netbird_change`, `watch_on_a_quiet_netbird_expires_rather_than_giving_up`)
 - `omarchy/arzaroth.tailgauge/Panel.qml` (`cycleProvider`, `onPressed`), `plasma/org.tailgauge.plasmoid/contents/ui/main.qml` (`cycleProvider`), `plasma/org.tailgauge.plasmoid/contents/ui/CompactRep.qml`, `gnome/tailgauge@arzaroth.github.io/provider.ts` (`switchProvider`), `gnome/tailgauge@arzaroth.github.io/extension.ts` (`_cycleProvider`); `crates/tailgauge-core/tests/parity.rs` (`no_click_on_the_bar_icon_toggles_a_connection`)
 - `crates/tailgauge-core/tests/fixtures/netbird-status.json`, `netbird-status-idle.json`, `netbird-networks.txt`; `crates/tailgauge-core/tests/specification.rs` (`parse_netbird_status_offers_nothing_it_cannot_do`, `the_networks_section_belongs_to_the_provider_that_has_networks`)
-- `crates/tailgauge/src/gather.rs` (`status_output`), `crates/tailgauge-core/src/providers.rs` (`daemon_socket`)
+- `crates/tailgauge/src/gather.rs` (`status_output`), `crates/tailgauge-core/src/providers/netbird.rs` (`daemon_socket`, `instance_socket_dir`), `providers/mod.rs` (`instance_socket`)

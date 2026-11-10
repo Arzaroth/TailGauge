@@ -12,36 +12,44 @@ the last is local and opt-in. No coverage tooling or floor exists in this repo.
 | `install.rs` | `install.sh` piped, against a release laid out on disk | `cargo test` |
 | `tests/qml`, `tests/gnome` | each frontend's service against a recorded panel | `tests/qml/run.sh`, `node --test` |
 | `tests/gnome/shell` | the extension's menu in a real GNOME Shell | `tests/gnome/shell/run.sh` |
+| `tests/zerotier` | not a suite: records the ZeroTier captures from two real nodes | `tests/zerotier/record.sh` (docker) |
 
 ## Specification (`crates/tailgauge-core/tests/specification.rs`)
 
-The behaviour of `panel_spec` and the parsers, around 110 tests grouped by
+The behaviour of `panel_spec` and the parsers, around 125 tests grouped by
 banner comments: parsers, sections, machines and search, header / status /
 traversal, banner and footer, provider registry, NetBird, the bar, expanded
-rows. It resolves panels from captures in `tests/fixtures/`: `status.json`,
-`exit-nodes.txt`, `accounts.json` (Tailscale) and `netbird-status.json`,
-`netbird-status-idle.json`, `netbird-networks.txt`, at a fixed `NOW`. When a
-CLI's shape changes, update the capture first; a suite passing against a stale
-capture is how a parser breaks silently.
+rows, Headscale, ZeroTier. It resolves panels from captures in
+`tests/fixtures/`: `status.json`, `exit-nodes.txt`, `accounts.json`
+(Tailscale), `headscale-status.json`, `headscale-exit-nodes.txt` (a client on
+Headscale), `netbird-status.json`, `netbird-status-idle.json`,
+`netbird-networks.txt`, and the `zerotier-*.json` captures, at a fixed `NOW`.
+When a CLI's shape changes, update the capture first; a suite passing against
+a stale capture is how a parser breaks silently. ZeroTier's are re-recorded by
+`tests/zerotier/record.sh`: two `zerotier/zerotier` containers, one hosting
+the networks on its built-in controller, so no account is needed; it scrubs
+the public address ZeroTier reports in `info`.
 
 ## Parity (`crates/tailgauge-core/tests/parity.rs`)
 
 Source-grepping guards over the Plasma, GNOME and Omarchy sources (not the TUI):
 no user-visible string written in a frontend, no re-derived section visibility,
 exit-node list, copy options, status precedence or search haystack, no provider
-binary named in an argv, a GNOME slot for every section, no bar-icon click that
-toggles a connection, no GNOME header switch that toggles while mirroring the
+binary named in an argv, a GNOME slot for every section, every provider's mark
+on every desktop, no bar-icon click that toggles a connection, no GNOME header switch that toggles while mirroring the
 daemon. Details and the full
 list in [panel-spec.md](panel-spec.md).
 
 ## The binary (`crates/tailgauge/tests/e2e.rs` and inner tests)
 
 - `e2e.rs` runs `CARGO_BIN_EXE_tailgauge` on a `Machine`: a temp `HOME` whose
-  `bin/` holds fake `tailscale` / `netbird` shell scripts that `cat` the core
-  fixtures, with `PATH` set to that directory alone (a real `tailscale` once
+  `bin/` holds fake `tailscale` / `netbird` / `zerotier-cli` shell scripts
+  that `cat` the core fixtures (the ZeroTier one joins and leaves for real,
+  through a marker per network), with `PATH` set to that directory alone (a real `tailscale` once
   answered instead) and the XDG dirs moved inside it. Covers the gather end to
   end: no CLI, a running tailnet, Mullvad regions, the bar, a dead daemon,
-  optimistic state, `the_panel_never_waits_on_github`, `ctl` per provider, and
+  optimistic state, `the_panel_never_waits_on_github`, `ctl` per provider,
+  ZeroTier's switch and its remembered networks, and
   `every_command_the_frontends_invoke_exists`, which greps the frontend sources
   for `tailgauge` argv literals and `_ctl(...)` calls and runs each with
   `--help`.
@@ -120,3 +128,4 @@ test could see it. Run at 45 and 50 after any
 - `tests/qml/run.sh`, `tests/qml/Check.qml`, `tests/qml/plasma.qml`, `tests/qml/omarchy.qml`, `tests/qml/stubs/`, `tests/qml/fixtures/panel.json`
 - `tests/gnome/register.js`, `tests/gnome/gi-loader.js`, `tests/gnome/mocks/`, `tests/gnome/panel.test.js`, `tests/gnome/provider.test.js`
 - `tests/gnome/shell/run.sh`, `tests/gnome/shell/boot.sh`, `tests/gnome/shell/Containerfile`, `tests/gnome/shell/probe@tailgauge.test/`
+- `tests/zerotier/record.sh`

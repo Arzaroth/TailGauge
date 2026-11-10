@@ -41,7 +41,7 @@ use the indexes.
 | [overview.md](architecture/overview.md) | Workspace, data flow from the CLIs to four surfaces, freshness without a daemon, layout rules. Read first. |
 | [panel-spec.md](architecture/panel-spec.md) | `panel_spec`, the JSON shape, the seven sections, row fields, the `--ui` hand-back, the parity guards. |
 | [frontends.md](architecture/frontends.md) | Plasma, GNOME, Omarchy (and the TUI): data path, clicks, settings, per-desktop quirks. |
-| [providers.md](architecture/providers.md) | The provider registry, capabilities, argv, the parsers and fixtures, gathering, `tailgauge watch`. |
+| [providers.md](architecture/providers.md) | The provider registry, each provider's backend, capabilities and how the daemon narrows them, the parsers and fixtures, gathering, `tailgauge watch`. |
 | [binary.md](architecture/binary.md) | The `tailgauge` command line, alias dispatch, `ctl`, the helper subcommands. |
 | [testing.md](architecture/testing.md) | Specification, parity, e2e, the QML and GNOME harnesses, the real GNOME Shell run. |
 | [distribution.md](architecture/distribution.md) | Binary names, the selvedge contract, `install.sh`, release assets, distribution packages, stores, `--install-frontend`, the 0.4.0 upgrade. |
@@ -55,6 +55,7 @@ use the indexes.
 | [exit-nodes.md](features/exit-nodes.md) | Tailnet exit nodes, the recent Mullvad shortlist, the picker. |
 | [machines.md](features/machines.md) | This device, peers, offline sorting, copy options, search. |
 | [netbird.md](features/netbird.md) | NetBird as a second provider, and switching providers. |
+| [zerotier.md](features/zerotier.md) | ZeroTier as a third provider, switched by its networks. |
 | [taildrop.md](features/taildrop.md) | Sending files from a machine row, the receive service. |
 | [keyboard.md](features/keyboard.md) | The letters, `panel.navigation`, per-desktop keys, the global toggle. |
 | [tui.md](features/tui.md) | `tailgauge tui`, the panel in a terminal. |
@@ -79,6 +80,8 @@ pick it up.
 | How does the panel notice a change without a daemon? | [architecture/overview.md](architecture/overview.md), [architecture/providers.md](architecture/providers.md) |
 | How do I add a provider, or a capability? | [architecture/providers.md](architecture/providers.md) |
 | What does NetBird not support? | [features/netbird.md](features/netbird.md) |
+| How does ZeroTier turn on and off, and what does it remember? | [features/zerotier.md](features/zerotier.md) |
+| Why does a Headscale tailnet show no Mullvad? | [architecture/providers.md](architecture/providers.md) |
 | Can TailGauge be on two tailnets (or two NetBird networks) at once? | Not yet: [proposals/multiple-networks.md](proposals/multiple-networks.md) |
 | Why does a click show the switch moved before the daemon agrees? | [features/connection.md](features/connection.md) |
 | Why does the bar icon not toggle the connection? | [architecture/frontends.md](architecture/frontends.md), [decisions.md](decisions.md) |

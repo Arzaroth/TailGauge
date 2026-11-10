@@ -49,10 +49,10 @@ existed). See
 ### 0003 A provider's commands live in the registry
 
 **Decision.** Every argv a provider is driven with is a method on its
-`ProviderDescriptor`. Frontends call `tailgauge ctl --provider ID ...` and never
-name a provider binary. Which provider has which command is decided in
-`providers.rs` (the optional methods check `self.id` today); capabilities
-decide which sections the panel shows.
+backend (`providers/<id>.rs`, decision 0009). Frontends call `tailgauge ctl
+--provider ID ...` and never name a provider binary. Which provider has which
+command is decided by which backend implements it; capabilities decide which
+sections the panel shows.
 
 **Why.** Each service used to spell `tailscale` into its commands, which is how
 a panel could show one provider and drive another (0.4.0).
@@ -105,6 +105,60 @@ disconnected slash goes the other way. See
 - **GNOME draws native `PopupMenu` rows** and ignores `panel.navigation`, so
   arrows, Enter and type-ahead behave as in every other extension. See
   [features/keyboard.md](features/keyboard.md).
+
+
+### 0009 Each provider is a backend behind one trait, and its capabilities narrow at runtime
+
+**Decision.** `ProviderDescriptor` says what a provider is; its `backend`
+(`Backend`, one implementation per provider) says what it does, with every
+optional command `None` by default. `provider_supports` answers from the
+row's capabilities narrowed by what the daemon reports: Taildrop needs the
+file-sharing cap, Mullvad needs a region list.
+
+**Why.** A review asked for a small backend interface in front of the model,
+so that Headscale's gaps and NetBird's go through the same code path. The
+optional commands each checked `self.id`, and a third provider (ZeroTier)
+would have made every one of them a match. Headscale runs the Tailscale CLI,
+so its gap (no Mullvad) cannot be a fixed row: it is what the daemon says.
+Recording a Headscale tailnet showed it grants file sharing, so Mullvad is its
+only gap, and the panel already hid an empty region list; the narrowing makes
+that the capability's job rather than the section's.
+
+**Rejected.**
+- *A `match` on the id in each method*: every new provider edits every method,
+  and a forgotten arm is a silent `None` only by luck.
+- *A Headscale provider row*: the same CLI probed twice, and a switcher
+  offering two faces of one daemon.
+- *Detecting Headscale from the status*: nothing in `tailscale status --json`
+  names the control server; what it allows is the only reliable signal.
+
+**Consequences.** Watch's event stream became the `live_watch` capability and
+the backend's `events()`, and the operator prompt became any backend's
+`authorization()`. See [architecture/providers.md](architecture/providers.md).
+
+### 0010 ZeroTier's switch leaves and rejoins its networks
+
+**Decision.** ZeroTier's backend has no `up` or `down`. On is joined to any
+network; turning it off leaves every joined network, and on joins back the
+ones it took. The binary remembers each network joined under
+`$XDG_STATE_HOME/tailgauge/networks-zerotier.json`, with a `wanted` flag that a
+network left from its own row clears. Machines are listed by ZeroTier address.
+
+**Why.** The ZeroTier service always runs and knows no global down. Leaving a
+private network keeps its member authorized on the controller, so a rejoin
+needs no approval and gets the same addresses (checked against a real
+controller). ZeroTier forgets a network the moment it is left, hence the
+memory, kept as state since losing it strands the user. Peer names live only
+on the controller.
+
+**Rejected.**
+- *Stop the service*: needs root or a polkit rule, and a stopped service can
+  report nothing to the panel.
+- *No switch for ZeroTier*: a header that behaves differently per provider.
+- *Ask the controller for member names*: an API token in every frontend's
+  settings and network calls from the binary, for a nicer label.
+
+See [features/zerotier.md](features/zerotier.md).
 
 ## Exit nodes
 
@@ -236,7 +290,7 @@ See [architecture/distribution.md](architecture/distribution.md#packages).
 ## Sources
 
 - `CHANGELOG.md` (0.4.0, 0.5.0, 0.5.1, 0.6.0)
-- `crates/tailgauge-core/src/panel.rs`, `crates/tailgauge-core/src/providers.rs`
+- `crates/tailgauge-core/src/panel.rs`, `crates/tailgauge-core/src/providers/mod.rs`
 - `crates/tailgauge-core/tests/parity.rs`
 - `crates/tailgauge/src/main.rs` (`splice_alias`), `crates/tailgauge/src/project.rs`
 - `crates/tailgauge/src/watch.rs`
