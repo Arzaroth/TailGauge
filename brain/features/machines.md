@@ -52,8 +52,8 @@ with the connection (`this_device_disappears_with_the_tailnet_it_belongs_to`).
   `navigation` entries repeat the scope and key, so the cursor can skip a row
   the query filtered out
   (`navigation_repeats_the_scope_and_key_of_the_row_it_points_at`).
-- With no peers at all the section's own `empty` text applies: "No machines
-  found on this tailnet."
+- With no peers at all the section's own `empty` text applies: "No other
+  machines found."
 
 ## Sources
 

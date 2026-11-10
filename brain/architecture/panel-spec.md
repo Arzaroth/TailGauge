@@ -41,16 +41,19 @@ named exactly as the JSON names it: there is nothing to generate it from.
   ([decision 0008](../decisions.md#0008-the-bar-icon-wears-the-mark-of-the-provider-that-connected-first)).
 - **`header`** (`panel_header`): `title` is the machine name when the provider
   is drivable and reported one, else the provider label. `meta` is
-  `ACTIVE_PHRASES[phraseIndex rem 10]` while active, else `<Label> is
-  disconnected`. `toggleVisible` and `toggleEnabled` are both
-  `provider_ready`, **never gated on `busy`**; `toggleChecked` is `active`;
-  `crossed` = off and not needing login, `warning` = needs login, `dimmed` = off.
+  `ACTIVE_PHRASES[phraseIndex rem 10]` while active, `<Label> needs your
+  permission` while its CLI refuses this user (`accessDenied`), else `<Label>
+  is disconnected`. `toggleVisible` and `toggleEnabled` are both
+  `provider_ready` and not `accessDenied` (a refused CLI cannot be switched),
+  **never gated on `busy`**; `toggleChecked` is `active`; `crossed` = off and
+  neither needing login nor refused, `warning` = needs login or refused,
+  `dimmed` = off.
   `toggleHint` (`toggle_hint`) is `Turn <Label> off|on` or `Authorize this
   device`, shared with Plasma's context menu. `actions` holds the `refresh`
   action when a provider is ready. `providerId`, `icon`, `glyph` come from the
   registry.
 - **`status`** (`panel_status`), precedence in one place: no CLI on PATH
-  (`No supported VPN CLI on PATH. Looked for Tailscale, NetBird.`, tone `dim`),
+  (`No supported VPN CLI on PATH. Looked for Tailscale, NetBird, ZeroTier.`, tone `dim`),
   installed but unsupported (`dim`), the frontend's `actionStatus` (`dim`), its
   `lastError` (`error`), else empty.
 - **`footer`** (`panel_footer`): `TailGauge v<widget version>`, plus
@@ -74,10 +77,10 @@ draw one. `panel.ts` `SECTION_IDS` must match the list exactly.
 | `self` | This device | provider ready, active, and the self peer has copy options | `self`, action `copy` |
 | `connections` | Connections | `accessDenied` with a backend `authorization()`, or the accounts capability and (more than one account, or `accountsAccessDenied`) | `auth` (action `authorize`, words from the backend) first when access is denied, then `account:<id>` (action `switchAccount`) |
 | `exitNodes` | Exit nodes | exit-node capability, active, rows not empty | the tailnet's own `exit:<id>` nodes, up to 5 recent or active Mullvad nodes (`recent_mullvad_nodes`), then the `mullvad:add` picker |
-| `networks` | Networks | networks capability (NetBird, ZeroTier), active, rows not empty | `network:<id>`, labelled by name (else id), action `selectNetwork`, hint `Join` / `Leave` |
+| `networks` | Networks | networks capability (NetBird, ZeroTier), rows not empty, and active or switched by its networks (ZeroTier keeps its rows while off) | `network:<id>`, labelled by name (else id), action `selectNetwork` with hint `Join` / `Leave`, or `openUrl` with hint `Log in` and `payload.url` for a network waiting on its SSO login |
 | `machines` | Machines | provider ready and active | `machines:search` above 8 peers (`MACHINE_SEARCH_MIN`), `machines:empty`, then `peer:<id>` |
 
-The machines section's `empty` is `No machines found on this tailnet.`; the
+The machines section's `empty` is `No other machines found.`; the
 others are empty strings. Capabilities come from the active provider's
 registry entry, not its name ([providers.md](providers.md)).
 

@@ -89,8 +89,10 @@ three desktops:
   `event_markers` (`"State"`, `"Prefs"`, `"LoginFinished"`, `"BackendState"`).
   Every other installed provider, and Tailscale without the stream (or once it
   hangs up), is polled every 2 s on `fingerprint_of_status` over the parsed
-  status (daemon state, running, needs-login, exit node id), so netmap churn
-  never wakes it. It exits 0 on the first change,
+  status (daemon state, running, needs-login, exit node id, and the id and
+  state of each network the status names), so netmap churn never wakes it.
+  Each status read is cut off after `gather::READ_LIMIT` (5 s), so one hung
+  daemon cannot hold the others. It exits 0 on the first change,
   2 when the deadline passes, and 1 only when no supported VPN CLI is installed.
   Frontends refresh on 0, re-arm after 250 ms on 0 or 2, and back off 30 s
   otherwise. This is why a change made by `tailgauge ctl`, a VPN CLI or another
@@ -138,8 +140,11 @@ or 2 on expiry (e2e `watch_wakes_on_a_netbird_change`,
   `every_command_the_frontends_invoke_exists` checks every subcommand a
   frontend spells exists.
 - **The binary must be on PATH.** Plasma and GNOME prefix `PATH` with
-  `$HOME/.local/bin:$HOME/bin:/usr/local/bin` (session PATHs often lack them);
-  Omarchy spawns `tailgauge` from the session PATH as it is.
+  `$HOME/.local/bin:$HOME/bin:/usr/local/bin` (session PATHs often lack them)
+  and append `/usr/sbin:/sbin`, where ZeroTier's own packages put
+  `zerotier-cli` and a Debian user session does not look; Omarchy (Arch,
+  where `/usr/sbin` is `/usr/bin`) spawns `tailgauge` from the session PATH as
+  it is.
   A store install (KDE Store kpackage, EGO zip) cannot put it there; the core
   hides Taildrop's send action unless `PanelState::helpers` is set, which the
   binary always sets since it is the one answering.

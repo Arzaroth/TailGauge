@@ -42,9 +42,11 @@ a `&'static dyn Backend` with one implementation per provider in
 - **The argv lives on the backend.** `status()` and `parse_status(raw)` exist
   for every provider; `read_status(run)` gathers what the parser reads, one
   `status()` call unless the backend overrides it (ZeroTier makes three).
-  `up()` / `down()` are `None` for a provider with no connection of its own,
-  whose switch joins and leaves its networks instead (ZeroTier). Every other
-  command is `None` by default and `Some` only where the provider has it, so
+  `switch()` says what the on/off switch drives: `Switch::Connection { up,
+  down }`, or `Switch::Networks` for a provider with no connection of its own,
+  whose switch leaves and joins back its networks (ZeroTier). `network_id`
+  normalizes a typed id to the provider's spelling (ZeroTier lowercases). Every
+  other command is `None` by default and `Some` only where the provider has it, so
   nothing can fire one CLI's command at another's daemon
   (`a_command_belongs_to_the_provider_that_has_it`,
   `every_provider_the_registry_calls_drivable_has_what_driving_needs`). The
@@ -117,9 +119,12 @@ input is a typed error the panel draws.
   empty (NetBird prints it on the `up` stream). A JSON array is an error, not a
   status (`a_list_is_not_a_status_document`).
   **`parse_netbird_networks`** reads the `- ID:` block format; "no networks" is
-  an answer, not a failure. `Network` is shared by every provider with
-  networks: `network_label` prefers its `name` (NetBird's are empty), and
-  `network_subtitle` the range, then domains, then the status.
+  an answer, not a failure.
+- **`network.rs`** is the `Network` every provider with networks shares:
+  `network_label` prefers its `name` (NetBird's are empty), `network_subtitle`
+  the range, then domains, then the status; `auth_url` is set while the
+  network waits on a login. `with_left_networks` appends the networks
+  remembered but no longer joined as "Not joined" rows.
 - **`zerotier.rs` `parse_zerotier_status`** reads the `envelope` of `info`,
   `listnetworks` and `peers` that `read_status` builds. Empty is `Unavailable`
   (the service is down), `ACCESS_DENIED` (`{"accessDenied":true}`, what a CLI
@@ -130,10 +135,11 @@ input is a typed error the panel draws.
   `Stopped`. Self is the node address with the up networks' addresses, split by
   family. Peers are the reachable `LEAF`s only (a live path or a measured
   latency), named by address; a preferred live path is "P2P", none is
-  "Relayed". **`parse_zerotier_networks`** names each network and puts its
-  addresses in the range once it is `OK`, its state in words before
-  (`Waiting for authorization`). `with_left_networks` appends the networks
-  remembered but no longer joined as "Not joined" rows. See
+  "Relayed". The joined networks ride on `StatusOk::networks` (empty for the
+  other providers). **`parse_zerotier_networks`** names each network and puts
+  its addresses in the range once it is `OK`, its state in words before
+  (`Waiting for authorization`), and an SSO network's `authenticationURL` in
+  `auth_url`. See
   [../features/zerotier.md](../features/zerotier.md).
 - **`exit_nodes.rs` `parse_exit_node_list`** slices the fixed-width table at the
   header offsets (CITY holds spaces), keeps only Mullvad hosts, and marks
@@ -167,10 +173,12 @@ them ([testing.md](testing.md)). A new CLI shape starts as a new capture here.
 1. `probe()`: one `ProviderState` per registry row (`proc::has(cli)`).
 2. `statuses()`: **every installed provider** is asked for status at once, one
    thread each, so the bar can say what all of them are doing:
-   `status_output` runs the backend's `read_status` through `proc::run`, and
+   `status_output` runs the backend's `read_status` through `run_bounded`,
+   which kills a read still running after `READ_LIMIT` (5 s) and reads it as
+   failed (`a_read_that_hangs_is_cut_off_and_reads_as_failed`), and
    `backend.parse_status` reads the answer.
 3. The active provider's status fills `running`, `needs_login`, self, peers,
-   `own_exit_nodes`, `file_sharing`; an `Unavailable` answer with
+   `own_exit_nodes`, `file_sharing`, `networks`; an `Unavailable` answer with
    `access_denied` sets `state.access_denied`, and the connections section
    offers the backend's `authorization()` row
    (`a_cli_that_refuses_this_user_asks_for_it_whether_or_not_there_are_accounts`).
@@ -180,9 +188,10 @@ them ([testing.md](testing.md)). A new CLI shape starts as a new capture here.
    accounts and networks in parallel threads, each skipped when the capability
    or argv is absent; networks go through `backend.parse_networks`.
    `fmt::is_profiles_access_denied(stderr)` on the accounts call becomes
-   `accounts_access_denied`. For a provider with no `up()`, the networks are
-   remembered (`networks::remember`) and the ones left are added back as rows
-   (`with_left_networks`).
+   `accounts_access_denied`. A provider switched by its networks skips the
+   networks call: its status named them. Whenever it answered, on or off,
+   they are remembered (`networks::observe`) and the ones left are added back
+   as rows (`with_left_networks`).
 5. `update_info()` reads the cached update check only; the panel never waits on
    GitHub (`the_panel_never_waits_on_github`).
 
@@ -206,11 +215,13 @@ exit 0 changed, 2 expired, 1 only when no supported VPN CLI is installed
 - **Everything else polled.** `poll` re-reads every other installed provider
   (and a live-watch one without its stream) every 2 s through `status_output`
   and `parse_status`, and compares `fingerprint_of_status`: daemon state,
-  running, needs-login and `exit_node_id` (`ExitNodeStatus.ID`, so a Mullvad
-  node counts though it is not a peer). A NetBird- or ZeroTier-only machine
-  waits and wakes like a Tailscale one
+  running, needs-login, `exit_node_id` (`ExitNodeStatus.ID`, so a Mullvad
+  node counts though it is not a peer) and each network's id and state, so a
+  ZeroTier network joined or left while another stays up counts. A NetBird- or
+  ZeroTier-only machine waits and wakes like a Tailscale one
   (`a_netbird_that_connects_moves_its_fingerprint`, e2e
   `watch_wakes_on_a_netbird_change`,
+  `watch_wakes_when_a_zerotier_network_is_left_while_another_stays_up`,
   `watch_on_a_quiet_netbird_expires_rather_than_giving_up`).
 
 Frontends refresh on 0, re-arm after 250 ms on 0 or 2, and back off 30 s on
@@ -242,11 +253,11 @@ slicer beside core's).
 
 ## Sources
 
-- `crates/tailgauge-core/src/providers/mod.rs` (`PROVIDERS`, `ProviderDescriptor`, `Backend`, `Authorization`, `Capabilities`, `Capability`, `installed_providers`, `active_provider`, `drivable_providers`, `next_provider`, `provider_ready`, `provider_supports`, `reported`, `parse_provider_probe`, `provider_label_list`, `login_plan`), `providers/tailscale.rs`, `providers/netbird.rs`, `providers/zerotier.rs`
+- `crates/tailgauge-core/src/providers/mod.rs` (`PROVIDERS`, `ProviderDescriptor`, `Backend`, `Switch`, `Authorization`, `Capabilities`, `Capability`, `installed_providers`, `active_provider`, `drivable_providers`, `next_provider`, `provider_ready`, `provider_supports`, `reported`, `parse_provider_probe`, `provider_label_list`, `login_plan`), `providers/tailscale.rs`, `providers/netbird.rs`, `providers/zerotier.rs`
 - `crates/tailgauge-core/src/status.rs` (`parse_status`, `peer_from_status`, `FILE_SHARING_CAP`, `StatusUnavailable::access_denied`), `peer.rs` (`Peer`, `collate`, `non_zero_time`, `is_mullvad_host`)
-- `crates/tailgauge-core/src/netbird.rs` (`parse_netbird_status`, `parse_netbird_networks`, `Network`, `network_label`, `network_subtitle`), `zerotier.rs` (`envelope`, `is_access_denied`, `parse_zerotier_status`, `parse_zerotier_networks`, `with_left_networks`), `exit_nodes.rs` (`parse_exit_node_list`), `accounts.rs` (`parse_accounts`, `first_of`), `bar.rs` (`summarize_provider`), `panel_state.rs` (`PanelState`, `ProviderState`)
+- `crates/tailgauge-core/src/netbird.rs` (`parse_netbird_status`, `parse_netbird_networks`), `network.rs` (`Network`, `network_label`, `network_subtitle`, `with_left_networks`), `zerotier.rs` (`envelope`, `is_access_denied`, `parse_zerotier_status`, `parse_zerotier_networks`), `exit_nodes.rs` (`parse_exit_node_list`), `accounts.rs` (`parse_accounts`, `first_of`), `bar.rs` (`summarize_provider`), `panel_state.rs` (`PanelState`, `ProviderState`)
 - `crates/tailgauge-core/tests/fixtures/`, `crates/tailgauge-core/tests/specification.rs`, `crates/tailgauge/tests/e2e.rs`, `tests/zerotier/record.sh`
-- `crates/tailgauge/src/gather.rs` (`Ui`, `probe`, `status_output`, `statuses`, `extras`, `connect`, `panel_state`), `crates/tailgauge/src/networks.rs`
+- `crates/tailgauge/src/gather.rs` (`Ui`, `READ_LIMIT`, `run_bounded`, `probe`, `status_output`, `statuses`, `extras`, `connect`, `panel_state`), `crates/tailgauge/src/networks.rs`
 - `crates/tailgauge-core/src/panel.rs` (`panel_status`, `connections_section`), `bar.rs` (`bar_tooltip`)
 - `crates/tailgauge/src/ctl.rs` (`read`, `authorize`), `crates/tailgauge/src/watch.rs` (`Outcome`, `run`, `has_events`, `watch_events`, `poll`, `fingerprint`, `fingerprint_of_status`, `a_netbird_that_connects_moves_its_fingerprint`), `crates/tailgauge/src/tailscale.rs` (`current_exit_node`, `first_active_host`)
 - `gnome/tailgauge@arzaroth.github.io/provider.ts` (`_watch`, `WATCH_TIMEOUT_SEC`)

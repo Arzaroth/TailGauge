@@ -36,10 +36,10 @@ that blur it. Back to the root map: [BRAIN.md](BRAIN.md).
   command that lets the user in, and the `auth` row that runs it. Avoid:
   permission error, unauthorized.
 - **Switched by its networks** - a provider with no `up` / `down` of its own
-  (ZeroTier): on is joined to any network, the switch leaves them all and
-  joins back the ones it took. Its **remembered networks** are kept in
-  `$XDG_STATE_HOME/tailgauge/networks-<id>.json`, each `wanted` until left by
-  hand. See [features/zerotier.md](features/zerotier.md). Avoid: saved
+  (ZeroTier, `Switch::Networks`): on is joined to any network, the switch
+  leaves them all and joins back the ones it took. Its **remembered
+  networks** are kept in `$XDG_STATE_HOME/tailgauge/networks-<id>.json`, each
+  `wanted` until left by hand. See [features/zerotier.md](features/zerotier.md). Avoid: saved
   networks, favourites.
 - **Daemon state** - the provider daemon's own state (`daemonState`, from
   Tailscale's `BackendState`): `Running`, `Stopped`, `NeedsLogin`... Avoid:

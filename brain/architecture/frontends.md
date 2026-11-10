@@ -67,9 +67,16 @@ It draws `panel.bar` (connected, crossed, warning badge) and its tooltip is
 `bar.providerId`'s: Tailscale's dot grid, NetBird's (`NetBirdIcon.qml` on
 Plasma and Omarchy, `NETBIRD_PATHS` drawn with cairo on GNOME) or ZeroTier's
 (`ZeroTierIcon.qml`, a `PathSvg` filled by winding; `drawZeroTier` from its
-shapes on GNOME), and NetBird's disconnected slash runs the other way so the
-mark does not swallow it. A provider with no mark of its own would fall back
-to the dots, so parity requires every provider's on every desktop.
+shapes on GNOME). NetBird's disconnected slash runs the other way so the mark
+does not swallow it; ZeroTier's filled square would swallow any slash, so it
+sits in a band cleared out of the mark on GNOME and drawn in the background
+colour on Plasma and Omarchy. The QML marks set `strokeWidth: -1`: Qt 6.6's
+software renderer strokes a zero width in white. A provider with no mark of
+its own would fall back to the dots, so parity requires every provider's on
+every desktop. Omarchy's hero is the same `TailGaugeIcon`, as Plasma's is.
+Plasma draws every panel label as `Text.PlainText`: a network's name is its
+owner's to choose, and rich text fetched an `<img>` in it
+(`every_plasma_label_draws_panel_text_as_plain_text`).
 `bar.badge` is drawn raised to the right of the mark, never over it: inside
 `TailGaugeIcon.qml`'s width on Plasma and Omarchy (Omarchy keeps the mark
 centred in its slot and lets the count hang out), as the `tailgauge-panel-count`
@@ -130,7 +137,10 @@ that test existed.
   children, copy options or actions become submenus; machines and the Mullvad
   picker are submenus. The menu rebuilds only when `_signatureOf(panel)`
   changes; typing filters by hiding rows (`_applySearch`), never by
-  rebuilding. `_syncHeader` mirrors `toggleChecked` onto the switch with its
+  rebuilding. A redraw (`_applyRow`) refreshes each item's `_row`, and every
+  click, copy and send reads it: a network joined or left keeps its id, so a
+  click bound to the row it was built from left it again
+  (`a_gnome_click_acts_on_the_row_as_it_is_now`). `_syncHeader` mirrors `toggleChecked` onto the switch with its
   `'toggled'` handler (`_headerToggledId`) blocked: GNOME 47+ emits `toggled`
   from `setToggleState` too. Opening the menu sets `attentive`, scrolls to the
   top, refreshes and starts the phrase tick (`PHRASE_INTERVAL_MS` 2800).

@@ -138,11 +138,12 @@ the backend's `events()`, and the operator prompt became any backend's
 
 ### 0010 ZeroTier's switch leaves and rejoins its networks
 
-**Decision.** ZeroTier's backend has no `up` or `down`. On is joined to any
-network; turning it off leaves every joined network, and on joins back the
-ones it took. The binary remembers each network joined under
-`$XDG_STATE_HOME/tailgauge/networks-zerotier.json`, with a `wanted` flag that a
-network left from its own row clears. Machines are listed by ZeroTier address.
+**Decision.** ZeroTier's backend is `Switch::Networks`: no `up` or `down`. On
+is joined to any network; turning it off leaves every joined network, and on
+joins back the ones it took. The binary remembers each network joined under
+`$XDG_STATE_HOME/tailgauge/networks-zerotier.json`, with a `wanted` flag that
+only the user's own join or leave and the switch set, never a poll. Machines
+are listed by ZeroTier address.
 
 **Why.** The ZeroTier service always runs and knows no global down. Leaving a
 private network keeps its member authorized on the controller, so a rejoin
