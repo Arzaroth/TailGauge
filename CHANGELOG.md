@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.11.0]
+
 ### Added
 
 - **ZeroTier.** TailGauge drives `zerotier-cli` on every desktop and in the

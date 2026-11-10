@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "arzaroth.tailgauge",
   "name": "TailGauge",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "author": "Arzaroth",
   "license": "MIT",
   "description": "Tailscale, NetBird and ZeroTier in an Omarchy bar panel: connection state, account switching, exit nodes including Mullvad regions, networks, machine browsing with copy actions, and Taildrop sending.",
