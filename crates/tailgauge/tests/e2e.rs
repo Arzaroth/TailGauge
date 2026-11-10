@@ -970,3 +970,30 @@ fn the_last_zerotier_network_left_by_hand_keeps_its_row_to_join_it_back() {
         [("homelab", "Join"), ("office", "Join")]
     );
 }
+
+#[test]
+fn a_zerotier_that_refuses_this_user_says_so_rather_than_reading_as_off() {
+    let machine = Machine::with(&["zerotier-denied"]);
+    let panel = machine.panel(ZEROTIER);
+    assert_eq!(panel["header"]["toggleVisible"], false, "nothing to switch");
+    assert_eq!(panel["header"]["meta"], "ZeroTier needs your permission");
+    assert_eq!(panel["header"]["crossed"], false);
+    assert_eq!(panel["bar"]["warning"], true);
+    assert!(
+        panel["bar"]["tooltip"][0]
+            .as_str()
+            .is_some_and(|line| line.ends_with("needs access")),
+        "{}",
+        panel["bar"]["tooltip"]
+    );
+
+    let (code, stdout, _) = machine.run(&["ctl", "--provider", "zerotier", "status"]);
+    assert_eq!(code, 3);
+    assert_eq!(
+        stdout.trim(),
+        "ZeroTier refuses this user: run tailgauge ctl --provider zerotier authorize"
+    );
+    let (code, _, stderr) = machine.run(&["ctl", "--provider", "zerotier", "toggle"]);
+    assert_eq!(code, 1);
+    assert!(stderr.contains("refuses this user"), "{stderr}");
+}
