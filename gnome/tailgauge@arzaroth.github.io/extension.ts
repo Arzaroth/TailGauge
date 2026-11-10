@@ -118,7 +118,7 @@ const NETBIRD_PATHS: PathStep[][] = [
 // drawn from its shapes: the square, the cut-outs erased, the halves of the
 // disc inside the ring filled back.
 const ZEROTIER_VIEW = 24;
-function drawZeroTier(cr: Loose, left: number, top: number, size: number): void {
+function drawZeroTier(cr: Loose, left: number, top: number, size: number, crossed: boolean): void {
     const k = size / ZEROTIER_VIEW;
     const disc = (x: number, y: number, radius: number) => {
         cr.newSubPath();
@@ -156,6 +156,17 @@ function drawZeroTier(cr: Loose, left: number, top: number, size: number): void 
         disc(12, 12, 4.889);
         cr.fill();
         cr.restore();
+    }
+    // The mark is a filled square, so a slash in its own colour would vanish
+    // into it: a wider band is cleared first, for the slash to sit in.
+    if (crossed) {
+        const inset = size * 0.06;
+        cr.setOperator(0);
+        cr.setLineWidth(Math.max(2, size * 0.14) * 2.4);
+        cr.setLineCap(1);
+        cr.moveTo(left + inset, top + size - inset);
+        cr.lineTo(left + size - inset, top + inset);
+        cr.stroke();
     }
     cr.popGroupToSource();
     cr.paint();
@@ -223,7 +234,7 @@ class TailGaugeIcon extends St.DrawingArea {
             }
         } else if (this._providerId === 'zerotier') {
             cr.setSourceRGBA(r, g, b, a);
-            drawZeroTier(cr, offsetX, offsetY, size);
+            drawZeroTier(cr, offsetX, offsetY, size, this._crossed);
         } else {
             const dot = Math.max(2, size * 0.24);
             const radius = dot / 2;

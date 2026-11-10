@@ -75,6 +75,18 @@ Item {
             }
         }
 
+        // ZeroTier's mark is a filled square that would swallow a slash in
+        // its own colour, so the slash sits in a band of the background.
+        Rectangle {
+            visible: root.crossed && root.providerId === "zerotier"
+            anchors.centerIn: parent
+            width: parent.width * 1.22
+            height: Math.max(2, parent.height * 0.14) * 2.4
+            radius: height / 2
+            color: Kirigami.Theme.backgroundColor
+            rotation: -45
+        }
+
         Rectangle {
             visible: root.crossed
             anchors.centerIn: parent
