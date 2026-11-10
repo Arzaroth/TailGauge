@@ -5,14 +5,14 @@
   "version": "0.10.0",
   "author": "Arzaroth",
   "license": "MIT",
-  "description": "Tailscale and NetBird in an Omarchy bar panel: connection state, account switching, exit nodes including Mullvad regions, networks, machine browsing with copy actions, and Taildrop sending.",
+  "description": "Tailscale, NetBird and ZeroTier in an Omarchy bar panel: connection state, account switching, exit nodes including Mullvad regions, networks, machine browsing with copy actions, and Taildrop sending.",
   "kinds": ["bar-widget"],
   "entryPoints": {
     "barWidget": "Panel.qml"
   },
   "barWidget": {
     "displayName": "TailGauge",
-    "description": "Toggle your VPN, switch between Tailscale and NetBird, pick an exit node or network, browse machines, and send files with Taildrop.",
+    "description": "Toggle your VPN, switch between Tailscale, NetBird and ZeroTier, pick an exit node or network, browse machines, and send files with Taildrop.",
     "category": "Network",
     "defaultSection": "right",
     "aliases": ["tailgauge", "tail-gauge"],

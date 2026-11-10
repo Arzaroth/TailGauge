@@ -2,7 +2,7 @@
     "KPlugin": {
         "Id": "org.tailgauge.plasmoid",
         "Name": "TailGauge",
-        "Description": "Tailscale and NetBird status, exit nodes, networks, machines and Taildrop in the panel",
+        "Description": "Tailscale, NetBird and ZeroTier status, exit nodes, networks, machines and Taildrop in the panel",
         "Icon": "network-vpn",
         "Category": "Network",
         "License": "MIT",
