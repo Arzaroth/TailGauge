@@ -571,6 +571,10 @@ class TailGaugeIndicator extends PanelMenu.Button {
     _applyRow(item: RowItem, byId: Map<string, Panel.PanelRow>): void {
         const row = item._rowId ? byId.get(item._rowId) : null;
         if (row) {
+            // The click acts on this, not on the row the item was built from:
+            // a network left keeps its id, so the menu is not rebuilt, and a
+            // click must join it rather than leave it again.
+            item._row = row;
             item.setOrnament(row.current ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
             if (item.label)
                 item.label.text = row.label;
@@ -673,10 +677,10 @@ class TailGaugeIndicator extends PanelMenu.Button {
         if (row.children.length > 0 || row.copyOptions.length > 0 || row.actions.length > 0)
             return this._renderSubmenuRow(row);
 
-        const item = new PopupMenu.PopupMenuItem(row.label);
+        const item: RowItem & PopupMenu.PopupMenuItem = new PopupMenu.PopupMenuItem(row.label);
         this._decorate(item, row);
         item.setOrnament(row.current ? PopupMenu.Ornament.CHECK : PopupMenu.Ornament.NONE);
-        item.connect('activate', () => this._dispatch(row));
+        item.connect('activate', () => this._dispatch(item._row ?? row));
         return item;
     }
 
@@ -701,7 +705,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
     }
 
     _renderSubmenuRow(row: Panel.PanelRow): RowItem {
-        const item = new PopupMenu.PopupSubMenuMenuItem(row.label, true);
+        const item: RowItem & PopupMenu.PopupSubMenuMenuItem = new PopupMenu.PopupSubMenuMenuItem(row.label, true);
         item.icon!.icon_name = row.icon;
         this._decorate(item, row);
 
@@ -742,7 +746,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
                 x_align: Clutter.ActorAlign.END,
             }));
             copyItem.connect('activate', () => {
-                this._copyOption(row, option.kind);
+                this._copyOption(item._row ?? row, option.kind);
                 this._menu.close();
             });
             item.menu.addMenuItem(copyItem);
@@ -753,7 +757,7 @@ class TailGaugeIndicator extends PanelMenu.Button {
                 continue;
             item.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
             const sendItem = new PopupMenu.PopupMenuItem(action.label);
-            sendItem.connect('activate', () => this._sendFile(row));
+            sendItem.connect('activate', () => this._sendFile(item._row ?? row));
             item.menu.addMenuItem(sendItem);
         }
 
