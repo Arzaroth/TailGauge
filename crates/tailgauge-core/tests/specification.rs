@@ -2241,6 +2241,7 @@ fn the_tooltip_says_what_each_installed_provider_is_doing_active_first() {
                 self_ip: "100.64.0.1".into(),
                 state: "Running".into(),
                 needs_login: false,
+                access_denied: false,
             },
             core::panel_state::ProviderSummary {
                 id: "netbird".into(),

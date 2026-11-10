@@ -33,6 +33,9 @@ pub struct ProviderSummary {
     pub self_ip: String,
     #[serde(default)]
     pub state: String,
+    /// Its CLI refuses this user, so nothing else here is known.
+    #[serde(default, rename = "accessDenied")]
+    pub access_denied: bool,
 }
 
 /// What `tailgauge --check-update` last reported, as the panel reads it.

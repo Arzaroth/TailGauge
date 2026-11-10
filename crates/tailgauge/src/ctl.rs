@@ -65,9 +65,21 @@ fn read(provider: &ProviderDescriptor) -> core::StatusResult {
     provider.backend.parse_status(&raw)
 }
 
+/// Why a provider gave no answer, in words a person can act on: a CLI that
+/// refuses this user is not the same as one that is down.
+fn unanswered(provider: &ProviderDescriptor) -> String {
+    match read(provider) {
+        core::StatusResult::Unavailable(u) if u.access_denied => format!(
+            "{} refuses this user: run tailgauge ctl --provider {} authorize",
+            provider.label, provider.id
+        ),
+        _ => format!("{} is not answering", provider.label),
+    }
+}
+
 pub fn status(provider: &ProviderDescriptor) -> Outcome {
     let core::StatusResult::Ok(status) = read(provider) else {
-        println!("{} is not answering", provider.label);
+        println!("{}", unanswered(provider));
         return Outcome::Disconnected;
     };
 
@@ -217,7 +229,7 @@ pub fn down(provider: &ProviderDescriptor) -> Outcome {
 /// network it was taken off, and every one it has joined is remembered first.
 fn rejoin(provider: &ProviderDescriptor) -> Outcome {
     let Some(joined) = crate::networks::joined(provider) else {
-        return Outcome::Failed(format!("{} is not answering", provider.label));
+        return Outcome::Failed(unanswered(provider));
     };
     let known = crate::networks::observe(provider, &joined);
     let missing = crate::networks::to_rejoin(&known, &joined);
@@ -258,7 +270,7 @@ fn rejoin(provider: &ProviderDescriptor) -> Outcome {
 /// back.
 fn leave_all(provider: &ProviderDescriptor) -> Outcome {
     let Some(joined) = crate::networks::joined(provider) else {
-        return Outcome::Failed(format!("{} is not answering", provider.label));
+        return Outcome::Failed(unanswered(provider));
     };
     if let Err(e) = crate::networks::take(provider, &joined) {
         announce(
@@ -296,7 +308,7 @@ fn switch_network(provider: &ProviderDescriptor, network_id: &str, join: bool) -
 
 pub fn toggle(provider: &ProviderDescriptor) -> Outcome {
     let core::StatusResult::Ok(status) = read(provider) else {
-        return Outcome::Failed(format!("{} is not answering", provider.label));
+        return Outcome::Failed(unanswered(provider));
     };
     // Not `on && down || up`: a failed `down` would fall through and turn it
     // back on again.

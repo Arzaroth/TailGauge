@@ -34,6 +34,9 @@ pub fn summarize_provider(provider_id: &str, status: &StatusResult) -> ProviderS
             .unwrap_or_else(|| provider_id.to_string()),
         ..ProviderSummary::default()
     };
+    if let StatusResult::Unavailable(unavailable) = status {
+        summary.access_denied = unavailable.access_denied;
+    }
     let StatusResult::Ok(status) = status else {
         return summary;
     };
@@ -61,6 +64,9 @@ pub fn provider_state_word(summary: Option<&ProviderSummary>) -> String {
     let Some(summary) = summary else {
         return "checking\u{2026}".to_string();
     };
+    if summary.access_denied {
+        return "needs access".to_string();
+    }
     if summary.needs_login {
         return "needs login".to_string();
     }
@@ -161,6 +167,11 @@ pub fn connection_order(previous: &[String], summaries: &[ProviderSummary]) -> V
     order
 }
 
+/// A provider that waits on the user: a login, or the access its CLI refuses.
+fn wants_the_user(summary: &ProviderSummary) -> bool {
+    summary.needs_login || summary.access_denied
+}
+
 pub fn bar_state(state: &PanelState) -> BarState {
     let (connected, warning, provider_id, up) = match state.summaries.as_ref() {
         Some(summaries) if !summaries.is_empty() => {
@@ -172,14 +183,14 @@ pub fn bar_state(state: &PanelState) -> BarState {
                 .or_else(|| {
                     installed
                         .iter()
-                        .find(|p| summary_for(state, p.id).is_some_and(|s| s.needs_login))
+                        .find(|p| summary_for(state, p.id).is_some_and(wants_the_user))
                         .or(installed.first())
                         .map(|p| p.id.to_string())
                 })
                 .unwrap_or_default();
             (
                 !order.is_empty(),
-                summaries.iter().any(|s| s.needs_login),
+                summaries.iter().any(wants_the_user),
                 lead,
                 order.len(),
             )

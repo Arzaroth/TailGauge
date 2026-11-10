@@ -410,7 +410,12 @@ pub fn panel_header(state: &PanelState, phrase_index: i64) -> PanelHeader {
     // A provider we cannot drive yet is named, but its switch would do nothing.
     let present = providers::provider_ready(state);
     let phrases = ACTIVE_PHRASES.len() as i64;
-    let meta = if state.active {
+    // A CLI that refuses this user cannot be switched either; the panel
+    // offers the authorization instead.
+    let present = present && !state.access_denied;
+    let meta = if state.access_denied {
+        format!("{label} needs your permission")
+    } else if state.active {
         ACTIVE_PHRASES[(phrase_index.rem_euclid(phrases)) as usize].to_string()
     } else {
         format!("{label} is disconnected")
@@ -440,8 +445,8 @@ pub fn panel_header(state: &PanelState, phrase_index: i64) -> PanelHeader {
         toggle_checked: state.active,
         busy: state.busy,
         toggle_hint: toggle_hint(state),
-        crossed: !state.active && !state.needs_login,
-        warning: state.needs_login,
+        crossed: !state.active && !state.needs_login && !state.access_denied,
+        warning: state.needs_login || state.access_denied,
         dimmed: !state.active,
         actions: if present {
             vec![RowAction::new(
