@@ -611,3 +611,26 @@ fn every_plasma_label_draws_panel_text_as_plain_text() {
         }
     }
 }
+
+/// GNOME rebuilds its menu only when the set of row ids changes, and joining
+/// or leaving a network keeps its id. A click bound to the row the item was
+/// built from left a network it had already left, instead of joining it back.
+#[test]
+fn a_gnome_click_acts_on_the_row_as_it_is_now() {
+    let source = repo_file("gnome/tailgauge@arzaroth.github.io/extension.ts");
+    let apply = between(&source, "_applyRow(item: RowItem", "\n    }\n");
+    assert!(
+        apply.contains("item._row = row;"),
+        "a redraw leaves the item holding the row it was built from"
+    );
+    for stale in [
+        "() => this._dispatch(row)",
+        "this._copyOption(row, option.kind)",
+        "() => this._sendFile(row)",
+    ] {
+        assert!(
+            !source.contains(stale),
+            "a click acts on the row the item was built from: {stale}"
+        );
+    }
+}
