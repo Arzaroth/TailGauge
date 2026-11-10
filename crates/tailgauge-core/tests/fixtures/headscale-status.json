@@ -1,0 +1,136 @@
+{
+  "Version": "1.104.4-t27047635f",
+  "TUN": false,
+  "BackendState": "Running",
+  "HaveNodeKey": true,
+  "AuthURL": "",
+  "TailscaleIPs": [
+    "100.64.0.2",
+    "fd7a:115c:a1e0::2"
+  ],
+  "Self": {
+    "ID": "2",
+    "NodeID": 2,
+    "PublicKey": "nodekey:3757615429f3915ceced0e37cfc90b8dc5d4db19f31e49402c3231f36fd8c72a",
+    "HostName": "hsb",
+    "DNSName": "hsb.hs.example.com.",
+    "OS": "linux",
+    "UserID": 1,
+    "TailscaleIPs": [
+      "100.64.0.2",
+      "fd7a:115c:a1e0::2"
+    ],
+    "AllowedIPs": [
+      "100.64.0.2/32",
+      "fd7a:115c:a1e0::2/128"
+    ],
+    "Addrs": [
+      "203.0.113.10:41432",
+      "172.23.0.6:41192"
+    ],
+    "CurAddr": "",
+    "Relay": "par",
+    "PeerRelay": "",
+    "RxBytes": 0,
+    "TxBytes": 0,
+    "Created": "2026-11-10T07:28:04.120293663Z",
+    "LastWrite": "0001-01-01T00:00:00Z",
+    "LastSeen": "0001-01-01T00:00:00Z",
+    "LastHandshake": "0001-01-01T00:00:00Z",
+    "Online": true,
+    "ExitNode": false,
+    "ExitNodeOption": false,
+    "Active": false,
+    "PeerAPIURL": [
+      "http://100.64.0.2:46590",
+      "http://[fd7a:115c:a1e0::2]:46590"
+    ],
+    "TaildropTarget": 0,
+    "NoFileSharingReason": "",
+    "Capabilities": [
+      "HTTPS://TAILSCALE.COM/s/DEPRECATED-NODE-CAPS#see-https://github.com/tailscale/tailscale/issues/11508",
+      "default-auto-update",
+      "https://tailscale.com/cap/file-sharing",
+      "https://tailscale.com/cap/is-admin",
+      "https://tailscale.com/cap/ssh",
+      "ssh-env-vars"
+    ],
+    "CapMap": {
+      "default-auto-update": [
+        false
+      ],
+      "https://tailscale.com/cap/file-sharing": [],
+      "https://tailscale.com/cap/is-admin": [],
+      "https://tailscale.com/cap/ssh": [],
+      "ssh-env-vars": []
+    },
+    "InNetworkMap": true,
+    "InMagicSock": false,
+    "InEngine": false
+  },
+  "Health": [],
+  "MagicDNSSuffix": "hs.example.com",
+  "CurrentTailnet": {
+    "Name": "headscale",
+    "StableID": "",
+    "MagicDNSSuffix": "hs.example.com",
+    "MagicDNSEnabled": true
+  },
+  "CertDomains": null,
+  "ExtraRecords": null,
+  "Peer": {
+    "nodekey:84608af3c2f8204579966ec9dc43c6e6b7533995f7636df741ebd70763471075": {
+      "ID": "1",
+      "NodeID": 1,
+      "PublicKey": "nodekey:84608af3c2f8204579966ec9dc43c6e6b7533995f7636df741ebd70763471075",
+      "HostName": "hsa",
+      "DNSName": "hsa.hs.example.com.",
+      "OS": "linux",
+      "UserID": 1,
+      "TailscaleIPs": [
+        "100.64.0.1",
+        "fd7a:115c:a1e0::1"
+      ],
+      "AllowedIPs": [
+        "0.0.0.0/0",
+        "100.64.0.1/32",
+        "::/0",
+        "fd7a:115c:a1e0::1/128"
+      ],
+      "Addrs": null,
+      "CurAddr": "",
+      "Relay": "par",
+      "PeerRelay": "",
+      "RxBytes": 0,
+      "TxBytes": 0,
+      "Created": "2026-11-10T07:28:03.956943483Z",
+      "LastWrite": "0001-01-01T00:00:00Z",
+      "LastSeen": "0001-01-01T00:00:00Z",
+      "LastHandshake": "0001-01-01T00:00:00Z",
+      "Online": true,
+      "ExitNode": false,
+      "ExitNodeOption": true,
+      "Active": false,
+      "PeerAPIURL": [
+        "http://100.64.0.1:58436",
+        "http://[fd7a:115c:a1e0::1]:58436"
+      ],
+      "TaildropTarget": 1,
+      "NoFileSharingReason": "",
+      "CapMap": {
+        "suggest-exit-node": null
+      },
+      "InNetworkMap": true,
+      "InMagicSock": true,
+      "InEngine": false
+    }
+  },
+  "User": {
+    "1": {
+      "ID": 1,
+      "LoginName": "alice",
+      "DisplayName": "alice"
+    }
+  },
+  "ClientVersion": null
+}

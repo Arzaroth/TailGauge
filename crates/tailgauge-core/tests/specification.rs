@@ -2773,3 +2773,76 @@ fn the_version_substitutes_into_its_template() {
         );
     }
 }
+
+/// A Tailscale client on a self-hosted Headscale server: the same CLI, with
+/// tailnet exit nodes and Taildrop but no Mullvad behind it.
+fn headscale_state() -> PanelState {
+    let core::StatusResult::Ok(status) = core::parse_status(&fixture("headscale-status.json"))
+    else {
+        panic!("the Headscale capture should parse as a running tailnet");
+    };
+    PanelState {
+        providers: Some(detected(&["tailscale"])),
+        installed: true,
+        running: status.running,
+        active: status.running,
+        helpers: true,
+        self_name: status.self_name.clone(),
+        self_ip: status.self_ip.clone(),
+        self_user_id: status.self_user_id.clone(),
+        self_peer: Some(status.self_peer.clone()),
+        file_sharing: status.file_sharing,
+        peers: status.peers.clone(),
+        own_exit_nodes: status.exit_nodes.clone(),
+        mullvad_regions: core::mullvad_region_options(&core::parse_exit_node_list(&fixture(
+            "headscale-exit-nodes.txt",
+        ))),
+        ..PanelState::default()
+    }
+}
+
+#[test]
+fn a_headscale_tailnet_offers_its_exit_nodes_and_taildrop_but_no_mullvad() {
+    let state = headscale_state();
+    assert!(
+        state.mullvad_regions.is_empty(),
+        "Headscale lists its own exit nodes and no Mullvad region"
+    );
+    assert!(!core::providers::provider_supports(
+        &state,
+        core::providers::Capability::Mullvad
+    ));
+
+    let panel = resolve(&state);
+    let exits = rows_of(&panel, "exitNodes");
+    assert!(section(&panel, "exitNodes").visible);
+    assert_eq!(
+        exits.iter().map(|r| r.label.as_str()).collect::<Vec<_>>(),
+        ["hsa"]
+    );
+    assert!(exits.iter().all(|r| r.kind != "mullvadPicker"));
+
+    let hsa = peer_rows(&panel)
+        .into_iter()
+        .find(|r| r.label == "hsa")
+        .expect("the exit node is a machine too");
+    assert!(
+        hsa.actions.iter().any(|a| a.id == "send"),
+        "Headscale grants the file-sharing capability"
+    );
+}
+
+#[test]
+fn a_tailnet_with_taildrop_switched_off_offers_no_send() {
+    let state = PanelState {
+        file_sharing: false,
+        ..headscale_state()
+    };
+    assert!(!core::providers::provider_supports(
+        &state,
+        core::providers::Capability::FileSend
+    ));
+    for row in peer_rows(&resolve(&state)) {
+        assert!(row.actions.iter().all(|a| a.id != "send"), "{}", row.label);
+    }
+}

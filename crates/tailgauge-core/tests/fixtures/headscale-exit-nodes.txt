@@ -1,0 +1,7 @@
+
+ IP             HOSTNAME               COUNTRY     CITY      STATUS     
+ 100.64.0.1     hsa.hs.example.com     -           -         -          
+
+# To view the complete list of exit nodes for a country, use `tailscale exit-node list --filter=` followed by the country name.
+# To use an exit node, use `tailscale set --exit-node=` followed by the IP or hostname.
+# To have Tailscale suggest an exit node, use `tailscale exit-node suggest`.
