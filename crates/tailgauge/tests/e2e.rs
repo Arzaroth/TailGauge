@@ -857,3 +857,61 @@ fn a_zerotier_that_refuses_this_user_offers_to_let_them_in() {
     assert_eq!(connections["rows"][0]["action"], "authorize");
     assert_eq!(connections["rows"][0]["label"], "Allow access to ZeroTier");
 }
+
+#[test]
+fn a_zerotier_network_left_by_id_before_any_panel_is_still_remembered() {
+    let machine = Machine::with(&["zerotier"]);
+    let (code, _, stderr) = machine.run(&[
+        "ctl",
+        "--provider",
+        "zerotier",
+        "select-network",
+        "E0EDD2BEBDFCE22E",
+        "--leave",
+    ]);
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(
+        rows(&machine.panel(ZEROTIER), "networks"),
+        [("homelab", "Leave"), ("e0edd2bebdfce22e", "Join")],
+        "one row, under the id as ZeroTier lists it, whatever case was typed"
+    );
+
+    let state = machine.home.join("state/tailgauge/networks-zerotier.json");
+    use std::os::unix::fs::PermissionsExt;
+    let mode = |p: &Path| std::fs::metadata(p).expect("exists").permissions().mode() & 0o777;
+    assert_eq!(mode(&state), 0o600, "it names every network joined");
+    assert_eq!(mode(state.parent().expect("a dir")), 0o700);
+}
+
+#[test]
+fn the_zerotier_switch_says_why_it_has_nothing_to_join() {
+    let machine = Machine::with(&["zerotier"]);
+    for id in ["e0edd2bebde885d3", "e0edd2bebdfce22e"] {
+        let (code, _, stderr) = machine.run(&[
+            "ctl",
+            "--provider",
+            "zerotier",
+            "select-network",
+            id,
+            "--leave",
+        ]);
+        assert_eq!(code, 0, "{stderr}");
+    }
+    let (code, _, stderr) = machine.run(&["ctl", "--provider", "zerotier", "up"]);
+    assert_eq!(code, 1);
+    assert!(
+        stderr.contains("every network was left by hand"),
+        "{stderr}"
+    );
+
+    let fresh = Machine::with(&["zerotier"]);
+    for id in ["e0edd2bebde885d3", "e0edd2bebdfce22e"] {
+        std::fs::remove_file(fresh.home.join(format!("zt-joined-{id}"))).expect("left");
+    }
+    let (code, _, stderr) = fresh.run(&["ctl", "--provider", "zerotier", "up"]);
+    assert_eq!(code, 1);
+    assert!(
+        stderr.contains("there is no network to join yet"),
+        "{stderr}"
+    );
+}
