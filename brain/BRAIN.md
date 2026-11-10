@@ -60,6 +60,15 @@ use the indexes.
 | [tui.md](features/tui.md) | `tailgauge tui`, the panel in a terminal. |
 | [updates.md](features/updates.md) | `--check-update`, `--update`, the banner, version skew, `--install-frontend`. |
 
+## Proposals (parked, not built)
+
+Specs written ahead of the code. Nothing in them exists yet; each says where to
+pick it up.
+
+| Doc | What's here |
+|---|---|
+| [multiple-networks.md](proposals/multiple-networks.md) | Several tailnets and several NetBird networks connected at once: userspace daemons per user, `tailgauge net`, the `tailgauge mux`, naming, spikes, delivery plan. |
+
 ## Find by question
 
 | If you're asking... | Go to |
@@ -70,6 +79,7 @@ use the indexes.
 | How does the panel notice a change without a daemon? | [architecture/overview.md](architecture/overview.md), [architecture/providers.md](architecture/providers.md) |
 | How do I add a provider, or a capability? | [architecture/providers.md](architecture/providers.md) |
 | What does NetBird not support? | [features/netbird.md](features/netbird.md) |
+| Can TailGauge be on two tailnets (or two NetBird networks) at once? | Not yet: [proposals/multiple-networks.md](proposals/multiple-networks.md) |
 | Why does a click show the switch moved before the daemon agrees? | [features/connection.md](features/connection.md) |
 | Why does the bar icon not toggle the connection? | [architecture/frontends.md](architecture/frontends.md), [decisions.md](decisions.md) |
 | How is a Mullvad exit node set, and where does the shortlist live? | [features/exit-nodes.md](features/exit-nodes.md) |
