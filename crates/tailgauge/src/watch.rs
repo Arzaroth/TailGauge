@@ -105,7 +105,7 @@ fn has_events(provider: &ProviderDescriptor) -> bool {
     ) {
         return true;
     }
-    let Some((name, parent)) = argv.split_last() else {
+    let Some((name, parent)) = argv.split_last().filter(|(_, parent)| !parent.is_empty()) else {
         return false;
     };
     proc::run(

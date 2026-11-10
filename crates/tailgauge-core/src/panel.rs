@@ -1019,7 +1019,7 @@ fn machines_section(state: &PanelState, expanded_peer_id: &str, now_ms: i64) -> 
         id: "machines".into(),
         title: "Machines".into(),
         visible: providers::provider_ready(state) && state.active,
-        empty: "No machines found on this tailnet.".into(),
+        empty: "No other machines found.".into(),
         rows,
     }
 }

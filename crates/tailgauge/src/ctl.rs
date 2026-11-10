@@ -401,7 +401,8 @@ pub fn select_network(provider: &ProviderDescriptor, network_id: &str, join: boo
     Outcome::Failed(format!("could not {what} {network_id}"))
 }
 
-/// Let this user operate the daemon's profile.
+/// Let this user drive a provider whose CLI refuses them: Tailscale's
+/// operator, ZeroTier's service token.
 ///
 /// `pkexec` because it needs root, and the user name is resolved by the shell
 /// that runs it rather than read here: a widget started without one in its

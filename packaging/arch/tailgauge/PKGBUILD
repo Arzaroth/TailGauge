@@ -16,6 +16,7 @@ depends=('gcc-libs' 'glibc')
 makedepends=('cargo' 'nodejs' 'pnpm' 'glib2')
 optdepends=('tailscale: a VPN for it to drive'
   'netbird: a VPN for it to drive'
+  'zerotier-one: a VPN for it to drive'
   'zenity: the Taildrop file chooser'
   'kdialog: the Taildrop file chooser on Plasma'
   'wl-clipboard: the copy actions on Wayland')

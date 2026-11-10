@@ -8,7 +8,8 @@
 #
 # Needs docker (rootless works) with /dev/net/tun, and python3. The member's
 # public address, which ZeroTier reports in `info`, is replaced with a
-# documentation address before anything is written.
+# documentation address before `info` reaches the fixtures: the raw answer
+# only ever sits in a private temporary file.
 
 set -euo pipefail
 
@@ -21,14 +22,19 @@ member="tailgauge-zt-member"
 keep=false
 [[ ${1:-} == --keep ]] && keep=true
 
+raw_info=$(mktemp)
 teardown() {
+  rm -f "$raw_info"
   docker rm -f "$controller" "$member" >/dev/null 2>&1 || true
   docker network rm "$net" >/dev/null 2>&1 || true
 }
-if ! $keep; then
+if $keep; then
+  trap 'rm -f "$raw_info"' EXIT
+else
   trap teardown EXIT
 fi
-teardown
+docker rm -f "$controller" "$member" >/dev/null 2>&1 || true
+docker network rm "$net" >/dev/null 2>&1 || true
 
 docker network create "$net" >/dev/null
 for node in "$controller" "$member"; do
@@ -100,19 +106,19 @@ wait_for "both networks" both_up
 direct() { cli "$member" peers | awk -v a="$address" '$1 == a && $5 == "DIRECT"' | grep -q .; }
 wait_for "a direct path to the controller" direct
 
-capture info zerotier-info.json
+cli "$member" -j info >"$raw_info"
 capture listnetworks zerotier-listnetworks.json
 capture peers zerotier-peers.json
 
-python3 - "$fixtures/zerotier-info.json" <<'EOF'
+python3 - "$raw_info" "$fixtures/zerotier-info.json" <<'EOF'
 import json, sys
-path = sys.argv[1]
-info = json.load(open(path))
+raw, out = sys.argv[1], sys.argv[2]
+info = json.load(open(raw))
 settings = info.get("config", {}).get("settings", {})
 settings["surfaceAddresses"] = [
     "203.0.113.10/" + a.rsplit("/", 1)[-1] for a in settings.get("surfaceAddresses", [])
 ]
-open(path, "w").write(json.dumps(info, indent=1) + "\n")
+open(out, "w").write(json.dumps(info, indent=1) + "\n")
 EOF
 
 echo "record: wrote the ZeroTier captures into $fixtures"

@@ -15,6 +15,7 @@ provides=("tailgauge=$pkgver")
 conflicts=('tailgauge')
 optdepends=('tailscale: a VPN for it to drive'
   'netbird: a VPN for it to drive'
+  'zerotier-one: a VPN for it to drive'
   'zenity: the Taildrop file chooser'
   'kdialog: the Taildrop file chooser on Plasma'
   'wl-clipboard: the copy actions on Wayland')

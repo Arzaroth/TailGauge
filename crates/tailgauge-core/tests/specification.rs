@@ -659,7 +659,7 @@ fn the_machines_section_states_its_own_empty_case() {
     let machines = section(&panel, "machines");
     assert!(machines.visible);
     assert!(machines.rows.is_empty());
-    assert_eq!(machines.empty, "No machines found on this tailnet.");
+    assert_eq!(machines.empty, "No other machines found.");
 }
 
 #[test]
@@ -1210,7 +1210,7 @@ fn every_user_visible_string_arrives_finished() {
     };
     assert_eq!(
         section(&resolve(&none), "machines").empty,
-        "No machines found on this tailnet."
+        "No other machines found."
     );
 }
 

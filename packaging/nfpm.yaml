@@ -21,6 +21,7 @@ recommends:
 suggests:
   - tailscale
   - netbird
+  - zerotier-one
   - zenity
   - wl-clipboard
 
