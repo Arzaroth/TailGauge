@@ -46,7 +46,9 @@ the why is [decision 0010](../decisions.md#0010-zerotiers-switch-leaves-and-rejo
 - **SSO.** A network in `AUTHENTICATION_REQUIRED` makes the provider
   needs-login, and its row is the login: action `openUrl` with the
   network's `authenticationURL` as `payload.url`, hinted "Log in", which every
-  desktop and the TUI open (`a_network_behind_sso_is_a_login_with_its_url`,
+  desktop and the TUI open. The controller chooses that URL, so only an
+  `https://` one without whitespace passes (`only_a_web_page_is_a_login_to_open`)
+  (`a_network_behind_sso_is_a_login_with_its_url`,
   `a_zerotier_network_behind_sso_is_the_row_that_opens_its_login`).
 - **This device** is the node's 10-digit address, with the addresses of the
   networks that are up, split by family.

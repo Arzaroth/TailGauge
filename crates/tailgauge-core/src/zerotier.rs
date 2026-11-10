@@ -70,11 +70,24 @@ fn zerotier_network(raw: &Value) -> Network {
         domains: Vec::new(),
         selected: true,
         auth_url: if status == "AUTHENTICATION_REQUIRED" {
-            peer::field(raw, "authenticationURL")
+            login_url(raw)
         } else {
             String::new()
         },
         status: network_state(&status).map(str::to_string).unwrap_or(status),
+    }
+}
+
+/// A network's SSO login page, which the panel hands to the desktop's opener.
+/// The controller chooses it, so only a web page passes: a `file://`, a
+/// custom scheme or an argument-shaped string is no login.
+fn login_url(raw: &Value) -> String {
+    let url = peer::field(raw, "authenticationURL");
+    let url = url.trim();
+    if url.starts_with("https://") && !url.contains(char::is_whitespace) {
+        url.to_string()
+    } else {
+        String::new()
     }
 }
 
@@ -242,9 +255,7 @@ pub fn parse_zerotier_status(raw: &str) -> StatusResult {
         running,
         needs_login: login.is_some(),
         daemon_state,
-        auth_url: login
-            .map(|n| peer::field(n, "authenticationURL"))
-            .unwrap_or_default(),
+        auth_url: login.map(login_url).unwrap_or_default(),
         self_name: address,
         self_dns_name: String::new(),
         self_ip: self_peer.ipv4.first().cloned().unwrap_or_default(),
@@ -306,6 +317,26 @@ mod tests {
         assert!(sso.needs_login);
         assert_eq!(sso.auth_url, "https://sso.example/zt");
         assert!(!status(&network("OK")).needs_login);
+    }
+
+    #[test]
+    fn only_a_web_page_is_a_login_to_open() {
+        let with = |url: &str| {
+            let listed = format!(
+                r#"[{{"nwid":"8056c2e21c000001","status":"AUTHENTICATION_REQUIRED","authenticationURL":"{url}"}}]"#
+            );
+            parse_zerotier_networks(&listed)[0].auth_url.clone()
+        };
+        assert_eq!(with("https://sso.example/zt"), "https://sso.example/zt");
+        for hostile in [
+            "file:///etc/passwd",
+            "x-scheme-handler:run",
+            "--help",
+            "http://sso.example/zt",
+            "https://sso.example/a b",
+        ] {
+            assert_eq!(with(hostile), "", "{hostile}");
+        }
     }
 
     #[test]
