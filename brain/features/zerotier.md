@@ -47,9 +47,12 @@ the why is [decision 0010](../decisions.md#0010-zerotiers-switch-leaves-and-rejo
 - **Access.** `zerotier-cli` needs the service's `authtoken.secret`, which is
   root's. A refusal (`authtoken.secret not found or readable`, or a `401`) is
   access denied, not a stopped service, and the connections section offers
-  "Allow access to ZeroTier": `ctl authorize` runs `pkexec install` to copy
-  the token to `~/.zeroTierOneAuthToken`, where the CLI looks next
-  (`a_zerotier_that_refuses_this_user_offers_to_let_them_in`).
+  "Allow access to ZeroTier": `ctl authorize` copies the token to
+  `~/.zeroTierOneAuthToken`, where the CLI looks next
+  (`a_zerotier_that_refuses_this_user_offers_to_let_them_in`). Only the read
+  is elevated (`pkexec cat`); the user's own shell writes a `mktemp` file and
+  `mv -fT`s it into place, because a root write into the user's home follows
+  any symlink planted there (`only_the_read_of_the_token_runs_as_root`).
 - **Its mark** on every desktop: the Simple Icons ZeroTier path (CC0-1.0) in
   `ZeroTierIcon.qml` on Plasma and Omarchy, and `drawZeroTier` in cairo on
   GNOME. The glyph is U+F0C26.

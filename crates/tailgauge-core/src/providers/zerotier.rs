@@ -59,12 +59,43 @@ impl Backend for ZeroTier {
     }
 
     /// The service token is root's. A copy in the user's home is where the
-    /// CLI looks next, so copying it there is the whole authorization.
+    /// CLI looks next, so copying it there is the whole authorization. Only
+    /// the read runs as root: a root write to a path in the user's home would
+    /// follow whatever the user put there, a symlink into a root directory
+    /// included.
     fn authorization(&self) -> Option<Authorization> {
         Some(Authorization {
-            command: r#"pkexec install -m 600 -o "$(id -un)" -g "$(id -gn)" /var/lib/zerotier-one/authtoken.secret "$HOME/.zeroTierOneAuthToken""#,
+            command: r#"t=$(mktemp "$HOME/.zeroTierOneAuthToken.XXXXXX") && { pkexec cat /var/lib/zerotier-one/authtoken.secret > "$t" && mv -fT "$t" "$HOME/.zeroTierOneAuthToken" || { rm -f "$t"; false; }; }"#,
             label: "Allow access to ZeroTier",
             sublabel: "Copy the ZeroTier service token to this user",
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_the_read_of_the_token_runs_as_root() {
+        let command = ZeroTier.authorization().expect("an authorization").command;
+        let elevated: Vec<&str> = command
+            .split("pkexec ")
+            .skip(1)
+            .map(|rest| rest.split(['>', '&', ';', '|']).next().unwrap_or("").trim())
+            .collect();
+        assert_eq!(
+            elevated,
+            ["cat /var/lib/zerotier-one/authtoken.secret"],
+            "root never writes into the user's home, where a symlink could send it anywhere"
+        );
+        assert!(
+            command.contains("mktemp"),
+            "the copy is made private before it is filled"
+        );
+        assert!(
+            command.contains("mv -fT"),
+            "a planted link is replaced, not followed"
+        );
     }
 }

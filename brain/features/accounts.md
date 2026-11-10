@@ -39,7 +39,7 @@ shows the row with no accounts at all
 | Provider | Row | `ctl authorize` runs |
 | --- | --- | --- |
 | Tailscale | "Authorize Tailscale operator" / "Allow this user to operate this Tailscale profile" | `pkexec tailscale set --operator="$(id -un)"` |
-| ZeroTier | "Allow access to ZeroTier" / "Copy the ZeroTier service token to this user" | `pkexec install -m 600 -o "$(id -un)" ... authtoken.secret "$HOME/.zeroTierOneAuthToken"` |
+| ZeroTier | "Allow access to ZeroTier" / "Copy the ZeroTier service token to this user" | `pkexec cat /var/lib/zerotier-one/authtoken.secret` into a `mktemp` file in `$HOME`, then `mv -fT` onto `~/.zeroTierOneAuthToken` |
 
 `ctl authorize` runs the line with `sh -c`. The user is resolved by that
 shell, because a widget started without `$USER` in its environment would

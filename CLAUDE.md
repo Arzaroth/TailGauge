@@ -173,6 +173,10 @@ leaves them all and joins back what it took, from the networks remembered in
   The service token is root's; `is_access_denied` tells the refusal apart from
   "connection failed", so the panel offers to copy the token instead of
   reading as off. `a_zerotier_that_refuses_this_user_offers_to_let_them_in`.
+- **Root only reads the token; the user writes it.** `ctl authorize` first
+  ran `pkexec install` onto `~/.zeroTierOneAuthToken`, and root's `install`
+  follows a symlink planted there into any directory, `/etc/cron.hourly`
+  included (found in review). `only_the_read_of_the_token_runs_as_root`.
 - **Its captures come from `tests/zerotier/record.sh`**, two real nodes in
   containers with no account; re-record rather than hand-edit them, and keep
   the public-address scrub.

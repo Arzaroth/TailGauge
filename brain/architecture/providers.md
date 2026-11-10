@@ -62,7 +62,7 @@ a `&'static dyn Backend` with one implementation per provider in
 | profiles | `tailscale switch --list --json`, `tailscale switch <id>` | - | - |
 | networks | - | `netbird networks list`, `netbird networks select\|deselect <id>` | `zerotier-cli -j listnetworks`, `zerotier-cli join\|leave <id>` |
 | events (`live_watch`) | `tailscale debug watch-ipn` | - | - |
-| authorize | `pkexec tailscale set --operator="$(id -un)"` | - | `pkexec install ... authtoken.secret "$HOME/.zeroTierOneAuthToken"` |
+| authorize | `pkexec tailscale set --operator="$(id -un)"` | - | `pkexec cat .../authtoken.secret` into a private temp file, moved onto `~/.zeroTierOneAuthToken` |
 
 ## Detection and the active provider
 
