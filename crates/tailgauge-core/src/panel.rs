@@ -864,6 +864,18 @@ fn exit_nodes_section(
     }
 }
 
+/// The network as the row's payload, with its login under `url`, where every
+/// frontend's `openUrl` reads it.
+fn network_payload(network: &crate::network::Network) -> Value {
+    let mut value = payload(network);
+    if !network.auth_url.is_empty()
+        && let Some(object) = value.as_object_mut()
+    {
+        object.insert("url".into(), Value::String(network.auth_url.clone()));
+    }
+    value
+}
+
 fn networks_section(state: &PanelState) -> PanelSection {
     let supported = providers::provider_supports(state, Capability::Networks);
     let networks: &[crate::network::Network] = if supported { &state.networks } else { &[] };
@@ -886,12 +898,26 @@ fn networks_section(state: &PanelState) -> PanelSection {
                 "\u{f06db}"
             }
             .into(),
-            action: "selectNetwork".into(),
+            // A network waiting on a login is the row that opens it: nothing
+            // else in the panel can, and leaving is the switch's job.
+            action: if network.auth_url.is_empty() {
+                "selectNetwork"
+            } else {
+                "openUrl"
+            }
+            .into(),
             current: network.selected,
             bold: network.selected,
             busy: state.selecting_network_id == network.id,
-            hint: if network.selected { "Leave" } else { "Join" }.into(),
-            payload: payload(network),
+            hint: if !network.auth_url.is_empty() {
+                "Log in"
+            } else if network.selected {
+                "Leave"
+            } else {
+                "Join"
+            }
+            .into(),
+            payload: network_payload(network),
             ..PanelRow::default()
         })
         .collect();

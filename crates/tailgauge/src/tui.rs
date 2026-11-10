@@ -121,6 +121,7 @@ enum Act {
     Authorize,
     Update,
     Copy(String),
+    OpenUrl(String),
 }
 
 enum Done {
@@ -156,6 +157,18 @@ fn perform(act: Act, provider_id: &str) -> Option<String> {
     if let Act::Copy(text) = act {
         return crate::copy::run(&text).err().map(|e| e.to_string());
     }
+    if let Act::OpenUrl(url) = act {
+        // Detached and silent: the TUI owns the terminal, and a browser's
+        // chatter would land on the drawn frame.
+        return std::process::Command::new("xdg-open")
+            .arg(&url)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .err()
+            .map(|e| format!("could not open {url}: {e}"));
+    }
     if let Act::Update = act {
         return match crate::update::apply(&crate::project::TAILGAUGE, &cache()) {
             Ok(_) => None,
@@ -186,7 +199,7 @@ fn perform(act: Act, provider_id: &str) -> Option<String> {
         Act::SetExitNode(target) => crate::ctl::exit_node(provider, Some(target.as_str())),
         Act::SelectNetwork { id, join } => crate::ctl::select_network(provider, &id, join),
         Act::Authorize => crate::ctl::authorize(provider),
-        Act::Copy(_) | Act::Update => unreachable!("handled above"),
+        Act::Copy(_) | Act::Update | Act::OpenUrl(_) => unreachable!("handled above"),
     };
     match outcome {
         crate::ctl::Outcome::Failed(why) => Some(why),
@@ -858,6 +871,7 @@ impl App {
                 join: !row.current,
             }),
             "authorize" => Some(Act::Authorize),
+            "openUrl" => Some(Act::OpenUrl(string_field(&row, "url"))),
             "update" => Some(Act::Update),
             // The option carries the value; `label` is what the row is drawn
             // with, and for a peer with no name of its own that is "Unknown".

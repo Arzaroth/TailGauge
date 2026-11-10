@@ -69,6 +69,11 @@ fn zerotier_network(raw: &Value) -> Network {
         },
         domains: Vec::new(),
         selected: true,
+        auth_url: if status == "AUTHENTICATION_REQUIRED" {
+            peer::field(raw, "authenticationURL")
+        } else {
+            String::new()
+        },
         status: network_state(&status).map(str::to_string).unwrap_or(status),
     }
 }

@@ -14,6 +14,10 @@ pub struct Network {
     pub domains: Vec<String>,
     pub selected: bool,
     pub status: String,
+    /// Where the network's login is done, while it waits on one (ZeroTier's
+    /// SSO networks).
+    #[serde(rename = "authUrl", skip_serializing_if = "String::is_empty")]
+    pub auth_url: String,
 }
 
 /// What a network row shows under its name: the range if it routes one, the
