@@ -73,10 +73,15 @@ fn update<T>(
     DirBuilder::new().recursive(true).mode(0o700).create(dir)?;
     let lock = File::create(path.with_extension("lock"))?;
     lock.lock()?;
-    let before: Vec<Known> = fs::read_to_string(&path)
-        .ok()
-        .and_then(|raw| serde_json::from_str(&raw).ok())
-        .unwrap_or_default();
+    // Only a missing file is a fresh start. One that cannot be read or parsed
+    // still holds networks ZeroTier has forgotten, so it is left alone.
+    let before: Vec<Known> = match fs::read_to_string(&path) {
+        Ok(raw) => {
+            serde_json::from_str(&raw).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
+        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Vec::new(),
+        Err(e) => return Err(e),
+    };
     let mut after = before.clone();
     let answer = change(&mut after);
     if after != before {
@@ -220,6 +225,28 @@ mod tests {
         assert_eq!(list, [known("c", false)]);
         wanted(&mut list, "c", true);
         assert_eq!(list, [known("c", true)]);
+    }
+
+    #[test]
+    fn a_state_file_that_cannot_be_read_is_never_overwritten() {
+        let dir = std::env::temp_dir().join(format!("tg-networks-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        // SAFETY: this test alone reads XDG_STATE_HOME in this process's tests.
+        unsafe { std::env::set_var("XDG_STATE_HOME", &dir) };
+        let provider = tailgauge_core::providers::provider_by_id("zerotier").expect("zerotier");
+        let path = file(provider);
+        fs::create_dir_all(path.parent().expect("a dir")).expect("the dir");
+        fs::write(&path, "{ not json").expect("a damaged file");
+
+        assert!(take(provider, &[network("a", "lab")]).is_err());
+        assert!(want(provider, "a", false).is_err());
+        assert_eq!(observe(provider, &[network("a", "lab")]).len(), 1);
+        assert_eq!(
+            fs::read_to_string(&path).expect("still there"),
+            "{ not json",
+            "what ZeroTier forgot is still in it"
+        );
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
